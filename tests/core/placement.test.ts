@@ -278,3 +278,54 @@ describe('re-running create commands', () => {
     expect(count(doc)).toBe(1);
   });
 });
+
+describe('meeting walls shorten the usable wall range (I5)', () => {
+  const outlet = (offset: number) =>
+    addItem({ mount: 'wall', preset: 'outlet-01', wall: 'w1', side: 'left', offset, elevation: 0.4 });
+
+  it('outlet inside the meeting wall at a corner is out of range', () => {
+    const doc = mk();
+    expect(codes(doc.tryExecute(outlet(0.04)))).toContain('wall-item-out-of-range');
+    expect(codes(doc.tryExecute(outlet(0.13)))).toContain('wall-item-out-of-range');
+    expect(codes(doc.tryExecute(outlet(3.96)))).toContain('wall-item-out-of-range');
+  });
+
+  it('valid min offset is meetThickness/2 + w/2 = 0.14 at both ends', () => {
+    const doc = mk();
+    expect(doc.tryExecute(outlet(0.14)).ok).toBe(true);
+    expect(doc.tryExecute(outlet(4 - 0.14)).ok).toBe(true);
+  });
+
+  it('a thick meeting wall pushes openings past the end margin', () => {
+    const f = oneRoomFloor();
+    f.walls.w4 = { ...f.walls.w4!, thickness: 0.4 }; // meets w1 at n1: half = 0.2 > margin 0.1
+    const doc = H3xDocument.fromProject(
+      { version: 1, unit: 'm', meta: { name: 't', created: '' }, floors: [f] } as Project,
+      { presets: testPresets },
+    );
+    expect(codes(doc.tryExecute(moveOpening('o1', { offset: 0.6 })))).toContain(
+      'opening-out-of-wall',
+    );
+    expect(doc.tryExecute(moveOpening('o1', { offset: 0.65 })).ok).toBe(true);
+  });
+
+  it('re-fit clamps wall items clear of the meeting wall', () => {
+    const f = oneRoomFloor();
+    f.items.i1 = {
+      id: 'i1',
+      preset: 'outlet-01',
+      mount: 'wall',
+      wall: 'w1',
+      side: 'left',
+      offset: 3.9,
+      elevation: 0.3,
+    };
+    const doc = H3xDocument.fromProject(
+      { version: 1, unit: 'm', meta: { name: 't', created: '' }, floors: [f] } as Project,
+      { presets: testPresets },
+    );
+    doc.execute(setWallLength('w1', 2));
+    expect((doc.floor.items.i1 as { offset: number }).offset).toBeCloseTo(1.86);
+    expect(doc.validatePlacements()).toEqual([]);
+  });
+});

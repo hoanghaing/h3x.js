@@ -112,7 +112,8 @@ describe('layout commands', () => {
     };
     const doc = mk(f);
     doc.execute(setWallLength('w1', 2));
-    expect((doc.floor.items.i1 as { offset: number }).offset).toBeCloseTo(1.96);
+    // 2 - 0.1 (half of the 0.2 m meeting wall w2) - 0.04 (half the outlet): I5.
+    expect((doc.floor.items.i1 as { offset: number }).offset).toBeCloseTo(1.86);
   });
 
   it('pre-existing problems elsewhere do not block unrelated edits', () => {

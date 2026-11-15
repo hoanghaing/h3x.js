@@ -8,17 +8,54 @@ import { distance } from '../geometry/vec';
 import { roomPolygon } from '../rooms/detect';
 import type { Floor, Id, Issue, Vec2 } from '../types';
 
-
-/** Valid centre range for an opening of `width` on a wall of `len` (hi < lo means it cannot fit). */
-export function openingRange(len: number, width: number): { lo: number; hi: number } {
-  return { lo: OPENING_END_MARGIN + width / 2, hi: len - OPENING_END_MARGIN - width / 2 };
-}
-
-function wallLength(floor: Floor, id: Id): number {
+export function wallLength(floor: Floor, id: Id): number {
   const w = floor.walls[id];
   const a = w && floor.nodes[w.a];
   const b = w && floor.nodes[w.b];
   return a && b ? distance(a, b) : 0;
+}
+
+/** Half of the thickest other wall meeting `wallId` at `node` (0 when none). */
+function meetHalf(floor: Floor, wallId: Id, node: Id): number {
+  let half = 0;
+  for (const o of Object.values(floor.walls)) {
+    if (o.id !== wallId && (o.a === node || o.b === node)) half = Math.max(half, o.thickness / 2);
+  }
+  return half;
+}
+
+/**
+ * Valid centre-offset range for something `width` wide on wall `wallId`. Each
+ * end is shortened by max(margin, half the thickness of the thickest other
+ * wall meeting at that end node), so nothing sits inside a meeting wall.
+ * Openings use margin OPENING_END_MARGIN, wall items 0. `length` overrides the
+ * current wall length (layout re-fit). hi < lo means it cannot fit.
+ */
+export function wallUsableRange(
+  floor: Floor,
+  wallId: Id,
+  opts: { width: number; margin?: number; length?: number },
+): { lo: number; hi: number } {
+  const w = floor.walls[wallId];
+  const len = opts.length ?? wallLength(floor, wallId);
+  const margin = opts.margin ?? 0;
+  const startCut = w ? Math.max(margin, meetHalf(floor, wallId, w.a)) : margin;
+  const endCut = w ? Math.max(margin, meetHalf(floor, wallId, w.b)) : margin;
+  return { lo: startCut + opts.width / 2, hi: len - endCut - opts.width / 2 };
+}
+
+/** Opening centre range on its wall (see wallUsableRange). */
+export function openingRange(
+  floor: Floor,
+  o: { wall: Id; width: number },
+  length?: number,
+): { lo: number; hi: number } {
+  return wallUsableRange(floor, o.wall, { width: o.width, margin: OPENING_END_MARGIN, length });
+}
+
+/** True when `offset` lies in [lo, hi] within GEOM_TOL (and the range is not empty). */
+export function inRange(offset: number, r: { lo: number; hi: number }): boolean {
+  return r.hi >= r.lo - GEOM_TOL && offset >= r.lo - GEOM_TOL && offset <= r.hi + GEOM_TOL;
 }
 
 function wallIssues(floor: Floor, ids: Iterable<Id>): Issue[] {
@@ -88,8 +125,7 @@ function openingIssues(floor: Floor): Issue[] {
   const out: Issue[] = [];
   for (const o of Object.values(floor.openings)) {
     if (!floor.walls[o.wall]) continue;
-    const { lo, hi } = openingRange(wallLength(floor, o.wall), o.width);
-    if (hi < lo - GEOM_TOL || o.offset < lo - GEOM_TOL || o.offset > hi + GEOM_TOL) {
+    if (!inRange(o.offset, openingRange(floor, o))) {
       out.push({
         code: 'opening-out-of-wall',
         ids: [o.id],
