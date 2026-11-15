@@ -9,7 +9,6 @@ import { roomPolygon } from '../rooms/detect';
 import { inRange, openingRange, wallUsableRange } from './layout';
 import type { Floor, Issue, Item, Opening, PresetResolver, Vec2 } from '../types';
 
-
 export function checkOpening(floor: Floor, o: Opening): Issue[] {
   const wall = floor.walls[o.wall];
   if (!wall) return [];

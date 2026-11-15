@@ -124,7 +124,13 @@ describe('H3xDocument', () => {
     const f = input.floors[0]!;
     pts.forEach(([px, py], i) => (f.nodes[`n${i}`] = { id: `n${i}`, x: px!, y: py! }));
     for (let i = 0; i < 4; i++)
-      f.walls[`w${i}`] = { id: `w${i}`, a: `n${i}`, b: `n${(i + 1) % 4}`, thickness: 0.2, height: 3 };
+      f.walls[`w${i}`] = {
+        id: `w${i}`,
+        a: `n${i}`,
+        b: `n${(i + 1) % 4}`,
+        thickness: 0.2,
+        height: 3,
+      };
     f.rooms.r = { id: 'r', walls: ['w3', 'w2', 'w1', 'w0'], name: '' };
     const d = H3xDocument.fromProject(input);
     expect(d.floor.rooms.r!.walls).toEqual(['w0', 'w1', 'w2', 'w3']);
@@ -201,12 +207,8 @@ describe('H3xDocument', () => {
   });
 
   it('mergeChanges keeps earliest before and latest after', () => {
-    const ch = (
-      kind: 'node' | 'wall',
-      id: string,
-      before: unknown,
-      after: unknown,
-    ): EntityChange => ({ kind, id, before, after }) as EntityChange; // opaque test payloads
+    const ch = (kind: 'node' | 'wall', id: string, before: unknown, after: unknown): EntityChange =>
+      ({ kind, id, before, after }) as EntityChange; // opaque test payloads
     const merged = mergeChanges(
       [ch('node', 'a', null, 1), ch('node', 'b', 5, 6)],
       [ch('node', 'a', 1, 2), ch('wall', 'a', 7, null)],
@@ -402,9 +404,13 @@ describe('fromProject checks', () => {
 
 describe('EntityChange typing', () => {
   it('is a discriminated union over kind', () => {
-    expectTypeOf<Extract<EntityChange, { kind: 'node' }>['after']>().toEqualTypeOf<PlanNode | null>();
+    expectTypeOf<
+      Extract<EntityChange, { kind: 'node' }>['after']
+    >().toEqualTypeOf<PlanNode | null>();
     expectTypeOf<Extract<EntityChange, { kind: 'wall' }>['before']>().toEqualTypeOf<Wall | null>();
-    expectTypeOf<Extract<EntityChange, { kind: 'opening' }>['after']>().toEqualTypeOf<Opening | null>();
+    expectTypeOf<
+      Extract<EntityChange, { kind: 'opening' }>['after']
+    >().toEqualTypeOf<Opening | null>();
     expectTypeOf<Extract<EntityChange, { kind: 'room' }>['after']>().toEqualTypeOf<Room | null>();
     expectTypeOf<Extract<EntityChange, { kind: 'item' }>['after']>().toEqualTypeOf<Item | null>();
   });

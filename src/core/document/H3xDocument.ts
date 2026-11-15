@@ -22,10 +22,7 @@ export interface ChangeEvent {
 export type Validator = (doc: H3xDocument, changes: EntityChange[]) => Issue[];
 
 const invert = (changes: EntityChange[]): EntityChange[] =>
-  changes
-    .slice()
-    .reverse()
-    .map(swapChange);
+  changes.slice().reverse().map(swapChange);
 
 function hasNonFinite(v: unknown): boolean {
   if (typeof v === 'number') return !Number.isFinite(v);

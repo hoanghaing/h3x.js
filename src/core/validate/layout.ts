@@ -92,7 +92,11 @@ function crossIssues(floor: Floor, scope: Iterable<Id>): Issue[] {
       if (!c || !d) continue;
       if (segmentsIntersect(a, b, c, d)) {
         seen.add(key);
-        out.push({ code: 'walls-cross', ids: [id, o.id], message: `Walls ${id} and ${o.id} cross` });
+        out.push({
+          code: 'walls-cross',
+          ids: [id, o.id],
+          message: `Walls ${id} and ${o.id} cross`,
+        });
       }
     }
   }
@@ -117,7 +121,8 @@ function roomIssue(floor: Floor, roomId: Id): Issue | null {
   if (!isSimple(center)) return bad('outline is not simple');
   if (signedArea(center) <= 0) return bad('outline is flipped');
   const inner = signedArea(roomPolygon(floor, room, 'inner'));
-  if (inner < MIN_ROOM_AREA - GEOM_TOL) return bad(`inner area ${inner.toFixed(3)} m2 is below ${MIN_ROOM_AREA}`);
+  if (inner < MIN_ROOM_AREA - GEOM_TOL)
+    return bad(`inner area ${inner.toFixed(3)} m2 is below ${MIN_ROOM_AREA}`);
   return null;
 }
 

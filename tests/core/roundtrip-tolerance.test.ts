@@ -38,7 +38,13 @@ describe('GEOM_TOL', () => {
 describe('validation is stable across an XML round trip', () => {
   it('(a) sofa flush to a wall at rotation PI/2', () => {
     const doc = mk();
-    const cmd = addItem({ mount: 'floor', preset: 'sofa-3s-01', x: 0.55, y: 2, rotation: Math.PI / 2 });
+    const cmd = addItem({
+      mount: 'floor',
+      preset: 'sofa-3s-01',
+      x: 0.55,
+      y: 2,
+      rotation: Math.PI / 2,
+    });
     expect(doc.tryExecute(cmd).ok).toBe(true);
     expect(codes(doc)).toEqual([]);
     const back = expectStable(doc);

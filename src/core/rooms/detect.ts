@@ -32,7 +32,7 @@ export function detectRooms(floor: Floor): Array<{ walls: Id[]; nodes: Id[] }> {
       .filter((w) => floor.nodes[w.a] && floor.nodes[w.b])
       .map((w) => [w.id, w]),
   );
-  for (let changed = true; changed; ) {
+  for (let changed = true; changed;) {
     changed = false;
     const deg = new Map<Id, number>();
     for (const w of live.values()) {
@@ -134,10 +134,6 @@ export function roomPolygon(floor: Floor, room: Room, kind: 'center' | 'inner'):
   return insetPolygon(pts, dists);
 }
 
-export function roomArea(
-  floor: Floor,
-  room: Room,
-  kind: 'center' | 'inner' = 'inner',
-): number {
+export function roomArea(floor: Floor, room: Room, kind: 'center' | 'inner' = 'inner'): number {
   return signedArea(roomPolygon(floor, room, kind));
 }
