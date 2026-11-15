@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Vector3, type Camera, type Scene } from 'three';
+import { Box3, Sphere, Vector3, type Camera, type Scene } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { H3xDocument, type Project } from '../../src/core';
 import { H3xScene, H3xViewer, type RendererLike } from '../../src/three';
@@ -45,6 +45,7 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  document.body.innerHTML = '';
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -69,6 +70,7 @@ describe('H3xViewer', () => {
   it('appends the canvas and coalesces render requests', () => {
     const { container, fake, viewer } = setup();
     expect(container.contains(fake.domElement)).toBe(true);
+    expect(fake.domElement.style.display).toBe('block');
     flush();
     fake.render.mockClear();
     viewer.requestRender();
@@ -103,7 +105,24 @@ describe('H3xViewer', () => {
     const dir = new Vector3();
     viewer.camera.getWorldDirection(dir);
     expect(dir.y).toBeLessThan(-0.99);
+    expect(dir.distanceTo(new Vector3(0, -1, 0))).toBeLessThan(1e-6);
+    expect(viewer.camera.up.toArray()).toEqual([0, 0, -1]);
     expect(viewer.camera.position.y).toBeGreaterThan(viewer.target.y);
+    viewer.dispose();
+  });
+
+  it('keeps content inside the clip range after dollying close', () => {
+    const { scene, viewer } = setup();
+    viewer.fitToContent();
+    const radius = new Box3().setFromObject(scene.root).getBoundingSphere(new Sphere()).radius;
+    const target = viewer.target;
+    const dir = viewer.camera.position.clone().sub(target).normalize();
+    viewer.camera.position.copy(target).addScaledVector(dir, 0.5);
+    viewer.viewFromAxis('y');
+    const dist = viewer.camera.position.y - target.y;
+    expect(dist).toBeGreaterThanOrEqual(radius * 2);
+    expect(viewer.camera.near).toBeLessThan(dist - radius);
+    expect(viewer.camera.far).toBeGreaterThanOrEqual(dist + 2 * radius);
     viewer.dispose();
   });
 

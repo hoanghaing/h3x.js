@@ -95,6 +95,7 @@ export class H3xViewer {
     if (typeof getComputedStyle === 'function' && getComputedStyle(container).position === 'static') {
       container.style.position = 'relative';
     }
+    this.renderer.domElement.style.display = 'block';
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.cam, this.renderer.domElement);
@@ -145,9 +146,11 @@ export class H3xViewer {
     dir.normalize();
     let newDist = dist;
     if (mode === 'orthographic') {
-      // Match the framing of the perspective view at the target plane.
+      // Match the framing of the perspective view at the target plane, but sit far
+      // enough back that the whole content is inside the clip range.
       this.orthoHalf = dist * TAN_HALF_FOV;
       this.ortho.zoom = 1;
+      newDist = Math.max(dist, this.contentRadius() * 2 + 1);
     } else {
       // Undo any orthographic zoom to find the equivalent perspective distance.
       newDist = this.orthoHalf / this.ortho.zoom / TAN_HALF_FOV;
@@ -164,14 +167,16 @@ export class H3xViewer {
   }
 
   viewFromAxis(axis: AxisName): void {
-    const dist = this.cam.position.distanceTo(this.controls.target) || 10;
+    const current = this.cam.position.distanceTo(this.controls.target) || 10;
     this.setProjection('orthographic');
+    const dist = Math.max(current, this.contentRadius() * 2 + 1);
     const cam = this.cam;
     const target = this.controls.target;
     // Plan +y is world -Z, so a top/bottom view keeps -Z up on screen (no rotation).
     if (axis === 'y' || axis === '-y') cam.up.set(0, 0, -1);
     else cam.up.set(0, 1, 0);
     cam.position.copy(target).addScaledVector(AXIS_DIRS[axis], dist);
+    this.updateClip(dist);
     cam.lookAt(target);
     this.controls.update();
     this.requestRender();
@@ -234,6 +239,7 @@ export class H3xViewer {
       else m.dispose();
     }
     this.threeScene.remove(this.scene.root);
+    this.light.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.container.style.position = this.prevContainerPosition;
@@ -265,10 +271,17 @@ export class H3xViewer {
     }
   }
 
+  private contentRadius(): number {
+    const box = new Box3().setFromObject(this.scene.root);
+    return box.isEmpty() ? 0 : box.getBoundingSphere(new Sphere()).radius;
+  }
+
   private updateClip(dist: number): void {
-    const far = Math.max(1000, dist * 20);
+    const radius = this.contentRadius();
+    const far = Math.max(1000, dist * 20, dist + radius * 2);
+    const near = Math.max(Math.min(dist / 1000, (dist - radius) / 2), 0.01);
     for (const cam of [this.perspective, this.ortho]) {
-      cam.near = Math.max(dist / 1000, 0.01);
+      cam.near = near;
       cam.far = far;
       cam.updateProjectionMatrix();
     }
