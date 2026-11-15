@@ -2,6 +2,7 @@
 import { H3xDocument } from 'h3x/core';
 import { H3xScene, H3xViewer } from 'h3x/three';
 import layoutXml from './layouts/nha-ong-4x16.h3x?raw';
+import { nextProjection, projectionLabel } from './projection';
 import { widenHouse } from './widen';
 
 const doc = H3xDocument.fromXML(layoutXml);
@@ -17,11 +18,10 @@ const say = (text: string, error = false): void => {
 const on = (id: string, fn: () => void): void =>
   document.getElementById(id)!.addEventListener('click', fn);
 
-let ortho = false;
+// Derive from viewer.projection: viewFromAxis also switches to orthographic.
 on('btn-projection', () => {
-  ortho = !ortho;
-  viewer.setProjection(ortho ? 'orthographic' : 'perspective');
-  say(ortho ? 'Chế độ trực giao' : 'Chế độ phối cảnh');
+  viewer.setProjection(nextProjection(viewer.projection));
+  say(projectionLabel(viewer.projection));
 });
 on('btn-top', () => viewer.viewFromAxis('y'));
 on('btn-widen', () => {
