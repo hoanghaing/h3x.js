@@ -185,3 +185,27 @@ describe('xml', () => {
     }
   });
 });
+
+describe('floors', () => {
+  it('a file with no <floor> is rejected', () => {
+    try {
+      projectFromXML('<h3x version="1" unit="m"><meta name="x" created=""/></h3x>');
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xParseError);
+      expect((e as H3xParseError).element).toBe('h3x');
+      expect((e as H3xParseError).message).toContain('no floor');
+    }
+  });
+
+  it('extra floors are kept untouched and round-trip', () => {
+    const xml = doc().replace(
+      '</h3x>',
+      '<floor id="f2" level="1" elevation="3.2" wallHeight="3"><node id="m1" x="1" y="1"/></floor></h3x>',
+    );
+    const p = projectFromXML(xml);
+    expect(p.floors).toHaveLength(2);
+    expect(p.floors[1]!.nodes.m1).toEqual({ id: 'm1', x: 1, y: 1 });
+    expect(projectFromXML(projectToXML(p))).toEqual(p);
+  });
+});
