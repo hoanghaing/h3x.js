@@ -6,6 +6,10 @@ import { mergeChanges } from '../../src/core/document/changes';
 import type { EntityChange } from '../../src/core/document/changes';
 import { H3xValidationError } from '../../src/core/errors';
 import type { PlanNode, Project } from '../../src/core/types';
+import { moveNode } from '../../src/core/commands/layout';
+import { moveOpening } from '../../src/core/commands/objects';
+import { setWallFinish } from '../../src/core/commands/finishes';
+import { oneRoomFloor, testPresets } from '../fixtures/floors';
 
 function setX(x: number): Command {
   return {
@@ -287,5 +291,64 @@ describe('H3xDocument', () => {
     d.undo(); // removes the add; no phantom drag step
     expect(d.floor.nodes.n1).toBeUndefined();
     expect(d.canUndo).toBe(false);
+  });
+});
+
+describe('no-op commands', () => {
+  const mkRoom = (): H3xDocument =>
+    H3xDocument.fromProject(
+      {
+        version: 1,
+        unit: 'm',
+        meta: { name: 't', created: '2026-01-01T00:00:00Z' },
+        floors: [oneRoomFloor()],
+      } as Project,
+      { presets: testPresets },
+    );
+
+  it('setWallFinish to the same value adds no undo step and emits nothing', () => {
+    const doc = mkRoom();
+    let n = 0;
+    doc.on('change', () => n++);
+    doc.execute(setWallFinish('w1', 'left', undefined));
+    expect(doc.canUndo).toBe(false);
+    expect(n).toBe(0);
+  });
+
+  it('moveNode to the same position adds no undo step and emits nothing', () => {
+    const doc = mkRoom();
+    let n = 0;
+    doc.on('change', () => n++);
+    doc.execute(moveNode('n2', { x: 4, y: 0 }));
+    expect(doc.tryExecute(moveNode('n2', { x: 4, y: 0 })).ok).toBe(true);
+    expect(doc.canUndo).toBe(false);
+    expect(n).toBe(0);
+  });
+
+  it('changes whose before equals after are a no-op', () => {
+    const doc = mkRoom();
+    let n = 0;
+    doc.on('change', () => n++);
+    doc.execute(moveOpening('o1', { offset: 1.2 }));
+    expect(doc.canUndo).toBe(false);
+    expect(n).toBe(0);
+  });
+
+  it('pointer-down with coalesceKey but no movement leaves no undo step', () => {
+    const doc = mkRoom();
+    doc.execute(moveNode('n3', { x: 4, y: 4 }), { coalesceKey: 'drag' });
+    expect(doc.canUndo).toBe(false);
+    doc.endCoalesce();
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('a no-op mid-drag does not break coalescing', () => {
+    const doc = mkRoom();
+    doc.execute(moveNode('n3', { x: 4.5, y: 4 }), { coalesceKey: 'drag' });
+    doc.execute(moveNode('n3', { x: 4.5, y: 4 }), { coalesceKey: 'drag' });
+    doc.execute(moveNode('n3', { x: 5, y: 4 }), { coalesceKey: 'drag' });
+    doc.undo();
+    expect(doc.floor.nodes.n3).toMatchObject({ x: 4, y: 4 });
+    expect(doc.canUndo).toBe(false);
   });
 });
