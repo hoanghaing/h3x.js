@@ -11,6 +11,14 @@ const fail = (code: string, ids: Id[], message: string): H3xValidationError =>
 const notFound = (what: string, id: Id): H3xValidationError =>
   fail('not-found', [id], `${what} ${id} does not exist`);
 
+/** Ids are unique per floor across all entity kinds; re-running a create command must not overwrite. */
+function assertFreeId(ctx: CommandContext, id: Id): void {
+  const f = ctx.floor;
+  if (f.nodes[id] || f.walls[id] || f.openings[id] || f.rooms[id] || f.items[id]) {
+    throw fail('duplicate-id', [id], 'Id ' + id + ' already exists in the floor');
+  }
+}
+
 function presetFor(ctx: CommandContext, preset: string, ids: Id[]): PresetInfo {
   const info = ctx.presets?.(preset);
   if (!info) throw fail('unknown-preset', ids, `Unknown preset ${preset}`);
@@ -29,6 +37,7 @@ export function addOpening(input: {
     label: 'addOpening',
     createdId: id,
     run: (ctx) => {
+      assertFreeId(ctx, id);
       if (!ctx.floor.walls[input.wall]) throw notFound('Wall', input.wall);
       const info = presetFor(ctx, input.preset, [id]);
       if (info.mount !== 'opening') {
@@ -86,6 +95,7 @@ export function addItem(input: NewItem): Created {
     label: 'addItem',
     createdId: id,
     run: (ctx) => {
+      assertFreeId(ctx, id);
       const info = presetFor(ctx, input.preset, [id]);
       if (info.mount !== input.mount) {
         throw fail(

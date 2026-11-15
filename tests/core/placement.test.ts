@@ -248,3 +248,33 @@ describe('non-finite numbers', () => {
     expect(doc.floor).toEqual(before);
   });
 });
+
+describe('re-running create commands', () => {
+  const dupCode = (fn: () => void): string | undefined => {
+    try {
+      fn();
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xValidationError);
+      return (e as H3xValidationError).issues[0]!.code;
+    }
+    return undefined;
+  };
+
+  it('addOpening run twice throws duplicate-id', () => {
+    const doc = mk();
+    const cmd = addOpening({ wall: 'w1', preset: 'window-01', offset: 3 });
+    doc.execute(cmd);
+    expect(dupCode(() => doc.execute(cmd))).toBe('duplicate-id');
+    doc.undo();
+    expect(doc.floor.openings[cmd.createdId]).toBeUndefined();
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('addItem run twice throws duplicate-id', () => {
+    const doc = mk();
+    const cmd = sofa(2, 2);
+    doc.execute(cmd);
+    expect(dupCode(() => doc.execute(cmd))).toBe('duplicate-id');
+    expect(count(doc)).toBe(1);
+  });
+});
