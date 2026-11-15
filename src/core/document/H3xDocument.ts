@@ -26,6 +26,23 @@ const invert = (changes: EntityChange[]): EntityChange[] =>
     .reverse()
     .map((c) => ({ ...c, before: c.after, after: c.before }));
 
+function hasNonFinite(v: unknown): boolean {
+  if (typeof v === 'number') return !Number.isFinite(v);
+  if (typeof v !== 'object' || v === null) return false;
+  return Object.values(v).some(hasNonFinite);
+}
+
+/** Blocking 'invalid-number' issues for changes whose new state holds NaN / Infinity. */
+function numberIssues(changes: EntityChange[]): Issue[] {
+  return changes
+    .filter((c) => c.after !== null && hasNonFinite(c.after))
+    .map((c) => ({
+      code: 'invalid-number',
+      ids: [c.id],
+      message: `${c.kind} ${c.id} has a value that is not a finite number`,
+    }));
+}
+
 export class H3xDocument {
   readonly presets?: PresetResolver;
   private readonly _project: Project;
@@ -122,6 +139,8 @@ export class H3xDocument {
   /** Apply and validate; reverts on any issue or validator error. */
   private attempt(cmd: Command): { changes: EntityChange[]; issues: Issue[] } {
     const changes = structuredClone(cmd.run({ floor: this.floor, presets: this.presets }));
+    const bad = numberIssues(changes);
+    if (bad.length > 0) return { changes, issues: bad };
     applyChanges(this.mutableFloor, changes, 'forward');
     let issues: Issue[];
     try {
@@ -181,6 +200,8 @@ export class H3xDocument {
       if (err instanceof H3xValidationError) return err.issues;
       throw err;
     }
+    const bad = numberIssues(changes);
+    if (bad.length > 0) return bad;
     applyChanges(this.mutableFloor, changes, 'forward');
     try {
       return this.validators.flatMap((v) => v(this, changes));
