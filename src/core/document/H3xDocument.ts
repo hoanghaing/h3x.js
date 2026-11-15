@@ -7,7 +7,7 @@ import { placementValidator, validatePlacements } from '../validate/placement';
 import type { Floor, Issue, PresetResolver, Project } from '../types';
 import { projectFromXML } from '../xml/parse';
 import { projectToXML } from '../xml/serialize';
-import { applyChanges } from './changes';
+import { applyChanges, swapChange } from './changes';
 import type { Command, EntityChange } from './changes';
 import { Emitter } from './emitter';
 import { History, deepEqual } from './history';
@@ -25,7 +25,7 @@ const invert = (changes: EntityChange[]): EntityChange[] =>
   changes
     .slice()
     .reverse()
-    .map((c) => ({ ...c, before: c.after, after: c.before }));
+    .map(swapChange);
 
 function hasNonFinite(v: unknown): boolean {
   if (typeof v === 'number') return !Number.isFinite(v);

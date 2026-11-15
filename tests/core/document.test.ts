@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
 import type { ChangeEvent, Command } from '../../src/core/document/H3xDocument';
 import { mergeChanges } from '../../src/core/document/changes';
 import type { EntityChange } from '../../src/core/document/changes';
 import { H3xValidationError } from '../../src/core/errors';
-import type { PlanNode, Project } from '../../src/core/types';
+import type { Item, Opening, PlanNode, Project, Room, Wall } from '../../src/core/types';
 import { moveNode } from '../../src/core/commands/layout';
 import { moveOpening } from '../../src/core/commands/objects';
 import { setWallFinish } from '../../src/core/commands/finishes';
@@ -206,7 +206,7 @@ describe('H3xDocument', () => {
       id: string,
       before: unknown,
       after: unknown,
-    ): EntityChange => ({ kind, id, before, after });
+    ): EntityChange => ({ kind, id, before, after }) as EntityChange; // opaque test payloads
     const merged = mergeChanges(
       [ch('node', 'a', null, 1), ch('node', 'b', 5, 6)],
       [ch('node', 'a', 1, 2), ch('wall', 'a', 7, null)],
@@ -397,5 +397,25 @@ describe('fromProject checks', () => {
       elevation: 0.3,
     };
     expect(err(proj([g])).issues[0]!.ids).toContain('i1');
+  });
+});
+
+describe('EntityChange typing', () => {
+  it('is a discriminated union over kind', () => {
+    expectTypeOf<Extract<EntityChange, { kind: 'node' }>['after']>().toEqualTypeOf<PlanNode | null>();
+    expectTypeOf<Extract<EntityChange, { kind: 'wall' }>['before']>().toEqualTypeOf<Wall | null>();
+    expectTypeOf<Extract<EntityChange, { kind: 'opening' }>['after']>().toEqualTypeOf<Opening | null>();
+    expectTypeOf<Extract<EntityChange, { kind: 'room' }>['after']>().toEqualTypeOf<Room | null>();
+    expectTypeOf<Extract<EntityChange, { kind: 'item' }>['after']>().toEqualTypeOf<Item | null>();
+  });
+
+  it('event consumers narrow without casts', () => {
+    const doc = docWithNode();
+    const xs: number[] = [];
+    doc.on('change', (e) => {
+      for (const c of e.changes) if (c.kind === 'node' && c.after) xs.push(c.after.x);
+    });
+    doc.execute(setX(3));
+    expect(xs).toEqual([3]);
   });
 });

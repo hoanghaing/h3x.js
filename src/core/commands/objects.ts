@@ -142,7 +142,7 @@ export function moveItem(id: Id, patch: ItemPatch): Command {
       if (it.mount === 'wall' && !ctx.floor.walls[after.wall as Id]) {
         throw notFound('Wall', after.wall as Id);
       }
-      return [{ kind: 'item', id, before: structuredClone(it), after }];
+      return [{ kind: 'item', id, before: structuredClone(it), after: after as unknown as Item }];
     },
   };
 }
