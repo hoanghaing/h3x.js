@@ -180,7 +180,17 @@ viewer.viewFromAxis('y'); // top view
 - **Render on demand.** There is no animation loop. The viewer renders after document changes,
   camera moves and resizes; call `viewer.requestRender()` after changing anything yourself, and
   `viewer.dispose()` / `scene.dispose()` when done.
-- Meshes carry `userData = { h3xKind: 'wall' | 'room', h3xId }` for picking.
+- **Picking.** Meshes carry `userData = { h3xKind: 'wall' | 'room' | 'join', h3xId }`. A `join`
+  mesh closes the top of a T or X junction (or the slot of a very acute corner); its `h3xId` is
+  the node id. Mesh objects keep their identity across document changes: only their geometry
+  and materials are swapped, so references from `getWallMesh` / `getFloorMesh` stay valid.
+- **Extra objects.** `scene.root` is the extension point: children you add to it (helpers,
+  furniture, markers) survive rebuilds. h3x only manages its own `h3x-walls`, `h3x-floors` and
+  `h3x-joins` groups.
+- **Ownership.** One `H3xScene` attaches to one `H3xViewer` (the viewer adds `scene.root` to its
+  own three.js scene). `scene.dispose()` disposes the materials it created, but a
+  `MaterialLibrary` you pass in through `materials` stays yours to dispose. `dispose()` can be
+  called more than once.
 
 Try it with the example page, a 4 x 16 m tube house (`examples/layouts/nha-ong-4x16.h3x`):
 
