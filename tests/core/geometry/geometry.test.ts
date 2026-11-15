@@ -81,6 +81,9 @@ describe('polygon', () => {
       const span = [{ x: 1, y: 1 }, { x: 3.5, y: 1 }, { x: 3.5, y: 1.9 }, { x: 1.9, y: 3.5 }, { x: 1, y: 3.5 }];
       expect(polygonContainsPolygon(L, span)).toBe(false);
       expect(polygonContainsPolygon(L, sq(1.5, 1.5, 1.9, 3.9))).toBe(true);
+      // diamond whose vertices lie on the notch walls but whose edge crosses the notch
+      const diamond = [{ x: 3, y: 2 }, { x: 2, y: 3 }, { x: 1, y: 2 }, { x: 2, y: 1 }];
+      expect(polygonContainsPolygon(L, diamond)).toBe(false);
     });
   });
 });
