@@ -114,6 +114,25 @@ describe('buildWallGeometry', () => {
     expectNear(area(g, 'left'), 10.27);
   });
 
+  it('touching doors are both cut', () => {
+    const f = isolatedFloor();
+    const door = { preset: 'door-single-01', wall: 'w', sill: 0, flip: false } as const;
+    f.openings.d1 = { ...door, id: 'd1', offset: 1.0, width: 0.8, height: 2.1 };
+    f.openings.d2 = { ...door, id: 'd2', offset: 1.8, width: 0.8, height: 2.0 };
+    const g = build(f, 'w');
+    expectNear(area(g, 'left'), 12.8 - 0.8 * 2.1 - 0.8 * 2.0);
+    expectNear(area(g, 'right'), 12.8 - 0.8 * 2.1 - 0.8 * 2.0);
+  });
+
+  it('touching windows are both cut', () => {
+    const f = isolatedFloor();
+    const win = { preset: 'window-01', wall: 'w', sill: 0.9, flip: false } as const;
+    f.openings.o1 = { ...win, id: 'o1', offset: 1.0, width: 0.8, height: 1.4 };
+    f.openings.o2 = { ...win, id: 'o2', offset: 1.8, width: 0.8, height: 1.4 };
+    const g = build(f, 'w');
+    expectNear(area(g, 'left'), 12.8 - 2 * 0.8 * 1.4);
+  });
+
   it('bbox', () => {
     const f = oneRoomFloor();
     f.elevation = 3.5;

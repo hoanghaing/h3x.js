@@ -25,8 +25,8 @@ interface Face {
 }
 
 /**
- * Clamped opening cuts sorted along the wall. A cut overlapping an earlier one
- * (validation normally prevents this) is skipped rather than merged.
+ * Clamped opening cuts sorted along the wall. A cut overlapping an earlier one by
+ * more than GEOM_TOL (validation normally prevents this) is skipped rather than merged.
  */
 function openingCuts(floor: Floor, wallId: Id, xMin: number, xMax: number, h: number): Cut[] {
   const raw: Cut[] = [];
@@ -43,8 +43,10 @@ function openingCuts(floor: Floor, wallId: Id, xMin: number, xMax: number, h: nu
   const out: Cut[] = [];
   for (const c of raw) {
     const prev = out[out.length - 1];
-    if (prev && c.x0 <= prev.x1 + GEOM_TOL) continue;
-    out.push(c);
+    // Openings that only touch (overlap ≤ GEOM_TOL) are both kept, as in core validation.
+    if (prev && prev.x1 - c.x0 > GEOM_TOL) continue;
+    // Snap a sub-tolerance overlap so the face outline never doubles back.
+    out.push(prev && c.x0 < prev.x1 ? { ...c, x0: prev.x1 } : c);
   }
   return out;
 }
