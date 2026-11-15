@@ -1,6 +1,7 @@
 import { FORMAT_VERSION } from '../constants';
 import { H3xValidationError } from '../errors';
 import { normalizeRoomOrientation } from '../rooms/normalize';
+import { layoutValidator, validateLayout } from '../validate/layout';
 import type { Floor, Issue, PresetResolver, Project } from '../types';
 import { projectFromXML } from '../xml/parse';
 import { projectToXML } from '../xml/serialize';
@@ -34,6 +35,7 @@ export class H3xDocument {
   private constructor(project: Project, presets?: PresetResolver) {
     this._project = project;
     this.presets = presets;
+    this.validators.push(layoutValidator);
   }
 
   static create(opts: { name?: string; presets?: PresetResolver } = {}): H3xDocument {
@@ -85,6 +87,11 @@ export class H3xDocument {
 
   toXML(opts: { pretty?: boolean } = {}): string {
     return projectToXML(this._project, opts);
+  }
+
+  /** All layout issues, including non-blocking ones. */
+  validateLayout(): Issue[] {
+    return validateLayout(this.floor as Floor);
   }
 
   addValidator(v: Validator): void {
