@@ -9,3 +9,7 @@ export * from './floors';
 export * from './materials';
 
 export * from './scene';
+
+export * from './gizmo';
+
+export * from './viewer';
