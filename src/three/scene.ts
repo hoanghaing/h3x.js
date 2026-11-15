@@ -8,6 +8,14 @@ import { buildWallGeometry } from './walls/wallGeometry';
 
 const GEOMETRY_KINDS = new Set(['node', 'wall', 'opening', 'room']);
 
+/** userData.h3xKind of the meshes an H3xScene creates. */
+export type H3xKind = 'wall' | 'room' | 'join';
+
+interface Built {
+  geom: BufferGeometry;
+  material: Mesh['material'];
+}
+
 /** A three.js scene graph (walls + floors) kept in sync with an H3xDocument. */
 export class H3xScene {
   readonly root = new Group();
@@ -21,6 +29,7 @@ export class H3xScene {
   private readonly joinMeshes = new Map<Id, Mesh>();
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
+  private disposed = false;
 
   constructor(
     private readonly doc: H3xDocument,
@@ -55,57 +64,82 @@ export class H3xScene {
     };
   }
 
+  /**
+   * Rebuilds all geometry from the document. Meshes keep their identity per id:
+   * geometry is swapped (old one disposed) and materials are updated in place;
+   * meshes are only created or removed when ids appear or disappear.
+   * A no-op after dispose().
+   */
   rebuild(): void {
-    this.clear();
+    if (this.disposed) return;
     const floor = this.doc.floor;
     const { corners, junctions } = computeJoins(floor);
+
+    const walls = new Map<Id, Built>();
     for (const wall of Object.values(floor.walls)) {
-      const id = wall.id;
-      const wallCorners = corners[id];
+      const wallCorners = corners[wall.id];
       if (!wallCorners) continue;
-      const geom = buildWallGeometry(floor, id, wallCorners);
-      const mesh = this.makeMesh(geom, [
-        this.materials.wall(wall.finishLeft),
-        this.materials.wall(wall.finishRight),
-        this.materials.trim(),
-      ]);
-      mesh.userData = { h3xKind: 'wall', h3xId: id };
-      this.wallsGroup.add(mesh);
-      this.wallMeshes.set(id, mesh);
+      walls.set(wall.id, {
+        geom: buildWallGeometry(floor, wall.id, wallCorners),
+        material: [
+          this.materials.wall(wall.finishLeft),
+          this.materials.wall(wall.finishRight),
+          this.materials.trim(),
+        ],
+      });
     }
+    const floors = new Map<Id, Built>();
     for (const room of Object.values(floor.rooms)) {
-      const id = room.id;
       const geom = buildFloorGeometry(floor, room);
-      if (!geom) continue;
-      const mesh = this.makeMesh(geom, this.materials.floor(room.floorFinish));
-      mesh.userData = { h3xKind: 'room', h3xId: id };
-      this.floorsGroup.add(mesh);
-      this.floorMeshes.set(id, mesh);
+      if (geom) floors.set(room.id, { geom, material: this.materials.floor(room.floorFinish) });
     }
+    const joins = new Map<Id, Built>();
     for (const [nodeId, junction] of Object.entries(junctions)) {
-      const mesh = this.makeMesh(
-        buildJoinGeometry(junction, floor.elevation),
-        this.materials.trim(),
-      );
-      mesh.userData = { h3xKind: 'join', h3xId: nodeId };
-      this.joinsGroup.add(mesh);
-      this.joinMeshes.set(nodeId, mesh);
+      joins.set(nodeId, {
+        geom: buildJoinGeometry(junction, floor.elevation),
+        material: this.materials.trim(),
+      });
     }
+
+    this.sync(this.wallMeshes, this.wallsGroup, 'wall', walls);
+    this.sync(this.floorMeshes, this.floorsGroup, 'room', floors);
+    this.sync(this.joinMeshes, this.joinsGroup, 'join', joins);
     this.notify();
   }
 
+  /** Idempotent. Does not dispose a MaterialLibrary passed in through the options. */
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.unsubscribe();
     this.clear();
     this.listeners.clear();
     if (this.ownsMaterials) this.materials.dispose();
   }
 
-  private makeMesh(geom: BufferGeometry, material: Mesh['material']): Mesh {
-    const mesh = new Mesh(geom, material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    return mesh;
+  private sync(meshes: Map<Id, Mesh>, group: Group, kind: H3xKind, built: Map<Id, Built>): void {
+    for (const [id, mesh] of meshes) {
+      if (built.has(id)) continue;
+      mesh.geometry.dispose();
+      mesh.removeFromParent();
+      meshes.delete(id);
+    }
+    for (const [id, { geom, material }] of built) {
+      const mesh = meshes.get(id);
+      if (mesh) {
+        const old = mesh.geometry;
+        mesh.geometry = geom;
+        mesh.material = material;
+        old.dispose();
+        continue;
+      }
+      const created = new Mesh(geom, material);
+      created.castShadow = true;
+      created.receiveShadow = true;
+      created.userData = { h3xKind: kind, h3xId: id };
+      group.add(created);
+      meshes.set(id, created);
+    }
   }
 
   private clear(): void {

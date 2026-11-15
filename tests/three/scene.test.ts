@@ -1,8 +1,8 @@
-import { Box3, BufferGeometry, type Material, type MeshStandardMaterial } from 'three';
+import { Box3, BufferGeometry, Group, type Material, type MeshStandardMaterial } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { H3xDocument, moveNode, setWallFinish, type Project } from '../../src/core';
-import { H3xScene } from '../../src/three';
-import { oneRoomFloor } from '../fixtures/floors';
+import { H3xDocument, moveNode, setWallFinish, type Floor, type Project } from '../../src/core';
+import { H3xScene, MaterialLibrary } from '../../src/three';
+import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
 
 function makeDoc(floor = oneRoomFloor()): H3xDocument {
   const project = { name: 'p', floors: [floor] } as unknown as Project;
@@ -15,7 +15,11 @@ describe('H3xScene', () => {
   it('builds wall and floor meshes with userData', () => {
     const scene = new H3xScene(makeDoc());
     expect(scene.root.name).toBe('h3x-root');
-    expect(scene.root.children.map((c) => c.name)).toEqual(['h3x-walls', 'h3x-floors', 'h3x-joins']);
+    expect(scene.root.children.map((c) => c.name)).toEqual([
+      'h3x-walls',
+      'h3x-floors',
+      'h3x-joins',
+    ]);
     for (const id of ['w1', 'w2', 'w3', 'w4']) {
       const m = scene.getWallMesh(id)!;
       expect(m.userData).toEqual({ h3xKind: 'wall', h3xId: id });
@@ -89,5 +93,76 @@ describe('H3xScene', () => {
     scene.onInvalidate(second);
     expect(() => scene.rebuild()).toThrow('boom');
     expect(second).toHaveBeenCalled();
+  });
+
+  it('keeps mesh identity across rebuilds', () => {
+    const doc = makeDoc(twoRoomFloor());
+    const scene = new H3xScene(doc);
+    const wall = scene.getWallMesh('w2')!;
+    const floor = scene.getFloorMesh('r2')!;
+    const join = scene.root.getObjectByName('h3x-joins')!.children[0]!;
+    const oldGeom = wall.geometry;
+    const spy = vi.spyOn(oldGeom, 'dispose');
+    doc.execute(moveNode('n3', { x: 9, y: 0 }));
+    expect(scene.getWallMesh('w2')).toBe(wall);
+    expect(scene.getFloorMesh('r2')).toBe(floor);
+    expect(scene.root.getObjectByName('h3x-joins')!.children[0]).toBe(join);
+    expect(wall.geometry).not.toBe(oldGeom);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(scene.root.children[0]!.children).toHaveLength(7);
+  });
+
+  it('updates materials in place on a finish change', () => {
+    const doc = makeDoc();
+    const scene = new H3xScene(doc);
+    const mesh = scene.getWallMesh('w1')!;
+    doc.execute(setWallFinish('w1', 'left', '#00ff00'));
+    expect(scene.getWallMesh('w1')).toBe(mesh);
+    const mats = mesh.material as Material[];
+    expect((mats[0] as MeshStandardMaterial).color.getHexString()).toBe('00ff00');
+  });
+
+  it('removes meshes whose ids disappear', () => {
+    const doc = makeDoc(twoRoomFloor());
+    const scene = new H3xScene(doc);
+    const w1 = scene.getWallMesh('w1');
+    // Simulate a topology change by editing the live floor, then rebuild.
+    const floor = doc.floor as Floor;
+    delete floor.walls.w7;
+    delete floor.rooms.r2;
+    scene.rebuild();
+    expect(scene.getWallMesh('w7')).toBeUndefined();
+    expect(scene.getFloorMesh('r2')).toBeUndefined();
+    expect(scene.getWallMesh('w1')).toBe(w1);
+    expect(scene.root.children[0]!.children).toHaveLength(6);
+    expect(scene.root.getObjectByName('h3x-joins')!.children).toHaveLength(0);
+  });
+
+  it('dispose is idempotent and does not dispose materials twice', () => {
+    const scene = new H3xScene(makeDoc());
+    const spy = vi.spyOn(MaterialLibrary.prototype, 'dispose');
+    scene.dispose();
+    scene.dispose();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebuild after dispose creates nothing and does not notify', () => {
+    const scene = new H3xScene(makeDoc());
+    const fn = vi.fn();
+    scene.onInvalidate(fn);
+    scene.dispose();
+    scene.rebuild();
+    expect(fn).not.toHaveBeenCalled();
+    expect(scene.getWallMesh('w1')).toBeUndefined();
+    expect(scene.root.children.every((g) => g.children.length === 0)).toBe(true);
+  });
+
+  it('keeps extra objects added to root across rebuilds', () => {
+    const doc = makeDoc();
+    const scene = new H3xScene(doc);
+    const extra = new Group();
+    scene.root.add(extra);
+    doc.execute(moveNode('n3', { x: 5, y: 4 }));
+    expect(extra.parent).toBe(scene.root);
   });
 });
