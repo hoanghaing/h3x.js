@@ -55,9 +55,11 @@ export class H3xScene {
     this.clear();
     const floor = this.doc.floor;
     const corners = computeWallCorners(floor);
-    for (const id of Object.keys(floor.walls)) {
-      const wall = floor.walls[id];
-      const geom = buildWallGeometry(floor, id, corners[id]);
+    for (const wall of Object.values(floor.walls)) {
+      const id = wall.id;
+      const wallCorners = corners[id];
+      if (!wallCorners) continue;
+      const geom = buildWallGeometry(floor, id, wallCorners);
       const mesh = this.makeMesh(geom, [
         this.materials.wall(wall.finishLeft),
         this.materials.wall(wall.finishRight),
