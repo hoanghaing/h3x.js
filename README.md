@@ -171,6 +171,14 @@ pnpm format      # prettier --write
 pnpm build       # vite library build to dist/
 ```
 
+## Documentation
+
+- [XML format](docs/xml-format.md): every element and attribute of `.h3x` v1, with an example.
+- [Validation](docs/validation.md): issue codes, blocking vs reported-only, the tolerance contract.
+- [Roadmap](docs/roadmap.md): milestones.
+- [Contributing](CONTRIBUTING.md): setup, rules, how to add commands and validators.
+- [Changelog](CHANGELOG.md).
+
 ## License
 
 MIT
