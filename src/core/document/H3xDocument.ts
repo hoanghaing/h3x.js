@@ -121,13 +121,23 @@ export class H3xDocument {
     return { changes, issues };
   }
 
-  execute(cmd: Command, opts: { coalesceKey?: string } = {}): void {
-    const { changes, issues } = this.attempt(cmd);
-    if (issues.length > 0) throw new H3xValidationError(issues);
-    this.history.push(changes, opts.coalesceKey);
+  /** Push to history, then emit. A throwing listener does not undo the commit. */
+  private commit(changes: EntityChange[], key?: string): void {
+    this.history.push(changes, key);
     this.emitter.emit({ reason: 'execute', changes: structuredClone(changes) });
   }
 
+  /**
+   * Throws H3xValidationError (state unchanged) on rejection. Listener errors are
+   * rethrown after all listeners ran; the change is already committed by then.
+   */
+  execute(cmd: Command, opts: { coalesceKey?: string } = {}): void {
+    const { changes, issues } = this.attempt(cmd);
+    if (issues.length > 0) throw new H3xValidationError(issues);
+    this.commit(changes, opts.coalesceKey);
+  }
+
+  /** Like execute but returns issues instead of throwing. Listener errors still propagate after the commit. */
   tryExecute(
     cmd: Command,
     opts: { coalesceKey?: string } = {},
@@ -141,8 +151,7 @@ export class H3xDocument {
       }
     })();
     if (issues.length > 0) return { ok: false, issues };
-    this.history.push(changes, opts.coalesceKey);
-    this.emitter.emit({ reason: 'execute', changes: structuredClone(changes) });
+    this.commit(changes, opts.coalesceKey);
     return { ok: true };
   }
 
