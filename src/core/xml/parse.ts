@@ -3,6 +3,7 @@ import { H3xParseError, H3xVersionError } from '../errors';
 import { createId } from '../ids';
 import { detectRooms } from '../rooms/detect';
 import { normalizeRoomOrientation } from '../rooms/normalize';
+import { checkRefs } from '../validate/refs';
 import type { Floor, Id, Item, Opening, PlanNode, Project, Room, Wall } from '../types';
 
 function req(e: Element, attr: string): string {
@@ -76,37 +77,6 @@ function parseItem(e: Element): Item {
         element: 'item',
         attribute: 'mount',
       });
-  }
-}
-
-function missingRef(
-  floor: Floor,
-  table: 'nodes' | 'walls',
-  id: Id,
-  element: string,
-  attribute: string,
-): void {
-  if (!floor[table][id]) {
-    throw new H3xParseError(
-      `<${element}> attribute "${attribute}" references missing ${table.slice(0, -1)} "${id}"`,
-      { element, attribute },
-    );
-  }
-}
-
-function checkRefs(floor: Floor): void {
-  for (const w of Object.values(floor.walls)) {
-    missingRef(floor, 'nodes', w.a, 'wall', 'a');
-    missingRef(floor, 'nodes', w.b, 'wall', 'b');
-  }
-  for (const o of Object.values(floor.openings)) {
-    missingRef(floor, 'walls', o.wall, 'opening', 'wall');
-  }
-  for (const r of Object.values(floor.rooms)) {
-    for (const id of r.walls) missingRef(floor, 'walls', id, 'room', 'walls');
-  }
-  for (const i of Object.values(floor.items)) {
-    if (i.mount === 'wall') missingRef(floor, 'walls', i.wall, 'item', 'wall');
   }
 }
 
@@ -190,7 +160,8 @@ function parseFloor(fe: Element): Floor {
     }
   }
 
-  checkRefs(floor);
+  const bad = checkRefs(floor)[0];
+  if (bad) throw new H3xParseError(bad.message, { element: bad.element, attribute: bad.attribute });
   if (Object.keys(floor.rooms).length === 0) {
     for (const d of detectRooms(floor)) {
       const id = createId();
@@ -243,6 +214,10 @@ export function projectFromXML(xml: string): Project {
     });
   }
 
+  const floorEls = children(root, 'floor');
+  if (floorEls.length === 0) {
+    throw new H3xParseError('<h3x> has no floor', { element: 'h3x' });
+  }
   const metaEl = children(root, 'meta')[0];
   return {
     version,
@@ -251,6 +226,6 @@ export function projectFromXML(xml: string): Project {
       name: metaEl?.getAttribute('name') ?? '',
       created: metaEl?.getAttribute('created') ?? '',
     },
-    floors: children(root, 'floor').map(parseFloor),
+    floors: floorEls.map(parseFloor),
   };
 }

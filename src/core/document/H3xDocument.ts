@@ -2,6 +2,7 @@ import { FORMAT_VERSION } from '../constants';
 import { H3xValidationError } from '../errors';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { layoutValidator, validateLayout } from '../validate/layout';
+import { checkRefs } from '../validate/refs';
 import { placementValidator, validatePlacements } from '../validate/placement';
 import type { Floor, Issue, PresetResolver, Project } from '../types';
 import { projectFromXML } from '../xml/parse';
@@ -83,9 +84,26 @@ export class H3xDocument {
     return new H3xDocument(projectFromXML(xml), opts.presets);
   }
 
+  /**
+   * Throws H3xValidationError 'no-floor' for an empty floor list and
+   * 'bad-reference' for dangling wall / node references.
+   */
   static fromProject(p: Project, opts: { presets?: PresetResolver } = {}): H3xDocument {
+    if (p.floors.length === 0) {
+      throw new H3xValidationError([
+        { code: 'no-floor', ids: [], message: 'Project has no floor' },
+      ]);
+    }
     const project = structuredClone(p);
-    for (const f of project.floors) normalizeRoomOrientation(f);
+    for (const f of project.floors) {
+      const bad = checkRefs(f);
+      if (bad.length > 0) {
+        throw new H3xValidationError(
+          bad.map((r) => ({ code: 'bad-reference', ids: [r.id, r.target], message: r.message })),
+        );
+      }
+      normalizeRoomOrientation(f);
+    }
     return new H3xDocument(project, opts.presets);
   }
 
@@ -94,7 +112,11 @@ export class H3xDocument {
     return this._project;
   }
 
-  /** Live internal floors[0]. Callers must not mutate it. */
+  /**
+   * Live internal floors[0]. Phase-1 editing APIs (commands, validators, undo)
+   * operate on floors[0] only; further floors are kept untouched and saved
+   * as loaded. Callers must not mutate it.
+   */
   get floor(): Readonly<Floor> {
     return this._project.floors[0]!;
   }

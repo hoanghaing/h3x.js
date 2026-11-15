@@ -352,3 +352,50 @@ describe('no-op commands', () => {
     expect(doc.canUndo).toBe(false);
   });
 });
+
+describe('fromProject checks', () => {
+  const proj = (floors: Project['floors']): Project => ({
+    version: 1,
+    unit: 'm',
+    meta: { name: 't', created: '' },
+    floors,
+  });
+  const err = (p: Project): H3xValidationError => {
+    try {
+      H3xDocument.fromProject(p);
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xValidationError);
+      return e as H3xValidationError;
+    }
+    throw new Error('expected throw');
+  };
+
+  it('no floors gives no-floor', () => {
+    expect(err(proj([])).issues[0]!.code).toBe('no-floor');
+  });
+
+  it('wall referencing a missing node gives bad-reference', () => {
+    const f = oneRoomFloor();
+    f.walls.w1 = { ...f.walls.w1!, b: 'nope' };
+    const e = err(proj([f]));
+    expect(e.issues[0]!.code).toBe('bad-reference');
+    expect(e.issues[0]!.ids).toContain('w1');
+  });
+
+  it('opening / wall item referencing a missing wall gives bad-reference', () => {
+    const f = oneRoomFloor();
+    f.openings.o1 = { ...f.openings.o1!, wall: 'nope' };
+    expect(err(proj([f])).issues[0]!.code).toBe('bad-reference');
+    const g = oneRoomFloor();
+    g.items.i1 = {
+      id: 'i1',
+      preset: 'outlet-01',
+      mount: 'wall',
+      wall: 'nope',
+      side: 'left',
+      offset: 1,
+      elevation: 0.3,
+    };
+    expect(err(proj([g])).issues[0]!.ids).toContain('i1');
+  });
+});
