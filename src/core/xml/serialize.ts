@@ -8,13 +8,13 @@ export function fmt(n: number): string {
 }
 
 /** XML 1.0 forbids C0 controls (except tab, LF, CR), U+FFFE / U+FFFF and lone surrogates. */
-// eslint-disable-next-line no-control-regex -- matching control characters is the point
 const FORBIDDEN_XML_CHARS =
-  /[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+  // eslint-disable-next-line no-control-regex -- matching control characters is the point
+  /[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
 function esc(s: string): string {
   return s
-    .replace(FORBIDDEN_XML_CHARS, '�')
+    .replace(FORBIDDEN_XML_CHARS, '\uFFFD')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
