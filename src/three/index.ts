@@ -7,3 +7,5 @@ export * from './walls/wallGeometry';
 export * from './floors';
 
 export * from './materials';
+
+export * from './scene';
