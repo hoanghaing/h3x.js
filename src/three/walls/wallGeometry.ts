@@ -1,8 +1,9 @@
-import { BufferGeometry, Float32BufferAttribute, ShapeUtils, Vector2, Vector3 } from 'three';
+import { BufferGeometry, Float32BufferAttribute, Vector2, Vector3 } from 'three';
 import type { Floor, Id, Vec2 } from '../../core';
 import { GEOM_TOL } from '../../core/constants';
 import { add, dot, leftNormal, normalize, scale, sub } from '../../core/geometry/vec';
 import { toWorld } from '../coords';
+import { TriangleSink, triangulateInto } from '../triangulate';
 import type { WallCorners } from './joins';
 
 /** Material group indices of a wall geometry. */
@@ -21,30 +22,6 @@ interface Face {
   start: Vec2;
   s: number;
   len: number;
-}
-
-class TriangleSink {
-  readonly positions: number[] = [];
-  readonly normals: number[] = [];
-
-  /** Emits a triangle wound so its geometric normal agrees with `want`. */
-  tri(a: Vector3, b: Vector3, c: Vector3, want: Vector3): void {
-    const n = new Vector3().subVectors(b, a).cross(new Vector3().subVectors(c, a));
-    const [p, q] = n.dot(want) < 0 ? [c, b] : [b, c];
-    for (const v of [a, p, q]) {
-      this.positions.push(v.x, v.y, v.z);
-      this.normals.push(want.x, want.y, want.z);
-    }
-  }
-
-  quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, want: Vector3): void {
-    this.tri(a, b, c, want);
-    this.tri(a, c, d, want);
-  }
-
-  get vertexCount(): number {
-    return this.positions.length / 3;
-  }
 }
 
 /**
@@ -107,23 +84,6 @@ function buildFace(
 
   const toW = (p: Vector2) => toWorld(add(face.start, scale(dir, p.x)), elevation + p.y);
   triangulateInto(sink, outline, holes, toW, want);
-}
-
-/** Triangulates a planar 2D contour (with holes) and emits it through `toW` into `sink`. */
-function triangulateInto(
-  sink: TriangleSink,
-  contour: Vector2[],
-  holes: Vector2[][],
-  toW: (p: Vector2) => Vector3,
-  want: Vector3,
-): void {
-  const world = [contour, ...holes].flat().map(toW);
-  for (const [i = -1, j = -1, k = -1] of ShapeUtils.triangulateShape(contour, holes)) {
-    const a = world[i];
-    const b = world[j];
-    const c = world[k];
-    if (a && b && c) sink.tri(a, b, c, want);
-  }
 }
 
 function degree(floor: Floor, nodeId: Id): number {
