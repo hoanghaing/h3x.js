@@ -2,7 +2,7 @@ import type { Command, CommandContext, EntityChange } from '../document/changes'
 import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
 import { H3xValidationError } from '../errors';
 import { add, distance, dot, leftNormal, scale, sub } from '../geometry/vec';
-import { openingRange } from '../validate/layout';
+import { inRange, openingRange, wallUsableRange } from '../validate/layout';
 import type { Id, Vec2, WallItem } from '../types';
 
 const EPS = 1e-9;
@@ -36,9 +36,10 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
     if (Math.abs(distance(a0, b0) - len) < EPS) continue;
     for (const o of Object.values(floor.openings)) {
       if (o.wall !== w.id) continue;
-      const { lo, hi } = openingRange(len, o.width);
+      const range = openingRange(floor, o, len);
+      const { lo, hi } = range;
       if (hi < lo - GEOM_TOL) continue;
-      if (o.offset >= lo - GEOM_TOL && o.offset <= hi + GEOM_TOL) continue;
+      if (inRange(o.offset, range)) continue;
       const offset = tidy(Math.min(Math.max(o.offset, lo), hi));
       if (offset === o.offset) continue;
       changes.push({
@@ -50,9 +51,11 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
     }
     for (const it of Object.values(floor.items)) {
       if (it.mount !== 'wall' || it.wall !== w.id) continue;
-      const half = (ctx.presets?.(it.preset)?.footprint.w ?? 0) / 2;
-      if (len - half < half) continue;
-      const offset = tidy(Math.min(Math.max(it.offset, half), len - half));
+      const width = ctx.presets?.(it.preset)?.footprint.w ?? 0;
+      const range = wallUsableRange(floor, w.id, { width, length: len });
+      if (range.hi < range.lo - GEOM_TOL) continue;
+      if (inRange(it.offset, range)) continue;
+      const offset = tidy(Math.min(Math.max(it.offset, range.lo), range.hi));
       if (Math.abs(offset - it.offset) < EPS) continue;
       const after: WallItem = { ...structuredClone(it), offset };
       changes.push({ kind: 'item', id: it.id, before: structuredClone(it), after });

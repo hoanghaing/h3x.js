@@ -5,25 +5,16 @@ import { H3xValidationError } from '../errors';
 import { obbCorners, obbOverlap, wallOBB } from '../geometry/obb';
 import type { OBB } from '../geometry/obb';
 import { polygonContainsPolygon, signedArea } from '../geometry/polygon';
-import { distance } from '../geometry/vec';
 import { roomPolygon } from '../rooms/detect';
-import { openingRange } from './layout';
-import type { Floor, Id, Issue, Item, Opening, PresetResolver, Vec2 } from '../types';
+import { inRange, openingRange, wallUsableRange } from './layout';
+import type { Floor, Issue, Item, Opening, PresetResolver, Vec2 } from '../types';
 
-
-function wallLength(floor: Floor, id: Id): number {
-  const w = floor.walls[id];
-  const a = w && floor.nodes[w.a];
-  const b = w && floor.nodes[w.b];
-  return a && b ? distance(a, b) : 0;
-}
 
 export function checkOpening(floor: Floor, o: Opening): Issue[] {
   const wall = floor.walls[o.wall];
   if (!wall) return [];
   const out: Issue[] = [];
-  const { lo, hi } = openingRange(wallLength(floor, o.wall), o.width);
-  if (hi < lo - GEOM_TOL || o.offset < lo - GEOM_TOL || o.offset > hi + GEOM_TOL) {
+  if (!inRange(o.offset, openingRange(floor, o))) {
     out.push({
       code: 'opening-out-of-wall',
       ids: [o.id, o.wall],
@@ -97,10 +88,8 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
   if (item.mount === 'wall') {
     const wall = floor.walls[item.wall];
     if (!wall) return out;
-    const len = wallLength(floor, item.wall);
     if (
-      item.offset < w / 2 - GEOM_TOL ||
-      item.offset > len - w / 2 + GEOM_TOL ||
+      !inRange(item.offset, wallUsableRange(floor, item.wall, { width: w })) ||
       item.elevation < -GEOM_TOL ||
       item.elevation > wall.height - h + GEOM_TOL
     ) {
