@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import * as h3x from '../../src/index';
+import readme from '../../README.md?raw';
 
 const FUNCTIONS = [
   'createId',
@@ -54,6 +55,27 @@ describe('public API', () => {
   it('keeps internals private', () => {
     for (const name of ['applyChanges', 'mergeChanges', 'History', 'normalizeRoomOrientation']) {
       expect((h3x as Record<string, unknown>)[name]).toBeUndefined();
+    }
+  });
+
+  it('readme documents what ships', () => {
+    expect(readme).not.toMatch(/later tasks/i);
+    for (const needle of [
+      'DOMParser',
+      'XMLSerializer',
+      'jsdom',
+      'GEOM_TOL',
+      'clean-room',
+      'H3xDocument.fromXML(xml);',
+      "doc.execute(moveNode('n3', { x: 5, y: 3 }));",
+      "doc.execute(moveNode('n2', { x: 5, y: 0 }));",
+      '<room id="r1" walls="w1 w2 w3 w4" name="Living room"/>',
+      'invalid-number',
+      'duplicate-id',
+      'bad-reference',
+      'no-floor',
+    ]) {
+      expect(readme).toContain(needle);
     }
   });
 
