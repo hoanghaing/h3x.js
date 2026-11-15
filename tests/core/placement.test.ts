@@ -9,7 +9,7 @@ import {
   removeItem,
   removeOpening,
 } from '../../src/core/commands/objects';
-import { moveWall } from '../../src/core/commands/layout';
+import { moveWall, setWallLength } from '../../src/core/commands/layout';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Floor, Project } from '../../src/core/types';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
@@ -194,5 +194,14 @@ describe('validatePlacements', () => {
     expect(hit).toBeDefined();
     expect(hit!.ids[1]).toBe('w3');
     expect((doc.floor as Floor).walls.w3).toBeDefined();
+  });
+
+  it('layout re-fit into a collision succeeds and is reported', () => {
+    const doc = mk();
+    const win = addOpening({ wall: 'w1', preset: 'window-01', offset: 3 });
+    doc.execute(win);
+    expect(doc.tryExecute(setWallLength('w1', 2.6)).ok).toBe(true);
+    const hit = doc.validatePlacements().find((i) => i.code === 'opening-overlap');
+    expect(hit?.ids).toContain(win.createdId);
   });
 });

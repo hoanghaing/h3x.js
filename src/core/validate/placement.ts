@@ -180,6 +180,7 @@ export const placementValidator: Validator = (
 ): Issue[] => {
   const floor = doc.floor as Floor;
   const presets = doc.presets ?? noPresets;
+  if (changes.some((c) => c.kind === 'node')) return []; // layout edits flag, never block (spec 5.4)
   const out: Issue[] = [];
   for (const c of changes) {
     if (c.after === null) continue;
