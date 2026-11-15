@@ -1,4 +1,5 @@
 import type { Vec2 } from '../types';
+import { GEOM_TOL } from '../constants';
 import { dot, sub } from './vec';
 
 export interface OBB {
@@ -7,8 +8,6 @@ export interface OBB {
   halfD: number;
   rotation: number;
 }
-
-const OVERLAP_TOL = 1e-6;
 
 export function obbCorners(o: OBB): Vec2[] {
   const c = Math.cos(o.rotation);
@@ -22,7 +21,7 @@ export function obbCorners(o: OBB): Vec2[] {
   return local.map(([x, y]) => ({ x: o.center.x + x * c - y * s, y: o.center.y + x * s + y * c }));
 }
 
-/** SAT; touching edges (penetration <= 1e-6) are not overlapping. */
+/** SAT; touching edges (penetration <= GEOM_TOL) are not overlapping. */
 export function obbOverlap(a: OBB, b: OBB): boolean {
   const ca = obbCorners(a);
   const cb = obbCorners(b);
@@ -39,7 +38,7 @@ export function obbOverlap(a: OBB, b: OBB): boolean {
     const pb = cb.map((p) => dot(sub(p, a.center), axis));
     const overlap =
       Math.min(Math.max(...pa), Math.max(...pb)) - Math.max(Math.min(...pa), Math.min(...pb));
-    if (overlap <= OVERLAP_TOL) return false;
+    if (overlap <= GEOM_TOL) return false;
   }
   return true;
 }

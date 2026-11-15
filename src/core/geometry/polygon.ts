@@ -1,8 +1,9 @@
 import type { Vec2 } from '../types';
+import { GEOM_TOL } from '../constants';
 import { EPS, cross, leftNormal, normalize, sub } from './vec';
 import { closestPointOnSegment, segmentsIntersect } from './segment';
 
-const BOUNDARY_TOL = 1e-6;
+const BOUNDARY_TOL = GEOM_TOL;
 
 const at = <T>(arr: T[], i: number): T => arr[((i % arr.length) + arr.length) % arr.length] as T;
 
@@ -52,7 +53,7 @@ export function insetPolygon(pts: Vec2[], distances: number[]): Vec2[] {
   });
 }
 
-/** Ray casting; points within 1e-6 of the boundary count as inside. */
+/** Ray casting; points within GEOM_TOL of the boundary count as inside. */
 export function pointInPolygon(p: Vec2, pts: Vec2[]): boolean {
   const n = pts.length;
   for (let i = 0; i < n; i++) {
@@ -72,9 +73,12 @@ export function pointInPolygon(p: Vec2, pts: Vec2[]): boolean {
 
 /** Strict interior crossing of both segments (touching / collinear excluded). */
 function properCross(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
+  // Signed distance of r from line pq; within BOUNDARY_TOL counts as on the line.
   const o = (p: Vec2, q: Vec2, r: Vec2): number => {
-    const v = cross(sub(q, p), sub(r, p));
-    return Math.abs(v) < BOUNDARY_TOL ? 0 : Math.sign(v);
+    const len = Math.hypot(q.x - p.x, q.y - p.y);
+    if (len < EPS) return 0;
+    const v = cross(sub(q, p), sub(r, p)) / len;
+    return Math.abs(v) <= BOUNDARY_TOL ? 0 : Math.sign(v);
   };
   return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
 }

@@ -1,5 +1,6 @@
 import type { EntityChange } from '../document/changes';
 import type { H3xDocument, Validator } from '../document/H3xDocument';
+import { GEOM_TOL } from '../constants';
 import { H3xValidationError } from '../errors';
 import { obbCorners, obbOverlap, wallOBB } from '../geometry/obb';
 import type { OBB } from '../geometry/obb';
@@ -9,7 +10,6 @@ import { roomPolygon } from '../rooms/detect';
 import { openingRange } from './layout';
 import type { Floor, Id, Issue, Item, Opening, PresetResolver, Vec2 } from '../types';
 
-const EPS = 1e-9;
 
 function wallLength(floor: Floor, id: Id): number {
   const w = floor.walls[id];
@@ -23,7 +23,7 @@ export function checkOpening(floor: Floor, o: Opening): Issue[] {
   if (!wall) return [];
   const out: Issue[] = [];
   const { lo, hi } = openingRange(wallLength(floor, o.wall), o.width);
-  if (hi < lo - EPS || o.offset < lo - EPS || o.offset > hi + EPS) {
+  if (hi < lo - GEOM_TOL || o.offset < lo - GEOM_TOL || o.offset > hi + GEOM_TOL) {
     out.push({
       code: 'opening-out-of-wall',
       ids: [o.id, o.wall],
@@ -35,7 +35,7 @@ export function checkOpening(floor: Floor, o: Opening): Issue[] {
     const overlap =
       Math.min(o.offset + o.width / 2, other.offset + other.width / 2) -
       Math.max(o.offset - o.width / 2, other.offset - other.width / 2);
-    if (overlap > EPS) {
+    if (overlap > GEOM_TOL) {
       out.push({
         code: 'opening-overlap',
         ids: [o.id, other.id],
@@ -43,7 +43,7 @@ export function checkOpening(floor: Floor, o: Opening): Issue[] {
       });
     }
   }
-  if (o.sill + o.height > wall.height + EPS) {
+  if (o.sill + o.height > wall.height + GEOM_TOL) {
     out.push({
       code: 'opening-too-tall',
       ids: [o.id, o.wall],
@@ -99,10 +99,10 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
     if (!wall) return out;
     const len = wallLength(floor, item.wall);
     if (
-      item.offset < w / 2 - EPS ||
-      item.offset > len - w / 2 + EPS ||
-      item.elevation < -EPS ||
-      item.elevation > wall.height - h + EPS
+      item.offset < w / 2 - GEOM_TOL ||
+      item.offset > len - w / 2 + GEOM_TOL ||
+      item.elevation < -GEOM_TOL ||
+      item.elevation > wall.height - h + GEOM_TOL
     ) {
       out.push({
         code: 'wall-item-out-of-range',
@@ -116,7 +116,7 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
         Math.min(item.offset + w / 2, o.offset + o.width / 2) -
         Math.max(item.offset - w / 2, o.offset - o.width / 2);
       const dy = Math.min(item.elevation + h, o.sill + o.height) - Math.max(item.elevation, o.sill);
-      if (dx > EPS && dy > EPS) {
+      if (dx > GEOM_TOL && dy > GEOM_TOL) {
         out.push({
           code: 'wall-item-on-opening',
           ids: [item.id, o.id],

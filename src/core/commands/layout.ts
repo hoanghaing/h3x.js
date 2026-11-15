@@ -1,5 +1,5 @@
 import type { Command, CommandContext, EntityChange } from '../document/changes';
-import { MIN_WALL_LENGTH } from '../constants';
+import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
 import { H3xValidationError } from '../errors';
 import { add, distance, dot, leftNormal, scale, sub } from '../geometry/vec';
 import { openingRange } from '../validate/layout';
@@ -37,8 +37,8 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
     for (const o of Object.values(floor.openings)) {
       if (o.wall !== w.id) continue;
       const { lo, hi } = openingRange(len, o.width);
-      if (hi < lo - EPS) continue;
-      if (o.offset >= lo - EPS && o.offset <= hi + EPS) continue;
+      if (hi < lo - GEOM_TOL) continue;
+      if (o.offset >= lo - GEOM_TOL && o.offset <= hi + GEOM_TOL) continue;
       const offset = tidy(Math.min(Math.max(o.offset, lo), hi));
       if (offset === o.offset) continue;
       changes.push({
