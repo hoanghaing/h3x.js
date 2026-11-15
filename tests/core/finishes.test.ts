@@ -57,10 +57,10 @@ describe('finish commands', () => {
     const doc = mk();
     doc.execute(renameRoom('r1', 'Bed\u0001room'));
     const back = H3xDocument.fromXML(doc.toXML());
-    expect(back.floor.rooms.r1!.name).toBe('Bed�room');
-    doc.execute(renameRoom('r1', 'a\u0000b\u000Bc￾d\uD800e\uDC00f\u{1F600}g'));
+    expect(back.floor.rooms.r1!.name).toBe('Bed\uFFFDroom');
+    doc.execute(renameRoom('r1', 'a\u0000b\u000Bc\uFFFEd\uD800e\uDC00f\u{1F600}g'));
     const again = H3xDocument.fromXML(doc.toXML());
-    expect(again.floor.rooms.r1!.name).toBe('a�b�c�d�e�f\u{1F600}g');
+    expect(again.floor.rooms.r1!.name).toBe('a\uFFFDb\uFFFDc\uFFFDd\uFFFDe\uFFFDf\u{1F600}g');
   });
 
   it('renameRoom allows an empty name', () => {
