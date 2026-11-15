@@ -9,7 +9,7 @@ import {
   removeItem,
   removeOpening,
 } from '../../src/core/commands/objects';
-import { moveWall, setWallLength } from '../../src/core/commands/layout';
+import { moveNode, moveWall, setWallLength } from '../../src/core/commands/layout';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Floor, Project } from '../../src/core/types';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
@@ -203,5 +203,48 @@ describe('validatePlacements', () => {
     expect(doc.tryExecute(setWallLength('w1', 2.6)).ok).toBe(true);
     const hit = doc.validatePlacements().find((i) => i.code === 'opening-overlap');
     expect(hit?.ids).toContain(win.createdId);
+  });
+});
+
+describe('non-finite numbers', () => {
+  const only = (r: ReturnType<H3xDocument['tryExecute']>): string[] => codes(r);
+
+  it('addOpening with NaN offset is rejected as invalid-number', () => {
+    const doc = mk();
+    const cmd = addOpening({ wall: 'w1', preset: 'window-01', offset: NaN });
+    const r = doc.tryExecute(cmd);
+    expect(r.ok).toBe(false);
+    expect(only(r)).toEqual(['invalid-number']);
+    if (!r.ok) expect(r.issues[0]!.ids).toEqual([cmd.createdId]);
+    expect(doc.floor.openings[cmd.createdId]).toBeUndefined();
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('wall item with NaN offset is rejected as invalid-number', () => {
+    const doc = mk();
+    const r = doc.tryExecute(
+      addItem({ mount: 'wall', preset: 'outlet-01', wall: 'w1', side: 'left', offset: NaN, elevation: 0.4 }),
+    );
+    expect(only(r)).toEqual(['invalid-number']);
+    expect(count(doc)).toBe(0);
+  });
+
+  it('moveNode to Infinity is invalid-number, not walls-cross', () => {
+    const doc = mk();
+    const before = structuredClone(doc.floor.nodes);
+    const r = doc.tryExecute(moveNode('n3', { x: Infinity, y: 4 }));
+    expect(only(r)).toEqual(['invalid-number']);
+    if (!r.ok) expect(r.issues[0]!.ids).toEqual(['n3']);
+    expect(doc.floor.nodes).toEqual(before);
+    expect(() => doc.toXML()).not.toThrow();
+  });
+
+  it('preview reports invalid-number without mutating', () => {
+    const doc = mk();
+    const before = structuredClone(doc.floor);
+    expect(doc.preview(moveNode('n3', { x: NaN, y: 4 })).map((i) => i.code)).toEqual([
+      'invalid-number',
+    ]);
+    expect(doc.floor).toEqual(before);
   });
 });
