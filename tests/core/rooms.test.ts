@@ -39,6 +39,29 @@ describe('detectRooms', () => {
     }
   });
 
+  it('ignores a spur ending inside a room', () => {
+    const floor = oneRoomFloor();
+    floor.nodes.n5 = { id: 'n5', x: 2, y: 2 };
+    floor.walls.w5 = { id: 'w5', a: 'n1', b: 'n5', thickness: 0.2, height: 3.2 };
+    const faces = detectRooms(floor);
+    expect(faces).toHaveLength(1);
+    expect(faces[0]!.walls).toHaveLength(4);
+    expect(sorted(faces[0]!.walls)).toEqual(['w1', 'w2', 'w3', 'w4']);
+    expect(new Set(faces[0]!.nodes).size).toBe(4);
+  });
+
+  it('finds two disjoint rooms', () => {
+    const floor = oneRoomFloor();
+    const corners = [[10, 0], [14, 0], [14, 4], [10, 4]] as const;
+    corners.forEach(([x, y], i) => {
+      floor.nodes[`m${i}`] = { id: `m${i}`, x, y };
+    });
+    for (let i = 0; i < 4; i++) {
+      floor.walls[`v${i}`] = { id: `v${i}`, a: `m${i}`, b: `m${(i + 1) % 4}`, thickness: 0.2, height: 3.2 };
+    }
+    expect(detectRooms(floor)).toHaveLength(2);
+  });
+
   it('ignores dangling walls', () => {
     const floor = oneRoomFloor();
     floor.nodes.n5 = { id: 'n5', x: 6, y: 0 };
@@ -66,6 +89,7 @@ describe('roomArea / roomPolygon', () => {
     const f = oneRoomFloor();
     f.nodes.n3 = { id: 'n3', x: -1, y: -1 };
     expect(signedArea(roomPolygon(f, f.rooms.r1!, 'center'))).toBeLessThan(0);
+    expect(roomArea(f, f.rooms.r1!, 'center')).toBeLessThan(0);
   });
 });
 

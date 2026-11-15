@@ -26,7 +26,27 @@ export function detectRooms(floor: Floor): Array<{ walls: Id[]; nodes: Id[] }> {
     list.push({ from, to, wall, angle: Math.atan2(q.y - p.y, q.x - p.x) });
     outgoing.set(from, list);
   };
-  for (const w of Object.values(floor.walls)) {
+  // Prune dangling chains so only the 2-connected part is traced.
+  const live = new Map(
+    Object.values(floor.walls)
+      .filter((w) => floor.nodes[w.a] && floor.nodes[w.b])
+      .map((w) => [w.id, w]),
+  );
+  for (let changed = true; changed; ) {
+    changed = false;
+    const deg = new Map<Id, number>();
+    for (const w of live.values()) {
+      deg.set(w.a, (deg.get(w.a) ?? 0) + 1);
+      deg.set(w.b, (deg.get(w.b) ?? 0) + 1);
+    }
+    for (const w of [...live.values()]) {
+      if (deg.get(w.a) === 1 || deg.get(w.b) === 1) {
+        live.delete(w.id);
+        changed = true;
+      }
+    }
+  }
+  for (const w of live.values()) {
     add(w.a, w.b, w.id);
     add(w.b, w.a, w.id);
   }
