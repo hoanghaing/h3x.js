@@ -1,4 +1,5 @@
 import { FORMAT_VERSION, XML_DECIMALS } from '../constants';
+import { H3xValidationError } from '../errors';
 import type { Floor, Item, Project } from '../types';
 
 export function fmt(n: number): string {
@@ -20,6 +21,18 @@ function esc(s: string): string {
 type AttrValue = string | number | undefined;
 
 function el(name: string, attrs: Array<[string, AttrValue]>, children?: string[]): string {
+  for (const [k, v] of attrs) {
+    if (typeof v === 'number' && !Number.isFinite(v)) {
+      const id = attrs[0]?.[0] === 'id' ? String(attrs[0][1]) : name;
+      throw new H3xValidationError([
+        {
+          code: 'non-finite-number',
+          ids: [id],
+          message: `<${name}> attribute "${k}" of "${id}" is not a finite number`,
+        },
+      ]);
+    }
+  }
   const a = attrs
     .filter((p): p is [string, string | number] => p[1] !== undefined)
     .map(([k, v]) => ` ${k}="${esc(typeof v === 'number' ? fmt(v) : v)}"`)

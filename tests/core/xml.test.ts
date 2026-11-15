@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { H3xParseError, H3xVersionError } from '../../src/core/errors';
+import { H3xParseError, H3xValidationError, H3xVersionError } from '../../src/core/errors';
 import { signedArea } from '../../src/core/geometry/polygon';
 import { roomPolygon } from '../../src/core/rooms/detect';
 import type { Project } from '../../src/core/types';
@@ -59,6 +59,51 @@ function doc(opts: { room?: string; version?: string; nodes?: string; walls?: st
 }
 
 describe('xml', () => {
+  it('round-trips optional attributes byte-identically', () => {
+    const p = sampleProject();
+    const f = p.floors[0]!;
+    f.openings.o1!.flip = true;
+    f.walls.w1!.finishLeft = 'paint-white';
+    f.walls.w1!.finishRight = 'paint-cream';
+    f.rooms.r1!.floorFinish = 'wood-oak';
+    f.items.i1!.variant = 'grey';
+    const xml = projectToXML(p);
+    expect(xml).toContain('flip="1"');
+    expect(xml).toContain('variant="grey"');
+    const back = projectFromXML(xml);
+    expect(back.floors[0]!.openings.o1!.flip).toBe(true);
+    expect(projectToXML(back)).toBe(xml);
+  });
+
+  it('rejects non-finite numbers on write', () => {
+    const p = sampleProject();
+    p.floors[0]!.nodes.n1!.x = NaN;
+    try {
+      projectToXML(p);
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xValidationError);
+      const issue = (e as H3xValidationError).issues[0]!;
+      expect(issue.code).toBe('non-finite-number');
+      expect(issue.ids).toContain('n1');
+    }
+    const q = sampleProject();
+    q.floors[0]!.walls.w1!.thickness = Infinity;
+    expect(() => projectToXML(q)).toThrow(H3xValidationError);
+    try {
+      projectToXML(q);
+    } catch (e) {
+      expect((e as H3xValidationError).issues[0]!.ids).toContain('w1');
+    }
+  });
+
+  it('validates unit', () => {
+    expect(() => projectFromXML(doc().replace('unit="m"', 'unit="cm"'))).toThrow(
+      expect.objectContaining({ name: 'H3xParseError', element: 'h3x', attribute: 'unit' }),
+    );
+    expect(projectFromXML(doc().replace(' unit="m"', '')).unit).toBe('m');
+  });
+
   it('round-trip is stable', () => {
     const p = sampleProject();
     const xml = projectToXML(p);
