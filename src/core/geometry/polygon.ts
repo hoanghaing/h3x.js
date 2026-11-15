@@ -88,10 +88,35 @@ export function polygonContainsPolygon(outer: Vec2[], inner: Vec2[]): boolean {
   const n = outer.length;
   const m = inner.length;
   for (let i = 0; i < m; i++) {
-    const a = inner[i] as Vec2;
-    const b = inner[(i + 1) % m] as Vec2;
+    const a = at(inner, i);
+    const b = at(inner, i + 1);
     for (let j = 0; j < n; j++) {
       if (properCross(a, b, at(outer, j), at(outer, j + 1))) return false;
+    }
+    // Split the edge where it touches the outer boundary; each piece must stay inside.
+    const d = sub(b, a);
+    const l2 = d.x * d.x + d.y * d.y;
+    if (l2 < EPS) continue;
+    const ts = [0, 1];
+    for (let j = 0; j < n; j++) {
+      const c = at(outer, j);
+      const e = at(outer, j + 1);
+      const onEdge = closestPointOnSegment(c, a, b);
+      if (Math.hypot(onEdge.point.x - c.x, onEdge.point.y - c.y) <= BOUNDARY_TOL) ts.push(onEdge.t);
+      const f = sub(e, c);
+      const denom = cross(d, f);
+      if (Math.abs(denom) < EPS) continue;
+      const t = cross(sub(c, a), f) / denom;
+      const u = cross(sub(c, a), d) / denom;
+      if (t > 0 && t < 1 && u >= 0 && u <= 1) ts.push(t);
+    }
+    ts.sort((x, y) => x - y);
+    for (let k = 0; k + 1 < ts.length; k++) {
+      const t0 = ts[k] as number;
+      const t1 = ts[k + 1] as number;
+      if (t1 - t0 < 1e-12) continue;
+      const tm = (t0 + t1) / 2;
+      if (!pointInPolygon({ x: a.x + d.x * tm, y: a.y + d.y * tm }, outer)) return false;
     }
   }
   return true;
