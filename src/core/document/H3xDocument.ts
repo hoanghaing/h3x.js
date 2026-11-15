@@ -9,7 +9,7 @@ import { projectToXML } from '../xml/serialize';
 import { applyChanges } from './changes';
 import type { Command, EntityChange } from './changes';
 import { Emitter } from './emitter';
-import { History } from './history';
+import { History, deepEqual } from './history';
 
 export type { Command, CommandContext, EntityChange } from './changes';
 
@@ -134,8 +134,13 @@ export class H3xDocument {
     return { changes, issues };
   }
 
-  /** Push to history, then emit. A throwing listener does not undo the commit. */
+  /**
+   * Push to history, then emit. A throwing listener does not undo the commit.
+   * A no-op (no changes, or every change has before deep-equal to after) leaves
+   * history (including its coalescing/seal state) untouched and emits nothing.
+   */
   private commit(changes: EntityChange[], key?: string): void {
+    if (changes.every((c) => deepEqual(c.before, c.after))) return;
     this.history.push(changes, key);
     this.emitter.emit({ reason: 'execute', changes: structuredClone(changes) });
   }
