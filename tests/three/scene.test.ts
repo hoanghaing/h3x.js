@@ -15,7 +15,7 @@ describe('H3xScene', () => {
   it('builds wall and floor meshes with userData', () => {
     const scene = new H3xScene(makeDoc());
     expect(scene.root.name).toBe('h3x-root');
-    expect(scene.root.children.map((c) => c.name)).toEqual(['h3x-walls', 'h3x-floors']);
+    expect(scene.root.children.map((c) => c.name)).toEqual(['h3x-walls', 'h3x-floors', 'h3x-joins']);
     for (const id of ['w1', 'w2', 'w3', 'w4']) {
       const m = scene.getWallMesh(id)!;
       expect(m.userData).toEqual({ h3xKind: 'wall', h3xId: id });

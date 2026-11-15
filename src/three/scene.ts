@@ -2,7 +2,8 @@ import { Group, Mesh, type BufferGeometry } from 'three';
 import type { ChangeEvent, H3xDocument, Id } from '../core';
 import { buildFloorGeometry } from './floors';
 import { MaterialLibrary, type FinishResolver } from './materials';
-import { computeWallCorners } from './walls/joins';
+import { buildJoinGeometry } from './walls/joinGeometry';
+import { computeJoins } from './walls/joins';
 import { buildWallGeometry } from './walls/wallGeometry';
 
 const GEOMETRY_KINDS = new Set(['node', 'wall', 'opening', 'room']);
@@ -12,10 +13,12 @@ export class H3xScene {
   readonly root = new Group();
   private readonly wallsGroup = new Group();
   private readonly floorsGroup = new Group();
+  private readonly joinsGroup = new Group();
   private readonly materials: MaterialLibrary;
   private readonly ownsMaterials: boolean;
   private readonly wallMeshes = new Map<Id, Mesh>();
   private readonly floorMeshes = new Map<Id, Mesh>();
+  private readonly joinMeshes = new Map<Id, Mesh>();
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
 
@@ -28,7 +31,8 @@ export class H3xScene {
     this.root.name = 'h3x-root';
     this.wallsGroup.name = 'h3x-walls';
     this.floorsGroup.name = 'h3x-floors';
-    this.root.add(this.wallsGroup, this.floorsGroup);
+    this.joinsGroup.name = 'h3x-joins';
+    this.root.add(this.wallsGroup, this.floorsGroup, this.joinsGroup);
     this.rebuild();
     this.unsubscribe = doc.on('change', (e: ChangeEvent) => {
       if (e.changes.some((c) => GEOMETRY_KINDS.has(c.kind))) this.rebuild();
@@ -54,7 +58,7 @@ export class H3xScene {
   rebuild(): void {
     this.clear();
     const floor = this.doc.floor;
-    const corners = computeWallCorners(floor);
+    const { corners, junctions } = computeJoins(floor);
     for (const wall of Object.values(floor.walls)) {
       const id = wall.id;
       const wallCorners = corners[id];
@@ -78,6 +82,15 @@ export class H3xScene {
       this.floorsGroup.add(mesh);
       this.floorMeshes.set(id, mesh);
     }
+    for (const [nodeId, junction] of Object.entries(junctions)) {
+      const mesh = this.makeMesh(
+        buildJoinGeometry(junction, floor.elevation),
+        this.materials.trim(),
+      );
+      mesh.userData = { h3xKind: 'join', h3xId: nodeId };
+      this.joinsGroup.add(mesh);
+      this.joinMeshes.set(nodeId, mesh);
+    }
     this.notify();
   }
 
@@ -96,12 +109,17 @@ export class H3xScene {
   }
 
   private clear(): void {
-    for (const mesh of [...this.wallMeshes.values(), ...this.floorMeshes.values()]) {
+    for (const mesh of [
+      ...this.wallMeshes.values(),
+      ...this.floorMeshes.values(),
+      ...this.joinMeshes.values(),
+    ]) {
       mesh.geometry.dispose();
       mesh.removeFromParent();
     }
     this.wallMeshes.clear();
     this.floorMeshes.clear();
+    this.joinMeshes.clear();
   }
 
   /** Runs every listener, then rethrows the first error (mirrors the document emitter). */
