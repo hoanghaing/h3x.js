@@ -127,8 +127,12 @@ export function buildWallGeometry(floor: Floor, wallId: Id, corners: WallCorners
     const cuts = openingCuts(floor, wallId, xMin, xMax, h);
 
     const nW = new Vector3(n.x, 0, -n.y);
-    buildFace(sinks[WALL_GROUP.left], left, dir, cuts, h, elev, nW);
-    buildFace(sinks[WALL_GROUP.right], right, dir, cuts, h, elev, nW.clone().negate());
+    // A short wall between long miters can have a face of zero or negative length;
+    // skip it rather than emit a self-intersecting outline.
+    if (left.len > GEOM_TOL) buildFace(sinks[WALL_GROUP.left], left, dir, cuts, h, elev, nW);
+    if (right.len > GEOM_TOL) {
+      buildFace(sinks[WALL_GROUP.right], right, dir, cuts, h, elev, nW.clone().negate());
+    }
 
     const trim = sinks[WALL_GROUP.trim];
     const up = new Vector3(0, 1, 0);

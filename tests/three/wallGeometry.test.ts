@@ -133,6 +133,35 @@ describe('buildWallGeometry', () => {
     expectNear(area(g, 'left'), 12.8 - 2 * 0.8 * 1.4);
   });
 
+  it('short wall between two acute joins skips its overrun face', () => {
+    // w: 0.3 m along +x; p and q leave its ends at 33° on the left side, so both
+    // left miters (~0.34 m along w, within MITER_LIMIT) overrun the wall.
+    const t = (33 * Math.PI) / 180;
+    const f = isolatedFloor();
+    f.nodes = {
+      a: { id: 'a', x: 0, y: 0 },
+      b: { id: 'b', x: 0.3, y: 0 },
+      p: { id: 'p', x: 3 * Math.cos(t), y: 3 * Math.sin(t) },
+      q: { id: 'q', x: 0.3 - 3 * Math.cos(t), y: 3 * Math.sin(t) },
+    };
+    f.walls = {
+      w: { id: 'w', a: 'a', b: 'b', thickness: 0.2, height: 3.2 },
+      p: { id: 'p', a: 'a', b: 'p', thickness: 0.2, height: 3.2 },
+      q: { id: 'q', a: 'b', b: 'q', thickness: 0.2, height: 3.2 },
+    };
+    const c = computeWallCorners(f).w!;
+    expect(c.endLeft.x - c.startLeft.x).toBeLessThan(0);
+    let g: ReturnType<typeof build> | undefined;
+    expect(() => {
+      g = build(f, 'w');
+    }).not.toThrow();
+    const pos = g!.getAttribute('position').array;
+    expect(Array.from(pos).every(Number.isFinite)).toBe(true);
+    expect(area(g!, 'left')).toBe(0);
+    expect(area(g!, 'right')).toBeGreaterThan(0);
+    expect(Number.isFinite(area(g!, 'trim'))).toBe(true);
+  });
+
   it('bbox', () => {
     const f = oneRoomFloor();
     f.elevation = 3.5;
