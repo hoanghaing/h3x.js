@@ -33,8 +33,13 @@ export function triangulateInto(
   toW: (p: Vector2) => Vector3,
   want: Vector3,
 ): void {
-  const world = [contour, ...holes].flat().map(toW);
-  for (const [i = -1, j = -1, k = -1] of ShapeUtils.triangulateShape(contour, holes)) {
+  // triangulateShape drops a closing duplicate point in place; work on copies and
+  // map to world afterwards so the triangle indices match the cleaned rings.
+  const c = [...contour];
+  const hs = holes.map((h) => [...h]);
+  const tris = ShapeUtils.triangulateShape(c, hs);
+  const world = [c, ...hs].flat().map(toW);
+  for (const [i = -1, j = -1, k = -1] of tris) {
     const a = world[i];
     const b = world[j];
     const c = world[k];
