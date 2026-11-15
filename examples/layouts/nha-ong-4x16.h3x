@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<h3x version="1" unit="m">
+  <meta name="Nhà ống 4x16"/>
+  <floor id="f1" level="0" elevation="0" wallHeight="3.2">
+    <node id="l0" x="0" y="0"/><node id="r0" x="4" y="0"/>
+    <node id="l1" x="0" y="5"/><node id="r1" x="4" y="5"/>
+    <node id="l2" x="0" y="9.5"/><node id="r2" x="4" y="9.5"/>
+    <node id="l3" x="0" y="14"/><node id="r3" x="4" y="14"/>
+    <node id="l4" x="0" y="16"/><node id="r4" x="4" y="16"/>
+    <wall id="wf" a="l0" b="r0" thickness="0.2" height="3.2"/>
+    <wall id="wr1" a="r0" b="r1" thickness="0.2" height="3.2"/>
+    <wall id="wr2" a="r1" b="r2" thickness="0.2" height="3.2"/>
+    <wall id="wr3" a="r2" b="r3" thickness="0.2" height="3.2"/>
+    <wall id="wr4" a="r3" b="r4" thickness="0.2" height="3.2"/>
+    <wall id="wb" a="r4" b="l4" thickness="0.2" height="3.2"/>
+    <wall id="wl4" a="l4" b="l3" thickness="0.2" height="3.2"/>
+    <wall id="wl3" a="l3" b="l2" thickness="0.2" height="3.2"/>
+    <wall id="wl2" a="l2" b="l1" thickness="0.2" height="3.2"/>
+    <wall id="wl1" a="l1" b="l0" thickness="0.2" height="3.2"/>
+    <wall id="wp1" a="l1" b="r1" thickness="0.1" height="3.2"/>
+    <wall id="wp2" a="l2" b="r2" thickness="0.1" height="3.2"/>
+    <wall id="wp3" a="l3" b="r3" thickness="0.1" height="3.2"/>
+    <opening id="d-front" wall="wf" preset="door-single-01" offset="2" width="0.9" height="2.1" sill="0"/>
+    <opening id="d-p1" wall="wp1" preset="door-single-01" offset="2" width="0.9" height="2.1" sill="0"/>
+    <opening id="d-p2" wall="wp2" preset="door-single-01" offset="2" width="0.9" height="2.1" sill="0"/>
+    <opening id="d-p3" wall="wp3" preset="door-single-01" offset="2" width="0.9" height="2.1" sill="0"/>
+    <opening id="win-l1" wall="wl1" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-r1" wall="wr1" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-l2" wall="wl2" preset="window-01" offset="2.25" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-r2" wall="wr2" preset="window-01" offset="2.25" width="1.2" height="1.4" sill="0.9"/>
+    <room id="rm1" walls="wf wr1 wp1 wl1" name="Phòng khách" floorFinish="#c8a77e"/>
+    <room id="rm2" walls="wp1 wr2 wp2 wl2" name="Phòng ngủ" floorFinish="#c8a77e"/>
+    <room id="rm3" walls="wp2 wr3 wp3 wl3" name="Bếp" floorFinish="#d9d4cc"/>
+    <room id="rm4" walls="wp3 wr4 wb wl4" name="WC" floorFinish="#b9c4c9"/>
+  </floor>
+</h3x>

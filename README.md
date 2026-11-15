@@ -147,6 +147,57 @@ U+FFFD.
 `obbCorners(obb)` and `wallOBB(a, b, thickness)` work with oriented boxes (`OBB`).
 `createId()` makes 10-character nanoid ids.
 
+## h3x/three
+
+`h3x/three` renders an `H3xDocument` with three.js: extruded walls with door and window
+cut-outs, mitered corners, floors and an orbit viewer with an axis gizmo. `three` is a peer
+dependency, so install it next to h3x (`h3x/core` and the package root do not need it):
+
+```sh
+pnpm add h3x three
+```
+
+```ts
+import { H3xDocument } from 'h3x/core';
+import { H3xScene, H3xViewer } from 'h3x/three';
+
+const doc = H3xDocument.fromXML(xml);
+const scene = new H3xScene(doc); // meshes follow every document change
+const viewer = new H3xViewer(document.getElementById('app')!, scene);
+viewer.fitToContent();
+
+viewer.setProjection('orthographic');
+viewer.viewFromAxis('y'); // top view
+```
+
+- **Coordinates.** Plan `(x, y)` at elevation `e` maps to world `(x, e + v, -y)`, where `v` is the
+  height. A plan rotation (CCW seen from above) becomes `object.rotation.y`. A top-down view is
+  therefore not mirrored.
+- **Finishes and materials.** Walls get one material per side plus trim; floors use the room
+  finish. A finish value starting with `#` is used as a literal colour (`#c8a77e`); other ids
+  go through the optional `resolveFinish` callback of `H3xScene` / `MaterialLibrary`.
+  Defaults: wall `#f2efe9`, floor `#c8b49a`, trim `#e2ddd5`.
+- **Render on demand.** There is no animation loop. The viewer renders after document changes,
+  camera moves and resizes; call `viewer.requestRender()` after changing anything yourself, and
+  `viewer.dispose()` / `scene.dispose()` when done.
+- **Picking.** Meshes carry `userData = { h3xKind: 'wall' | 'room' | 'join', h3xId }`. A `join`
+  mesh closes the top of a T or X junction (or the slot of a very acute corner); its `h3xId` is
+  the node id. Mesh objects keep their identity across document changes: only their geometry
+  and materials are swapped, so references from `getWallMesh` / `getFloorMesh` stay valid.
+- **Extra objects.** `scene.root` is the extension point: children you add to it (helpers,
+  furniture, markers) survive rebuilds. h3x only manages its own `h3x-walls`, `h3x-floors` and
+  `h3x-joins` groups.
+- **Ownership.** One `H3xScene` attaches to one `H3xViewer` (the viewer adds `scene.root` to its
+  own three.js scene). `scene.dispose()` disposes the materials it created, but a
+  `MaterialLibrary` you pass in through `materials` stays yours to dispose. `dispose()` can be
+  called more than once.
+
+Try it with the example page, a 4 x 16 m tube house (`examples/layouts/nha-ong-4x16.h3x`):
+
+```sh
+pnpm dev   # http://localhost:5173
+```
+
 ## Tolerance
 
 All contact, containment and range checks use one tolerance, `GEOM_TOL` = 1e-3 m (1 mm).
@@ -169,6 +220,7 @@ pnpm typecheck   # tsc --noEmit
 pnpm lint        # eslint
 pnpm format      # prettier --write
 pnpm build       # vite library build to dist/
+pnpm dev         # example page (examples/) with the sample layout
 ```
 
 ## Documentation

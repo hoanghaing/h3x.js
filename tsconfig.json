@@ -9,7 +9,11 @@
     "declaration": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "paths": {
+      "h3x/core": ["./src/core/index.ts"],
+      "h3x/three": ["./src/three/index.ts"]
+    }
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "examples"]
 }
