@@ -53,6 +53,16 @@ describe('finish commands', () => {
     expect(back.floor.rooms.r1!.name).toBe('Phòng ngủ');
   });
 
+  it('XML-forbidden characters are replaced with U+FFFD so the file reloads', () => {
+    const doc = mk();
+    doc.execute(renameRoom('r1', 'Bed\u0001room'));
+    const back = H3xDocument.fromXML(doc.toXML());
+    expect(back.floor.rooms.r1!.name).toBe('Bed�room');
+    doc.execute(renameRoom('r1', 'a\u0000b\u000Bc￾d\uD800e\uDC00f\u{1F600}g'));
+    const again = H3xDocument.fromXML(doc.toXML());
+    expect(again.floor.rooms.r1!.name).toBe('a�b�c�d�e�f\u{1F600}g');
+  });
+
   it('renameRoom allows an empty name', () => {
     const doc = mk();
     doc.execute(renameRoom('r1', '   '));
