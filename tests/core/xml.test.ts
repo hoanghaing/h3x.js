@@ -43,7 +43,9 @@ const ROOM = `<room id="r1" walls="w1 w2 w3 w4" name="Phòng khách" floorFinish
 const ITEMS = `<item id="i1" preset="sofa-3s-01" mount="floor" x="2" y="3" rotation="1.5708"/>
 <item id="i2" preset="outlet-01" mount="wall" wall="w1" side="left" offset="2.5" elevation="0.4"/>`;
 
-function doc(opts: { room?: string; version?: string; nodes?: string; walls?: string } = {}): string {
+function doc(
+  opts: { room?: string; version?: string; nodes?: string; walls?: string } = {},
+): string {
   const version = opts.version ?? ' version="1"';
   return `<h3x${version} unit="m">
   <meta name="Nhà ống" created="2026-11-16T10:00:00Z"/>
@@ -170,9 +172,7 @@ describe('xml', () => {
     expect(bad(doc({ walls: WALLS.replace('b="n2"', 'b="n9"') })).message).toContain('n9');
     expect(bad('<h3x')).toBeInstanceOf(H3xParseError);
     expect(bad(doc({ version: '' })).attribute).toBe('version');
-    expect(
-      bad(doc().replace('mount="floor"', 'mount="sky"')).attribute,
-    ).toBe('mount');
+    expect(bad(doc().replace('mount="floor"', 'mount="sky"')).attribute).toBe('mount');
   });
 
   it('version 2', () => {

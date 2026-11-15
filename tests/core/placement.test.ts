@@ -223,7 +223,14 @@ describe('non-finite numbers', () => {
   it('wall item with NaN offset is rejected as invalid-number', () => {
     const doc = mk();
     const r = doc.tryExecute(
-      addItem({ mount: 'wall', preset: 'outlet-01', wall: 'w1', side: 'left', offset: NaN, elevation: 0.4 }),
+      addItem({
+        mount: 'wall',
+        preset: 'outlet-01',
+        wall: 'w1',
+        side: 'left',
+        offset: NaN,
+        elevation: 0.4,
+      }),
     );
     expect(only(r)).toEqual(['invalid-number']);
     expect(count(doc)).toBe(0);
@@ -281,7 +288,14 @@ describe('re-running create commands', () => {
 
 describe('meeting walls shorten the usable wall range (I5)', () => {
   const outlet = (offset: number) =>
-    addItem({ mount: 'wall', preset: 'outlet-01', wall: 'w1', side: 'left', offset, elevation: 0.4 });
+    addItem({
+      mount: 'wall',
+      preset: 'outlet-01',
+      wall: 'w1',
+      side: 'left',
+      offset,
+      elevation: 0.4,
+    });
 
   it('outlet inside the meeting wall at a corner is out of range', () => {
     const doc = mk();

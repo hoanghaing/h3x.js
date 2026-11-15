@@ -47,7 +47,14 @@ describe('polygon', () => {
     expect(signedArea(sq(0, 0, 1, 1).reverse())).toBe(-1);
   });
   it('isSimple', () => {
-    expect(isSimple([{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 0 }, { x: 0, y: 1 }])).toBe(false);
+    expect(
+      isSimple([
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+      ]),
+    ).toBe(false);
     expect(isSimple(sq(0, 0, 1, 1))).toBe(true);
   });
   it('insetPolygon', () => {
@@ -67,29 +74,47 @@ describe('polygon', () => {
     const outer = sq(0, 0, 4, 4);
     it('flush square shares collinear edge', () =>
       expect(polygonContainsPolygon(outer, sq(0, 0, 1, 1))).toBe(true));
-    it('strictly inside', () =>
-      expect(polygonContainsPolygon(outer, sq(1, 1, 2, 2))).toBe(true));
-    it('poking outside', () =>
-      expect(polygonContainsPolygon(outer, sq(3, 1, 5, 2))).toBe(false));
+    it('strictly inside', () => expect(polygonContainsPolygon(outer, sq(1, 1, 2, 2))).toBe(true));
+    it('poking outside', () => expect(polygonContainsPolygon(outer, sq(3, 1, 5, 2))).toBe(false));
     it('L-shape notch spanned', () => {
       const L = [
-        { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 2 },
-        { x: 2, y: 2 }, { x: 2, y: 4 }, { x: 0, y: 4 },
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 4, y: 2 },
+        { x: 2, y: 2 },
+        { x: 2, y: 4 },
+        { x: 0, y: 4 },
       ];
       expect(polygonContainsPolygon(L, sq(1, 1, 3, 1.5))).toBe(true);
       // vertices (1,1.5)... all inside, but spans the notch region
-      const span = [{ x: 1, y: 1 }, { x: 3.5, y: 1 }, { x: 3.5, y: 1.9 }, { x: 1.9, y: 3.5 }, { x: 1, y: 3.5 }];
+      const span = [
+        { x: 1, y: 1 },
+        { x: 3.5, y: 1 },
+        { x: 3.5, y: 1.9 },
+        { x: 1.9, y: 3.5 },
+        { x: 1, y: 3.5 },
+      ];
       expect(polygonContainsPolygon(L, span)).toBe(false);
       expect(polygonContainsPolygon(L, sq(1.5, 1.5, 1.9, 3.9))).toBe(true);
       // diamond whose vertices lie on the notch walls but whose edge crosses the notch
-      const diamond = [{ x: 3, y: 2 }, { x: 2, y: 3 }, { x: 1, y: 2 }, { x: 2, y: 1 }];
+      const diamond = [
+        { x: 3, y: 2 },
+        { x: 2, y: 3 },
+        { x: 1, y: 2 },
+        { x: 2, y: 1 },
+      ];
       expect(polygonContainsPolygon(L, diamond)).toBe(false);
     });
   });
 });
 
 describe('obb', () => {
-  const o = (x: number, y: number, rotation = 0) => ({ center: { x, y }, halfW: 0.5, halfD: 0.5, rotation });
+  const o = (x: number, y: number, rotation = 0) => ({
+    center: { x, y },
+    halfW: 0.5,
+    halfD: 0.5,
+    rotation,
+  });
   it('overlap', () => expect(obbOverlap(o(0, 0), o(0.5, 0))).toBe(true));
   it('touching', () => expect(obbOverlap(o(0, 0), o(1, 0))).toBe(false));
   it('rotated', () => expect(obbOverlap(o(0, 0), o(1.2, 0, Math.PI / 4))).toBe(true));

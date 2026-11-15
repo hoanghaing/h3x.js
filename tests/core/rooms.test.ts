@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { H3xValidationError } from '../../src/core/errors';
 import { signedArea } from '../../src/core/geometry/polygon';
-import {
-  detectRooms,
-  roomArea,
-  roomNodeLoop,
-  roomPolygon,
-} from '../../src/core/rooms/detect';
+import { detectRooms, roomArea, roomNodeLoop, roomPolygon } from '../../src/core/rooms/detect';
 import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
 
 const sorted = (a: string[]): string[] => [...a].sort();
@@ -22,7 +17,12 @@ describe('detectRooms', () => {
     const faces = detectRooms(twoRoomFloor());
     expect(faces).toHaveLength(2);
     const sets = faces.map((f) => sorted(f.walls).join(',')).sort();
-    expect(sets).toEqual([sorted(['w1', 'w7', 'w5', 'w6']).join(','), sorted(['w2', 'w3', 'w4', 'w7']).join(',')].sort());
+    expect(sets).toEqual(
+      [
+        sorted(['w1', 'w7', 'w5', 'w6']).join(','),
+        sorted(['w2', 'w3', 'w4', 'w7']).join(','),
+      ].sort(),
+    );
   });
 
   it('emits nodes and walls in matching CCW order', () => {
@@ -52,12 +52,23 @@ describe('detectRooms', () => {
 
   it('finds two disjoint rooms', () => {
     const floor = oneRoomFloor();
-    const corners = [[10, 0], [14, 0], [14, 4], [10, 4]] as const;
+    const corners = [
+      [10, 0],
+      [14, 0],
+      [14, 4],
+      [10, 4],
+    ] as const;
     corners.forEach(([x, y], i) => {
       floor.nodes[`m${i}`] = { id: `m${i}`, x, y };
     });
     for (let i = 0; i < 4; i++) {
-      floor.walls[`v${i}`] = { id: `v${i}`, a: `m${i}`, b: `m${(i + 1) % 4}`, thickness: 0.2, height: 3.2 };
+      floor.walls[`v${i}`] = {
+        id: `v${i}`,
+        a: `m${i}`,
+        b: `m${(i + 1) % 4}`,
+        thickness: 0.2,
+        height: 3.2,
+      };
     }
     expect(detectRooms(floor)).toHaveLength(2);
   });
