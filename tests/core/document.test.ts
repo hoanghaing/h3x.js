@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
 import type { ChangeEvent, Command } from '../../src/core/document/H3xDocument';
+import { mergeChanges } from '../../src/core/document/changes';
+import type { EntityChange } from '../../src/core/document/changes';
 import { H3xValidationError } from '../../src/core/errors';
 import type { PlanNode, Project } from '../../src/core/types';
 
@@ -137,5 +139,153 @@ describe('H3xDocument', () => {
     const d = docWithNode();
     const d2 = H3xDocument.fromXML(d.toXML());
     expect(d2.floor.nodes.n1).toEqual({ id: 'n1', x: 0, y: 0 });
+  });
+
+  it('throwing validator reverts and rethrows (execute and preview)', () => {
+    const d = docWithNode();
+    d.addValidator(() => {
+      throw new Error('boom');
+    });
+    let n = 0;
+    d.on('change', () => n++);
+    expect(() => d.execute(setX(5))).toThrow('boom');
+    expect(x(d)).toBe(0);
+    expect(() => d.preview(setX(5))).toThrow('boom');
+    expect(x(d)).toBe(0);
+    expect(n).toBe(0);
+  });
+
+  it('throwing listener: others run, error rethrown, change committed', () => {
+    const d = docWithNode();
+    let ran = false;
+    d.on('change', () => {
+      throw new Error('listener');
+    });
+    d.on('change', () => (ran = true));
+    expect(() => d.execute(setX(4))).toThrow('listener');
+    expect(ran).toBe(true);
+    expect(x(d)).toBe(4);
+    expect(d.canUndo).toBe(true);
+  });
+
+  it('execute after undo clears redo', () => {
+    const d = docWithNode();
+    d.execute(setX(1));
+    d.undo();
+    expect(d.canRedo).toBe(true);
+    d.execute(setX(2));
+    expect(d.canRedo).toBe(false);
+  });
+
+  it('history is limited to 200 entries', () => {
+    const d = docWithNode();
+    for (let i = 1; i <= 201; i++) d.execute(setX(i));
+    let undos = 0;
+    while (d.undo()) undos++;
+    expect(undos).toBe(200);
+  });
+
+  it('undo event is inverted', () => {
+    const d = docWithNode();
+    d.execute(setX(1));
+    const events: ChangeEvent[] = [];
+    d.on('change', (e) => events.push(e));
+    d.undo();
+    expect(events[0]!.reason).toBe('undo');
+    expect((events[0]!.changes[0]!.before as PlanNode).x).toBe(1);
+    expect((events[0]!.changes[0]!.after as PlanNode).x).toBe(0);
+  });
+
+  it('mergeChanges keeps earliest before and latest after', () => {
+    const ch = (
+      kind: 'node' | 'wall',
+      id: string,
+      before: unknown,
+      after: unknown,
+    ): EntityChange => ({ kind, id, before, after });
+    const merged = mergeChanges(
+      [ch('node', 'a', null, 1), ch('node', 'b', 5, 6)],
+      [ch('node', 'a', 1, 2), ch('wall', 'a', 7, null)],
+    );
+    expect(merged).toHaveLength(3);
+    expect(merged.find((c) => c.kind === 'node' && c.id === 'a')).toMatchObject({
+      before: null,
+      after: 2,
+    });
+    expect(merged.find((c) => c.kind === 'node' && c.id === 'b')).toMatchObject({
+      before: 5,
+      after: 6,
+    });
+    expect(merged.find((c) => c.kind === 'wall')).toMatchObject({ before: 7, after: null });
+  });
+
+  it('tryExecute reports H3xValidationError thrown by run', () => {
+    const d = docWithNode();
+    const bad: Command = {
+      label: 'bad',
+      run: () => {
+        throw new H3xValidationError([{ code: 'bad', ids: [], message: 'bad input' }]);
+      },
+    };
+    const r = d.tryExecute(bad);
+    expect(r).toEqual({ ok: false, issues: [{ code: 'bad', ids: [], message: 'bad input' }] });
+    expect(x(d)).toBe(0);
+    d.undo(); // only the add is in history
+    expect(d.canUndo).toBe(false);
+  });
+
+  it('rejected step mid-drag does not break coalescing', () => {
+    const d = docWithNode();
+    d.addValidator((doc) =>
+      doc.floor.nodes.n1!.x > 10 ? [{ code: 'far', ids: ['n1'], message: 'far' }] : [],
+    );
+    d.execute(setX(1), { coalesceKey: 'drag' });
+    d.execute(setX(2), { coalesceKey: 'drag' });
+    expect(d.tryExecute(setX(20), { coalesceKey: 'drag' }).ok).toBe(false);
+    d.execute(setX(3), { coalesceKey: 'drag' });
+    d.undo();
+    expect(x(d)).toBe(0);
+  });
+
+  it('rejected multi-entity command leaves all entities unchanged', () => {
+    const d = docWithNode();
+    d.execute({
+      label: 'add n2',
+      run: () => [{ kind: 'node', id: 'n2', before: null, after: { id: 'n2', x: 0, y: 0 } }],
+    });
+    d.addValidator((doc) =>
+      doc.floor.nodes.n2!.x > 10 ? [{ code: 'far', ids: ['n2'], message: 'far' }] : [],
+    );
+    const move: Command = {
+      label: 'move both',
+      run: ({ floor }) => [
+        {
+          kind: 'node',
+          id: 'n1',
+          before: structuredClone(floor.nodes.n1!),
+          after: { id: 'n1', x: 5, y: 0 },
+        },
+        {
+          kind: 'node',
+          id: 'n2',
+          before: structuredClone(floor.nodes.n2!),
+          after: { id: 'n2', x: 50, y: 0 },
+        },
+      ],
+    };
+    expect(d.tryExecute(move).ok).toBe(false);
+    expect(x(d)).toBe(0);
+    expect(d.floor.nodes.n2!.x).toBe(0);
+  });
+
+  it('coalesced drag back to start leaves no undo step', () => {
+    const d = docWithNode();
+    d.endCoalesce();
+    d.execute(setX(5), { coalesceKey: 'drag' });
+    d.execute(setX(0), { coalesceKey: 'drag' });
+    expect(x(d)).toBe(0);
+    d.undo(); // removes the add; no phantom drag step
+    expect(d.floor.nodes.n1).toBeUndefined();
+    expect(d.canUndo).toBe(false);
   });
 });
