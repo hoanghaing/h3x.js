@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Milestone 2: `h3x/three`.
+
+- `H3xScene`: wall and floor meshes kept in sync with an `H3xDocument`, with mitered joins,
+  door and window cut-outs and per-side finishes (`MaterialLibrary`).
+- `H3xViewer`: render-on-demand viewer with perspective / orthographic cameras, orbit controls,
+  `viewFromAxis`, `fitToContent` and an axis gizmo.
+- Example page (`pnpm dev`) with a sample Vietnamese tube-house layout.
+- `three` is a peer dependency of `h3x/three` only.
+
 Milestone 1: `h3x/core`.
 
 - `H3xDocument`: editable document with undo / redo, drag coalescing (`coalesceKey`), change

@@ -6,7 +6,7 @@ floor of a house.
 | #   | Milestone                        | Scope                                                                                                                 | Status  |
 | --- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------- |
 | 1   | `h3x/core`                       | Data model, XML round trip, commands with undo / redo, room detection, geometry, validation. Fully tested.            | Done    |
-| 2   | 3D with one layout (`h3x/three`) | Build walls with door and window cut-outs and a floor from a sample layout file; camera and axis gizmo.               | Planned |
+| 2   | 3D with one layout (`h3x/three`) | Build walls with door and window cut-outs and a floor from a sample layout file; camera and axis gizmo.               | Done    |
 | 3   | 2D plan editing (`h3x/plan`)     | SVG plan: drag nodes and walls, type lengths, live dimensions; the 3D view updates with edits.                        | Planned |
 | 4   | Constrained placement            | Catalog, GLB loading, drag and drop of floor / wall / opening / ceiling items with the placement rules, in 2D and 3D. | Planned |
 | 5   | h3xEditor                        | Full editor UI, IndexedDB saving, import / export, i18n, 8 sample layouts, playground.                                | Planned |

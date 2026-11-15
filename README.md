@@ -147,6 +147,47 @@ U+FFFD.
 `obbCorners(obb)` and `wallOBB(a, b, thickness)` work with oriented boxes (`OBB`).
 `createId()` makes 10-character nanoid ids.
 
+## h3x/three
+
+`h3x/three` renders an `H3xDocument` with three.js: extruded walls with door and window
+cut-outs, mitered corners, floors and an orbit viewer with an axis gizmo. `three` is a peer
+dependency, so install it next to h3x (`h3x/core` and the package root do not need it):
+
+```sh
+pnpm add h3x three
+```
+
+```ts
+import { H3xDocument } from 'h3x/core';
+import { H3xScene, H3xViewer } from 'h3x/three';
+
+const doc = H3xDocument.fromXML(xml);
+const scene = new H3xScene(doc); // meshes follow every document change
+const viewer = new H3xViewer(document.getElementById('app')!, scene);
+viewer.fitToContent();
+
+viewer.setProjection('orthographic');
+viewer.viewFromAxis('y'); // top view
+```
+
+- **Coordinates.** Plan `(x, y)` at elevation `e` maps to world `(x, e + v, -y)`, where `v` is the
+  height. A plan rotation (CCW seen from above) becomes `object.rotation.y`. A top-down view is
+  therefore not mirrored.
+- **Finishes and materials.** Walls get one material per side plus trim; floors use the room
+  finish. A finish value starting with `#` is used as a literal colour (`#c8a77e`); other ids
+  go through the optional `resolveFinish` callback of `H3xScene` / `MaterialLibrary`.
+  Defaults: wall `#f2efe9`, floor `#c8b49a`, trim `#e2ddd5`.
+- **Render on demand.** There is no animation loop. The viewer renders after document changes,
+  camera moves and resizes; call `viewer.requestRender()` after changing anything yourself, and
+  `viewer.dispose()` / `scene.dispose()` when done.
+- Meshes carry `userData = { h3xKind: 'wall' | 'room', h3xId }` for picking.
+
+Try it with the example page, a 4 x 16 m tube house (`examples/layouts/nha-ong-4x16.h3x`):
+
+```sh
+pnpm dev   # http://localhost:5173
+```
+
 ## Tolerance
 
 All contact, containment and range checks use one tolerance, `GEOM_TOL` = 1e-3 m (1 mm).
@@ -169,6 +210,7 @@ pnpm typecheck   # tsc --noEmit
 pnpm lint        # eslint
 pnpm format      # prettier --write
 pnpm build       # vite library build to dist/
+pnpm dev         # example page (examples/) with the sample layout
 ```
 
 ## Documentation
