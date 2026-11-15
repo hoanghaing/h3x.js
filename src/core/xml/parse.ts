@@ -245,6 +245,14 @@ export function projectFromXML(xml: string): Project {
   }
   if (version > FORMAT_VERSION) throw new H3xVersionError(version);
 
+  const unit = root.getAttribute('unit');
+  if (unit !== null && unit !== 'm') {
+    throw new H3xParseError(`<h3x> unit must be "m": "${unit}"`, {
+      element: 'h3x',
+      attribute: 'unit',
+    });
+  }
+
   const metaEl = children(root, 'meta')[0];
   return {
     version,
