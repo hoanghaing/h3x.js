@@ -1,8 +1,8 @@
 import { FORMAT_VERSION } from '../constants';
-import { H3xParseError, H3xValidationError, H3xVersionError } from '../errors';
-import { signedArea } from '../geometry/polygon';
+import { H3xParseError, H3xVersionError } from '../errors';
 import { createId } from '../ids';
-import { detectRooms, roomPolygon } from '../rooms/detect';
+import { detectRooms } from '../rooms/detect';
+import { normalizeRoomOrientation } from '../rooms/normalize';
 import type { Floor, Id, Item, Opening, PlanNode, Project, Room, Wall } from '../types';
 
 function req(e: Element, attr: string): string {
@@ -110,21 +110,6 @@ function checkRefs(floor: Floor): void {
   }
 }
 
-/** Ruling R2: rooms are stored CCW. */
-function normalizeRoom(floor: Floor, room: Room): void {
-  try {
-    if (signedArea(roomPolygon(floor, room, 'center')) < 0) room.walls.reverse();
-  } catch (err) {
-    if (err instanceof H3xValidationError) {
-      throw new H3xParseError(`room "${room.id}" walls do not form a loop: ${err.message}`, {
-        element: 'room',
-        attribute: 'walls',
-      });
-    }
-    throw err;
-  }
-}
-
 function parseFloor(fe: Element): Floor {
   const floor: Floor = {
     id: req(fe, 'id'),
@@ -212,7 +197,12 @@ function parseFloor(fe: Element): Floor {
       floor.rooms[id] = { id, walls: d.walls, name: '' };
     }
   } else {
-    for (const room of Object.values(floor.rooms)) normalizeRoom(floor, room);
+    normalizeRoomOrientation(floor, (room, err) => {
+      throw new H3xParseError(`room "${room.id}" walls do not form a loop: ${err.message}`, {
+        element: 'room',
+        attribute: 'walls',
+      });
+    });
   }
   return floor;
 }
