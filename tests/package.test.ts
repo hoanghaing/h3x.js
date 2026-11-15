@@ -8,4 +8,10 @@ describe('package.json', () => {
     expect(p.main).toBe('./dist/index.js');
     expect(p.module).toBe('./dist/index.js');
   });
+
+  it('marks three as an optional peer (only h3x/three needs it)', () => {
+    const p = pkg as Record<string, unknown>;
+    expect(p.peerDependencies).toEqual({ three: '^0.187.0' });
+    expect(p.peerDependenciesMeta).toEqual({ three: { optional: true } });
+  });
 });
