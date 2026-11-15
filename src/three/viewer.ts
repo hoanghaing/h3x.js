@@ -35,6 +35,8 @@ export interface H3xViewerOptions {
 }
 
 const FOV = 50;
+/** The grid sits this far below the lowest content. */
+const GRID_OFFSET = 0.005;
 const TAN_HALF_FOV = Math.tan(MathUtils.degToRad(FOV / 2));
 const AXIS_DIRS: Record<AxisName, Vector3> = {
   x: new Vector3(1, 0, 0),
@@ -85,6 +87,10 @@ export class H3xViewer {
 
     if (opts.grid ?? true) {
       this.grid = new GridHelper(100, 100, 0x999999, 0xcccccc);
+      // Drawn first and without depth writes so it never z-fights the floors.
+      const gm = this.grid.material;
+      for (const m of Array.isArray(gm) ? gm : [gm]) m.depthWrite = false;
+      this.grid.renderOrder = -1;
       this.threeScene.add(this.grid);
     }
 
@@ -92,7 +98,10 @@ export class H3xViewer {
     this.perspective.lookAt(0, 0, 0);
 
     this.prevContainerPosition = container.style.position;
-    if (typeof getComputedStyle === 'function' && getComputedStyle(container).position === 'static') {
+    if (
+      typeof getComputedStyle === 'function' &&
+      getComputedStyle(container).position === 'static'
+    ) {
       container.style.position = 'relative';
     }
     this.renderer.domElement.style.display = 'block';
@@ -267,7 +276,7 @@ export class H3xViewer {
     this.light.position.copy(center).add(new Vector3(5, 10, 7));
     if (this.grid) {
       const base = box.isEmpty() ? 0 : box.min.y;
-      this.grid.position.set(Math.round(center.x), base - 0.001, Math.round(center.z));
+      this.grid.position.set(Math.round(center.x), base - GRID_OFFSET, Math.round(center.z));
     }
   }
 

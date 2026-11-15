@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Box3, Sphere, Vector3, type Camera, type Scene } from 'three';
+import { Box3, GridHelper, Sphere, Vector3, type Camera, type Material, type Scene } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { H3xDocument, type Project } from '../../src/core';
 import { H3xScene, H3xViewer, type RendererLike } from '../../src/three';
@@ -123,6 +123,19 @@ describe('H3xViewer', () => {
     expect(dist).toBeGreaterThanOrEqual(radius * 2);
     expect(viewer.camera.near).toBeLessThan(dist - radius);
     expect(viewer.camera.far).toBeGreaterThanOrEqual(dist + 2 * radius);
+    viewer.dispose();
+  });
+
+  it('draws the grid under content without z-fighting floors', () => {
+    const { fake, viewer, scene } = setup();
+    flush();
+    const rendered = fake.render.mock.calls.at(-1)![0];
+    const grid = rendered.children.find((c): c is GridHelper => c instanceof GridHelper)!;
+    expect(grid).toBeDefined();
+    expect((grid.material as Material).depthWrite).toBe(false);
+    expect(grid.renderOrder).toBeLessThan(0);
+    const minY = new Box3().setFromObject(scene.root).min.y;
+    expect(grid.position.y).toBeCloseTo(minY - 0.005, 9);
     viewer.dispose();
   });
 
