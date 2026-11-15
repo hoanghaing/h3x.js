@@ -4,10 +4,14 @@ import dts from 'vite-plugin-dts';
 export default defineConfig({
   build: {
     lib: {
-      entry: { index: 'src/index.ts', 'core/index': 'src/core/index.ts' },
+      entry: {
+        index: 'src/index.ts',
+        'core/index': 'src/core/index.ts',
+        'three/index': 'src/three/index.ts',
+      },
       formats: ['es'],
     },
-    rollupOptions: { external: ['nanoid'] },
+    rollupOptions: { external: ['nanoid', 'three', /^three\//] },
   },
   plugins: [dts({ include: ['src'] })],
   test: { include: ['tests/**/*.test.ts'], environment: 'node' },
