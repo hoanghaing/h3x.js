@@ -1,15 +1,11 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-
-const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as Record<
-  string,
-  unknown
->;
+import pkg from '../package.json';
 
 describe('package.json', () => {
   it('has top-level entry fields for older resolvers', () => {
-    expect(pkg.types).toBe('./dist/index.d.ts');
-    expect(pkg.main).toBe('./dist/index.js');
-    expect(pkg.module).toBe('./dist/index.js');
+    const p = pkg as Record<string, unknown>;
+    expect(p.types).toBe('./dist/index.d.ts');
+    expect(p.main).toBe('./dist/index.js');
+    expect(p.module).toBe('./dist/index.js');
   });
 });
