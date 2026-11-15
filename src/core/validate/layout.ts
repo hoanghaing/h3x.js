@@ -1,6 +1,6 @@
 import type { EntityChange } from '../document/changes';
 import type { H3xDocument, Validator } from '../document/H3xDocument';
-import { MIN_ROOM_AREA, MIN_WALL_LENGTH, OPENING_END_MARGIN } from '../constants';
+import { GEOM_TOL, MIN_ROOM_AREA, MIN_WALL_LENGTH, OPENING_END_MARGIN } from '../constants';
 import { H3xValidationError } from '../errors';
 import { isSimple, signedArea } from '../geometry/polygon';
 import { segmentsIntersect } from '../geometry/segment';
@@ -8,7 +8,6 @@ import { distance } from '../geometry/vec';
 import { roomPolygon } from '../rooms/detect';
 import type { Floor, Id, Issue, Vec2 } from '../types';
 
-const EPS = 1e-9;
 
 /** Valid centre range for an opening of `width` on a wall of `len` (hi < lo means it cannot fit). */
 export function openingRange(len: number, width: number): { lo: number; hi: number } {
@@ -27,7 +26,7 @@ function wallIssues(floor: Floor, ids: Iterable<Id>): Issue[] {
   for (const id of ids) {
     if (!floor.walls[id]) continue;
     const len = wallLength(floor, id);
-    if (len < MIN_WALL_LENGTH - EPS) {
+    if (len < MIN_WALL_LENGTH - GEOM_TOL) {
       out.push({
         code: 'wall-too-short',
         ids: [id],
@@ -81,7 +80,7 @@ function roomIssue(floor: Floor, roomId: Id): Issue | null {
   if (!isSimple(center)) return bad('outline is not simple');
   if (signedArea(center) <= 0) return bad('outline is flipped');
   const inner = signedArea(roomPolygon(floor, room, 'inner'));
-  if (inner < MIN_ROOM_AREA) return bad(`inner area ${inner.toFixed(3)} m2 is below ${MIN_ROOM_AREA}`);
+  if (inner < MIN_ROOM_AREA - GEOM_TOL) return bad(`inner area ${inner.toFixed(3)} m2 is below ${MIN_ROOM_AREA}`);
   return null;
 }
 
@@ -90,7 +89,7 @@ function openingIssues(floor: Floor): Issue[] {
   for (const o of Object.values(floor.openings)) {
     if (!floor.walls[o.wall]) continue;
     const { lo, hi } = openingRange(wallLength(floor, o.wall), o.width);
-    if (hi < lo - EPS || o.offset < lo - EPS || o.offset > hi + EPS) {
+    if (hi < lo - GEOM_TOL || o.offset < lo - GEOM_TOL || o.offset > hi + GEOM_TOL) {
       out.push({
         code: 'opening-out-of-wall',
         ids: [o.id],
