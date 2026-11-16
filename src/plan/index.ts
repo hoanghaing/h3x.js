@@ -24,3 +24,4 @@ export { hitTest, type HitScene, type HitTarget } from './hit';
 export { pickAnchor } from './anchor';
 export { H3xPlan, type H3xPlanOptions } from './H3xPlan';
 export type { PlanPointerEvent, Tool, ToolContext } from './tools/Tool';
+export { SelectEditTool, type SelectEditToolOptions } from './tools/SelectEditTool';
