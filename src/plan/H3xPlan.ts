@@ -230,6 +230,7 @@ export class H3xPlan {
   setTool(tool: Tool | null): void {
     if (this.disposed) return;
     this._tool?.deactivate();
+    this.input.cancelGesture();
     this._tool = tool;
     tool?.activate(this.toolContext);
   }
