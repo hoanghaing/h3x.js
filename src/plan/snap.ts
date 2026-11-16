@@ -1,4 +1,5 @@
-import type { Vec2 } from '../core';
+import type { Floor, Id, Vec2 } from '../core';
+import { closestPointOnSegment } from '../core/geometry/segment';
 
 export interface SnapOptions {
   /** Grid step in meters; `<= 0` disables grid snapping. */
@@ -57,4 +58,66 @@ export function snapPoint(p: Vec2, others: Vec2[], opts: SnapOptions): SnapResul
     return opts.grid > 0 ? snapScalar(p[a], opts.grid) : p[a];
   };
   return { point: { x: axis('x'), y: axis('y') }, guides };
+}
+
+export type DrawSnapTarget = { kind: 'node'; id: Id } | { kind: 'wall'; id: Id } | { kind: 'free' };
+
+export interface DrawSnapResult extends SnapResult {
+  target: DrawSnapTarget;
+  /** Set when the point was locked to a 45-degree ray from `from`; the overlay may draw `from` to `to`. */
+  angleLock?: { from: Vec2; to: Vec2 };
+}
+
+const ANGLE_STEP = Math.PI / 4;
+const ANGLE_TOLERANCE = (5 * Math.PI) / 180;
+
+/**
+ * Snap for drawing tools. Priority: node within `reach` > closest point on a
+ * wall center line within `reach` > alignment to nodes and `extra` > 45-degree
+ * angle lock from `from` (length grid-snapped) > grid.
+ */
+export function snapDraw(
+  p: Vec2,
+  floor: Readonly<Floor>,
+  opts: SnapOptions & { reach: number; from?: Vec2; extra?: Vec2[] },
+): DrawSnapResult {
+  const nodes = Object.values(floor.nodes);
+
+  let nodeHit: { id: Id; d: number; at: Vec2 } | undefined;
+  for (const n of nodes) {
+    const d = Math.hypot(n.x - p.x, n.y - p.y);
+    if (d <= opts.reach && (!nodeHit || d < nodeHit.d))
+      nodeHit = { id: n.id, d, at: { x: n.x, y: n.y } };
+  }
+  if (nodeHit) return { point: nodeHit.at, guides: [], target: { kind: 'node', id: nodeHit.id } };
+
+  let wallHit: { id: Id; d: number; at: Vec2 } | undefined;
+  for (const w of Object.values(floor.walls)) {
+    const a = floor.nodes[w.a];
+    const b = floor.nodes[w.b];
+    if (!a || !b) continue;
+    const { point } = closestPointOnSegment(p, a, b);
+    const d = Math.hypot(point.x - p.x, point.y - p.y);
+    if (d <= opts.reach && (!wallHit || d < wallHit.d)) wallHit = { id: w.id, d, at: point };
+  }
+  if (wallHit) return { point: wallHit.at, guides: [], target: { kind: 'wall', id: wallHit.id } };
+
+  const snapped = snapPoint(p, [...nodes, ...(opts.extra ?? [])], opts);
+  const free: DrawSnapTarget = { kind: 'free' };
+  if (snapped.guides.length > 0 || !opts.from) return { ...snapped, target: free };
+
+  const dx = p.x - opts.from.x;
+  const dy = p.y - opts.from.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return { ...snapped, target: free };
+  const angle = Math.atan2(dy, dx);
+  const step = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
+  if (Math.abs(angle - step) > ANGLE_TOLERANCE) return { ...snapped, target: free };
+
+  const snappedLen = opts.grid > 0 ? snapScalar(len, opts.grid) : len;
+  const point = {
+    x: tidy(opts.from.x + snappedLen * Math.cos(step)),
+    y: tidy(opts.from.y + snappedLen * Math.sin(step)),
+  };
+  return { point, guides: [], target: free, angleLock: { from: opts.from, to: point } };
 }
