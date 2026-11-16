@@ -109,26 +109,29 @@ Validators return `Issue { code, ids, message }`. Layout edits are never blocked
 issues on items or openings that a layout change causes are flagged by `validatePlacements()`
 instead. Only entities touched by a change can block it.
 
-| Code                               | Meaning                                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| `wall-too-short`                   | wall shorter than `MIN_WALL_LENGTH` (0.3 m)                                                 |
-| `walls-cross`                      | two walls that do not share a node intersect                                                |
-| `room-degenerate`                  | room outline not simple, flipped, or inner area below `MIN_ROOM_AREA`                       |
-| `opening-out-of-wall`              | opening does not fit in its wall's usable range                                             |
-| `opening-overlap`                  | two openings on one wall overlap                                                            |
-| `opening-too-tall`                 | sill + height above the wall height                                                         |
-| `wall-item-out-of-range`           | wall item outside its wall's usable range or height                                         |
-| `wall-item-on-opening`             | wall item covers an opening                                                                 |
-| `outside-room`                     | floor / ceiling item not fully inside a room                                                |
-| `hits-wall`                        | floor item overlaps a wall                                                                  |
-| `hits-item`                        | floor item overlaps another floor item (`layer: 'covering'` presets, like rugs, are exempt) |
-| `invalid-number`                   | a command produced NaN or Infinity                                                          |
-| `unknown-preset`, `mount-mismatch` | preset missing or wrong mount for the command                                               |
-| `not-found`                        | referenced id does not exist                                                                |
-| `duplicate-id`                     | a create command was run twice                                                              |
-| `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                     |
-| `room-open`                        | room walls do not form a closed loop (from room geometry helpers)                           |
-| `non-finite-number`                | `projectToXML` was given a non-finite number                                                |
+| Code                               | Meaning                                                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `wall-too-short`                   | wall shorter than `MIN_WALL_LENGTH` (0.3 m)                                                                               |
+| `walls-cross`                      | two walls that do not share a node intersect                                                                              |
+| `room-degenerate`                  | room outline not simple, flipped, a hole crossing it or overlapping another hole, or net inner area below `MIN_ROOM_AREA` |
+| `column-size`                      | column width or depth not above 0 or above 2 m                                                                            |
+| `columns-overlap`                  | two columns overlap (reported only)                                                                                       |
+| `site-not-simple`                  | site outline self-intersects (reported only)                                                                              |
+| `opening-out-of-wall`              | opening does not fit in its wall's usable range                                                                           |
+| `opening-overlap`                  | two openings on one wall overlap                                                                                          |
+| `opening-too-tall`                 | sill + height above the wall height                                                                                       |
+| `wall-item-out-of-range`           | wall item outside its wall's usable range or height                                                                       |
+| `wall-item-on-opening`             | wall item covers an opening                                                                                               |
+| `outside-room`                     | floor / ceiling item not fully inside a room                                                                              |
+| `hits-wall`                        | floor item overlaps a wall                                                                                                |
+| `hits-item`                        | floor item overlaps another floor item (`layer: 'covering'` presets, like rugs, are exempt)                               |
+| `invalid-number`                   | a command produced NaN or Infinity                                                                                        |
+| `unknown-preset`, `mount-mismatch` | preset missing or wrong mount for the command                                                                             |
+| `not-found`                        | referenced id does not exist                                                                                              |
+| `duplicate-id`                     | a create command was run twice                                                                                            |
+| `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                                                   |
+| `room-open`                        | room walls do not form a closed loop (from room geometry helpers)                                                         |
+| `non-finite-number`                | `projectToXML` was given a non-finite number                                                                              |
 
 The usable range along a wall is shortened at each end by half the thickness of the thickest
 other wall meeting there (and, for openings, at least `OPENING_END_MARGIN`), so nothing sits

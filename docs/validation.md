@@ -41,12 +41,15 @@ Constants: `MIN_WALL_LENGTH` = 0.3 m, `MIN_ROOM_AREA` = 1.0 m2.
 
 ### Layout
 
-| Code                  | Meaning                                                                            | Blocking                                            | Ids         |
-| --------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------- | ----------- |
-| `wall-too-short`      | wall shorter than `MIN_WALL_LENGTH`                                                | yes, for walls touched by the change                | the wall    |
-| `walls-cross`         | two walls that do not share a node intersect                                       | yes, when one of them is touched                    | both walls  |
-| `room-degenerate`     | room loop open, outline not simple or flipped, or inner area below `MIN_ROOM_AREA` | yes, for rooms touched or containing a touched wall | the room    |
-| `opening-out-of-wall` | opening outside its wall's usable range (see Placement)                            | in `validateLayout`: reported only                  | the opening |
+| Code                  | Meaning                                                                                                                                                                                                           | Blocking                                            | Ids          |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------ |
+| `wall-too-short`      | wall shorter than `MIN_WALL_LENGTH`                                                                                                                                                                               | yes, for walls touched by the change                | the wall     |
+| `walls-cross`         | two walls that do not share a node intersect                                                                                                                                                                      | yes, when one of them is touched                    | both walls   |
+| `room-degenerate`     | room loop open, outline not simple or flipped, a hole open, not simple, crossing the outline or overlapping another hole (touching at nodes is fine), or net inner area (outer minus holes) below `MIN_ROOM_AREA` | yes, for rooms touched or containing a touched wall | the room     |
+| `column-size`         | column width or depth not above 0 or above `MAX_COLUMN_SIZE` (2 m)                                                                                                                                                | yes, for columns touched by the change              | the column   |
+| `columns-overlap`     | two columns overlap in area (touching is fine)                                                                                                                                                                    | `validateLayout` only: reported                     | both columns |
+| `site-not-simple`     | site outline self-intersects (`validateLayout` checks `project.site`)                                                                                                                                             | `validateLayout` only: reported                     | `site`       |
+| `opening-out-of-wall` | opening outside its wall's usable range (see Placement)                                                                                                                                                           | in `validateLayout`: reported only                  | the opening  |
 
 ### Placement
 

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { H3xValidationError } from '../../src/core/errors';
 import { signedArea } from '../../src/core/geometry/polygon';
-import { detectRooms, roomArea, roomNodeLoop, roomPolygon } from '../../src/core/rooms/detect';
+import {
+  detectRooms,
+  roomArea,
+  roomNodeLoop,
+  roomPolygon,
+  roomShape,
+} from '../../src/core/rooms/detect';
+import type { Floor } from '../../src/core/types';
 import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
 
 const sorted = (a: string[]): string[] => [...a].sort();
@@ -129,5 +136,60 @@ describe('roomNodeLoop', () => {
     const f = oneRoomFloor();
     expectOpen(() => roomNodeLoop(f, { id: 'r', name: 'x', walls: ['w1', 'w2', 'zz', 'w4'] }));
     expectOpen(() => roomNodeLoop(f, { id: 'r', name: 'x', walls: ['w1', 'w2'] }));
+  });
+});
+
+describe('roomShape with holes', () => {
+  const holeFloor = (): Floor => {
+    const f = oneRoomFloor();
+    f.openings = {};
+    const pts = [
+      [0, 0],
+      [6, 0],
+      [6, 6],
+      [0, 6],
+    ] as const;
+    pts.forEach(([x, y], i) => (f.nodes[`n${i + 1}`] = { id: `n${i + 1}`, x, y }));
+    // Hole box 2x2 at (2,2), stored clockwise.
+    const hp = [
+      [2, 2],
+      [2, 4],
+      [4, 4],
+      [4, 2],
+    ] as const;
+    hp.forEach(([x, y], i) => {
+      f.nodes[`h${i}`] = { id: `h${i}`, x, y };
+      f.walls[`hw${i}`] = {
+        id: `hw${i}`,
+        a: `h${i}`,
+        b: `h${(i + 1) % 4}`,
+        thickness: 0.1,
+        height: 3.2,
+      };
+    });
+    f.rooms.r1!.holes = [['hw0', 'hw1', 'hw2', 'hw3']];
+    return f;
+  };
+
+  it('subtracts hole area', () => {
+    const f = holeFloor();
+    expect(roomArea(f, f.rooms.r1!, 'center')).toBeCloseTo(36 - 4, 9);
+    expect(roomArea(f, f.rooms.r1!, 'inner')).toBeCloseTo(5.8 * 5.8 - 2.1 * 2.1, 9);
+  });
+
+  it('outsets the hole loop by half the wall thickness', () => {
+    const f = holeFloor();
+    const { outer, holes } = roomShape(f, f.rooms.r1!, 'inner');
+    expect(outer).toHaveLength(4);
+    expect(holes).toHaveLength(1);
+    const xs = holes[0]!.map((p) => p.x);
+    const ys = holes[0]!.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(2.1, 9);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(2.1, 9);
+  });
+
+  it('has no holes for a plain room', () => {
+    const f = oneRoomFloor();
+    expect(roomShape(f, f.rooms.r1!, 'center').holes).toEqual([]);
   });
 });
