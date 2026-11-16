@@ -70,9 +70,11 @@ This example is run by the test suite (`tests/core/public-api.test.ts`); keep bo
   `doc.tryExecute(cmd, opts)` returns `{ ok: true } | { ok: false, issues }`;
   `doc.preview(cmd)` returns the issues without changing anything.
 - `doc.undo()`, `doc.redo()`, `doc.canUndo`, `doc.canRedo`. Commands with the same
-  `coalesceKey` merge into one undo step until `doc.endCoalesce()`. Commands that change nothing
+  `coalesceKey` merge into one undo step until `doc.endCoalesce()`;
+  `doc.cancelCoalesce(key)` instead reverts that open group with no undo or redo trace (returns
+  `false` if it is closed or netted out). Commands that change nothing
   add no undo step and emit no event.
-- `doc.on('change', fn)` receives `{ reason, changes }`. `EntityChange` is a discriminated union
+- `doc.on('change', fn)` receives `{ reason, changes }` (`reason`: `'execute' | 'undo' | 'redo' | 'load' | 'cancel'`). `EntityChange` is a discriminated union
   on `kind` (`'node' | 'wall' | 'opening' | 'room' | 'item'`), so `before` / `after` narrow to
   the entity type (`null` = absent).
 - `doc.addValidator(fn)`, `doc.validateLayout()`, `doc.validatePlacements()`.
