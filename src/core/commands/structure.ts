@@ -1,19 +1,9 @@
-import type { Command, CommandContext } from '../document/changes';
-import { H3xValidationError } from '../errors';
+import type { Command } from '../document/changes';
 import { createId } from '../ids';
 import { structural } from '../topology/draft';
 import { removeNodeIn, removeWallIn, splitAt } from '../topology/ops';
 import type { Id, Vec2 } from '../types';
-
-/** Ids are unique per floor across all entity kinds; re-running a create command must not overwrite. */
-function assertFreeId(ctx: CommandContext, id: Id): void {
-  const f = ctx.floor;
-  if (f.nodes[id] || f.walls[id] || f.openings[id] || f.rooms[id] || f.items[id] || f.columns[id]) {
-    throw new H3xValidationError([
-      { code: 'duplicate-id', ids: [id], message: 'Id ' + id + ' already exists in the floor' },
-    ]);
-  }
-}
+import { assertFreeId } from './shared';
 
 /** Splits a wall at the projection of `at`; `createdId` is the new node. */
 export function splitWall(wallId: Id, at: Vec2): Command & { createdId: Id } {

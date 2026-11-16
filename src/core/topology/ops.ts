@@ -1,20 +1,12 @@
+import { fail, notFound } from '../commands/shared';
 import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
-import { H3xValidationError } from '../errors';
-import { add, distance, dot, scale, sub } from '../geometry/vec';
-import { inRange, openingRange, wallUsableRange } from '../validate/layout';
+import { add, distance, dot, scale, sub, tidy } from '../geometry/vec';
+import { clampIntoRange, openingRange, wallUsableRange } from '../validate/layout';
 import type { Floor, Id, PresetResolver, Vec2, Wall } from '../types';
 import { wallsAt } from './draft';
 
 /** Two walls within this angle (radians) count as collinear. */
 export const COLLINEAR_TOL = (1 * Math.PI) / 180;
-
-const tidy = (n: number): number => Math.round(n * 1e9) / 1e9;
-
-const fail = (code: string, ids: Id[], message: string): H3xValidationError =>
-  new H3xValidationError([{ code, ids, message }]);
-
-const notFound = (what: string, id: Id): H3xValidationError =>
-  fail('not-found', [id], `${what} ${id} does not exist`);
 
 function endsOf(draft: Floor, w: Wall): [Vec2, Vec2] {
   const a = draft.nodes[w.a];
@@ -35,9 +27,9 @@ function fitOn(
   why: string,
 ): void {
   const clamp = (id: Id, offset: number, r: { lo: number; hi: number }): number => {
-    if (inRange(offset, r)) return offset;
-    if (r.hi < r.lo - GEOM_TOL) throw fail(code, [id], `${id} ${why}`);
-    return tidy(Math.min(Math.max(offset, r.lo), r.hi));
+    const next = clampIntoRange(offset, r);
+    if (next === null) throw fail(code, [id], `${id} ${why}`);
+    return next;
   };
   for (const o of Object.values(draft.openings)) {
     if (!wallIds.includes(o.wall)) continue;
@@ -143,6 +135,8 @@ function mergeAt(
 ): void {
   const keepLen = distance(...endsOf(draft, keep));
   const otherLen = distance(...endsOf(draft, other));
+  // `other` runs against the merged wall when both walls start (or both end) at the node.
+  const reversed = (keep.a === nodeId) === (other.a === nodeId);
   // Distance of a point on each wall from the merged wall's start, along the old walls.
   let fromKeep: (off: number) => number;
   let fromOther: (off: number) => number;
@@ -162,6 +156,8 @@ function mergeAt(
     else if (o.wall === other.id) {
       o.wall = keep.id;
       o.offset = tidy(fromOther(o.offset));
+      // flip is relative to the wall direction (hinge end and swing side), so it mirrors too.
+      if (reversed) o.flip = !o.flip;
     }
   }
   for (const it of Object.values(draft.items)) {
@@ -170,6 +166,7 @@ function mergeAt(
     else if (it.wall === other.id) {
       it.wall = keep.id;
       it.offset = tidy(fromOther(it.offset));
+      if (reversed) it.side = it.side === 'left' ? 'right' : 'left';
     }
   }
   delete draft.walls[other.id];

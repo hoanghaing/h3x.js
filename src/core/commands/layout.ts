@@ -1,18 +1,9 @@
 import type { Command, CommandContext, EntityChange } from '../document/changes';
-import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
-import { H3xValidationError } from '../errors';
-import { add, distance, dot, leftNormal, scale, sub } from '../geometry/vec';
-import { inRange, openingRange, wallUsableRange } from '../validate/layout';
+import { MIN_WALL_LENGTH } from '../constants';
+import { EPS, add, distance, dot, leftNormal, scale, sub, tidy } from '../geometry/vec';
+import { clampIntoRange, openingRange, wallUsableRange } from '../validate/layout';
 import type { Id, Vec2, WallItem } from '../types';
-
-const EPS = 1e-9;
-const tidy = (n: number): number => Math.round(n * 1e9) / 1e9;
-
-function notFound(what: string, id: Id): H3xValidationError {
-  return new H3xValidationError([
-    { code: 'not-found', ids: [id], message: `${what} ${id} does not exist` },
-  ]);
-}
+import { fail, notFound } from './shared';
 
 /**
  * Node moves plus re-fit of openings / wall items on walls whose length changed. `shift` first
@@ -45,12 +36,8 @@ function applyMoves(
     const by = shift?.wall === w.id ? shift.by : 0;
     for (const o of Object.values(floor.openings)) {
       if (o.wall !== w.id) continue;
-      const range = openingRange(floor, o, len);
-      const { lo, hi } = range;
       const start = by === 0 ? o.offset : tidy(o.offset + by);
-      const fits = hi >= lo - GEOM_TOL;
-      const offset =
-        !fits || inRange(start, range) ? start : tidy(Math.min(Math.max(start, lo), hi));
+      const offset = clampIntoRange(start, openingRange(floor, o, len)) ?? start;
       if (offset === o.offset) continue;
       changes.push({
         kind: 'opening',
@@ -64,11 +51,7 @@ function applyMoves(
       const width = ctx.presets?.(it.preset)?.footprint.w ?? 0;
       const range = wallUsableRange(floor, w.id, { width, length: len });
       const start = by === 0 ? it.offset : tidy(it.offset + by);
-      const fits = range.hi >= range.lo - GEOM_TOL;
-      const offset =
-        !fits || inRange(start, range)
-          ? start
-          : tidy(Math.min(Math.max(start, range.lo), range.hi));
+      const offset = clampIntoRange(start, range) ?? start;
       if (Math.abs(offset - it.offset) < EPS) continue;
       const after: WallItem = { ...structuredClone(it), offset };
       changes.push({ kind: 'item', id: it.id, before: structuredClone(it), after });
@@ -116,13 +99,11 @@ export function setWallLength(wallId: Id, length: number, opts?: { anchor?: 'a' 
     label: 'setWallLength',
     run: (ctx) => {
       if (!(length >= MIN_WALL_LENGTH)) {
-        throw new H3xValidationError([
-          {
-            code: 'wall-too-short',
-            ids: [wallId],
-            message: `Wall length ${length} is below the minimum ${MIN_WALL_LENGTH} m`,
-          },
-        ]);
+        throw fail(
+          'wall-too-short',
+          [wallId],
+          `Wall length ${length} is below the minimum ${MIN_WALL_LENGTH} m`,
+        );
       }
       const w = ctx.floor.walls[wallId];
       if (!w) throw notFound('Wall', wallId);
