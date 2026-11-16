@@ -98,6 +98,12 @@ describe('ColumnTool', () => {
     expect(columns(plan)[0]).toMatchObject({ shape: 'round', width: 0.5 });
   });
 
+  it('uses the depth option for square columns', () => {
+    const plan = makePlan(new ColumnTool({ width: 0.4, depth: 0.2 }));
+    click(plan, { x: 10, y: 0 });
+    expect(columns(plan)[0]).toMatchObject({ shape: 'square', width: 0.4, depth: 0.2 });
+  });
+
   it('Alt disables snapping', () => {
     const plan = makePlan();
     fire(plan, 'pointermove', { x: 10.013, y: 0.017 }, { altKey: true });
