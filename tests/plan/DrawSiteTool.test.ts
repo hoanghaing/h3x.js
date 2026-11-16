@@ -130,13 +130,15 @@ describe('DrawSiteTool', () => {
     expect(b.doc.canUndo).toBe(false);
   });
 
-  it('ignores node and wall targets: clicking on a wall puts the vertex on the grid', () => {
+  it('ignores wall targets: a click on a wall grid-snaps instead', () => {
     const plan = makePlan();
-    click(plan, { x: 4.01, y: 0.04 }); // on node n2 / wall w1 of the fixture
+    click(plan, { x: 2.013, y: 0.03 }); // on wall w1: wall snap gives x 2.013, grid gives 2
     click(plan, { x: 5, y: -5 });
     click(plan, { x: 8, y: -5 });
     key(plan, 'Enter');
-    expect(site(plan)!.points).toContainEqual({ x: 4, y: 0 });
+    const [p0] = site(plan)!.points.filter((p) => Math.abs(p.x - 2) < 0.5);
+    expect(p0!.x).toBeCloseTo(2, 9);
+    expect(p0!.y).toBeCloseTo(0, 9); // aligned with the nodes at y 0
   });
 
   it('Alt disables snapping', () => {
