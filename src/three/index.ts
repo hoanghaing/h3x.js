@@ -8,6 +8,10 @@ export * from './walls/joinGeometry';
 
 export * from './floors';
 
+export * from './columns';
+
+export * from './site';
+
 export * from './materials';
 
 export * from './scene';

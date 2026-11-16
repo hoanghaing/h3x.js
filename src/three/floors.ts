@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Vector2, Vector3 } from 'three';
-import { H3xValidationError, roomPolygon, type Floor, type Room } from '../core';
+import { H3xValidationError, roomPolygon, roomShape, type Floor, type Room } from '../core';
 import { signedArea } from '../core/geometry/polygon';
 import { toWorld } from './coords';
 import { TriangleSink, triangulateInto } from './triangulate';
@@ -10,20 +10,22 @@ import { TriangleSink, triangulateInto } from './triangulate';
  */
 export function buildFloorGeometry(floor: Floor, room: Room): BufferGeometry | null {
   let center;
-  let inner;
+  let shape;
   try {
     center = roomPolygon(floor, room, 'center');
     if (signedArea(center) <= 0) return null;
-    inner = roomPolygon(floor, room, 'inner');
+    shape = roomShape(floor, room, 'inner');
   } catch (e) {
     if (e instanceof H3xValidationError) return null;
     throw e;
   }
-  if (inner.length < 3) return null;
+  if (shape.outer.length < 3) return null;
 
   const sink = new TriangleSink();
-  const contour = inner.map((p) => new Vector2(p.x, p.y));
-  triangulateInto(sink, contour, [], (p) => toWorld(p, floor.elevation), new Vector3(0, 1, 0));
+  const toV = (p: { x: number; y: number }) => new Vector2(p.x, p.y);
+  const contour = shape.outer.map(toV);
+  const holes = shape.holes.map((h) => h.map(toV));
+  triangulateInto(sink, contour, holes, (p) => toWorld(p, floor.elevation), new Vector3(0, 1, 0));
 
   const geom = new BufferGeometry();
   geom.setAttribute('position', new Float32BufferAttribute(sink.positions, 3));

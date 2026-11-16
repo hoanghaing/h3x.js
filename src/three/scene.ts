@@ -1,15 +1,17 @@
-import { Group, Mesh, type BufferGeometry } from 'three';
+import { Group, Mesh, type BufferGeometry, type LineLoop } from 'three';
 import type { ChangeEvent, H3xDocument, Id } from '../core';
+import { buildColumnGeometry } from './columns';
 import { buildFloorGeometry } from './floors';
 import { MaterialLibrary, type FinishResolver } from './materials';
+import { buildSiteLine } from './site';
 import { buildJoinGeometry } from './walls/joinGeometry';
 import { computeJoins } from './walls/joins';
 import { buildWallGeometry } from './walls/wallGeometry';
 
-const GEOMETRY_KINDS = new Set(['node', 'wall', 'opening', 'room']);
+const GEOMETRY_KINDS = new Set(['node', 'wall', 'opening', 'room', 'column', 'site']);
 
 /** userData.h3xKind of the meshes an H3xScene creates. */
-export type H3xKind = 'wall' | 'room' | 'join';
+export type H3xKind = 'wall' | 'room' | 'join' | 'column';
 
 interface Built {
   geom: BufferGeometry;
@@ -22,11 +24,14 @@ export class H3xScene {
   private readonly wallsGroup = new Group();
   private readonly floorsGroup = new Group();
   private readonly joinsGroup = new Group();
+  private readonly columnsGroup = new Group();
+  private siteLine: LineLoop | undefined;
   private readonly materials: MaterialLibrary;
   private readonly ownsMaterials: boolean;
   private readonly wallMeshes = new Map<Id, Mesh>();
   private readonly floorMeshes = new Map<Id, Mesh>();
   private readonly joinMeshes = new Map<Id, Mesh>();
+  private readonly columnMeshes = new Map<Id, Mesh>();
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
   private disposed = false;
@@ -41,7 +46,8 @@ export class H3xScene {
     this.wallsGroup.name = 'h3x-walls';
     this.floorsGroup.name = 'h3x-floors';
     this.joinsGroup.name = 'h3x-joins';
-    this.root.add(this.wallsGroup, this.floorsGroup, this.joinsGroup);
+    this.columnsGroup.name = 'h3x-columns';
+    this.root.add(this.wallsGroup, this.floorsGroup, this.joinsGroup, this.columnsGroup);
     this.rebuild();
     this.unsubscribe = doc.on('change', (e: ChangeEvent) => {
       if (e.changes.some((c) => GEOMETRY_KINDS.has(c.kind))) this.rebuild();
@@ -50,6 +56,10 @@ export class H3xScene {
 
   getWallMesh(id: Id): Mesh | undefined {
     return this.wallMeshes.get(id);
+  }
+
+  getColumnMesh(id: Id): Mesh | undefined {
+    return this.columnMeshes.get(id);
   }
 
   getFloorMesh(roomId: Id): Mesh | undefined {
@@ -101,9 +111,19 @@ export class H3xScene {
       });
     }
 
+    const columns = new Map<Id, Built>();
+    for (const column of Object.values(floor.columns)) {
+      columns.set(column.id, {
+        geom: buildColumnGeometry(floor, column),
+        material: this.materials.wall(),
+      });
+    }
+
     this.sync(this.wallMeshes, this.wallsGroup, 'wall', walls);
     this.sync(this.floorMeshes, this.floorsGroup, 'room', floors);
     this.sync(this.joinMeshes, this.joinsGroup, 'join', joins);
+    this.sync(this.columnMeshes, this.columnsGroup, 'column', columns);
+    this.syncSite();
     this.notify();
   }
 
@@ -142,11 +162,29 @@ export class H3xScene {
     }
   }
 
+  private syncSite(): void {
+    this.removeSite();
+    const site = this.doc.project.site;
+    if (!site) return;
+    this.siteLine = buildSiteLine(site);
+    this.root.add(this.siteLine);
+  }
+
+  private removeSite(): void {
+    if (!this.siteLine) return;
+    this.siteLine.geometry.dispose();
+    (this.siteLine.material as { dispose(): void }).dispose();
+    this.siteLine.removeFromParent();
+    this.siteLine = undefined;
+  }
+
   private clear(): void {
+    this.removeSite();
     for (const mesh of [
       ...this.wallMeshes.values(),
       ...this.floorMeshes.values(),
       ...this.joinMeshes.values(),
+      ...this.columnMeshes.values(),
     ]) {
       mesh.geometry.dispose();
       mesh.removeFromParent();
@@ -154,6 +192,7 @@ export class H3xScene {
     this.wallMeshes.clear();
     this.floorMeshes.clear();
     this.joinMeshes.clear();
+    this.columnMeshes.clear();
   }
 
   /** Runs every listener, then rethrows the first error (mirrors the document emitter). */
