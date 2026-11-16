@@ -5,6 +5,7 @@ import {
   addWallIn,
   dropNodeIn,
   mergeNodesIn,
+  pushPullIn,
   removeNodeIn,
   removeWallIn,
   splitAt,
@@ -78,5 +79,21 @@ export function dropNode(nodeId: Id, target: { node: Id } | { wall: Id; at: Vec2
   const ids = { wall: createId(), node: createId() };
   return structural('dropNode', (draft, ctx) =>
     dropNodeIn(draft, nodeId, target, ids, ctx.presets),
+  );
+}
+
+/**
+ * Moves a wall along its left normal by `distance` (signed). Free ends move, a single
+ * neighbour along the normal slides, anything else gets a connector wall (square bump-out
+ * / recess; copies thickness and height). A connector below `MIN_WALL_LENGTH` is
+ * `wall-too-short`. Rooms re-sync.
+ */
+export function pushPullWall(wallId: Id, distance: number): Command {
+  const ids = {
+    nodes: [createId(), createId()] as [Id, Id],
+    walls: [createId(), createId()] as [Id, Id],
+  };
+  return structural('pushPullWall', (draft, ctx) =>
+    pushPullIn(draft, wallId, distance, ids, ctx.presets),
   );
 }

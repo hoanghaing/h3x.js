@@ -109,10 +109,15 @@ passed as `presets`.
   its walls), `mergeNodes(keep, drop)` (re-attaches the walls of `drop` to `keep`; walls that
   would loop are deleted; of duplicate walls the one with more openings + wall items survives,
   then the smaller id), `dropNode(nodeId, { node } | { wall, at })` (moves a node onto a node or
-  a wall point, T-junction, in one step; onto itself or its own wall is `invalid-target`).
+  a wall point, T-junction, in one step; onto itself or its own wall is `invalid-target`),
+  `pushPullWall(wallId, distance)` (moves a wall along its left normal, `+` = left of `a -> b`;
+  per end a free end moves, a single neighbour along the normal slides, otherwise a connector wall
+  copying thickness / height makes a square bump-out or recess; a connector below
+  `MIN_WALL_LENGTH` is `wall-too-short`; `|distance| < GEOM_TOL` changes nothing).
   Openings / wall items are re-based and clamped into range. Each is one undo step
   and re-syncs rooms (rooms keep their id and name where they overlap most). Rejections:
-  `split-too-short`, `split-cuts-opening`, `merge-drops-opening`, `invalid-target`.
+  `split-too-short`, `split-cuts-opening`, `merge-drops-opening`, `push-pull-cuts-opening`,
+  `invalid-target`.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
   `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
@@ -147,6 +152,7 @@ instead. Only entities touched by a change can block it.
 | `not-found`                        | referenced id does not exist                                                                                              |
 | `duplicate-id`                     | a create command was run twice                                                                                            |
 | `split-too-short`                  | a split would leave a wall part below `MIN_WALL_LENGTH`                                                                   |
+| `push-pull-cuts-opening`           | a slid neighbour wall gets too short for an opening / wall item on it                                                     |
 | `split-cuts-opening`               | a split cuts an opening / wall item that cannot fit in the half holding its center                                        |
 | `merge-drops-opening`              | removing a node would merge walls into one too short for its openings / wall items                                        |
 | `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                                                   |

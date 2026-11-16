@@ -20,6 +20,7 @@ export {
   removeNode,
   mergeNodes,
   dropNode,
+  pushPullWall,
 } from './commands/structure';
 export type { NewWall, WallEnd } from './topology/ops';
 export {
