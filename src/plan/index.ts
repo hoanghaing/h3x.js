@@ -11,3 +11,12 @@ export {
   type View,
 } from './view';
 export { snapPoint, snapScalar, type SnapGuide, type SnapOptions, type SnapResult } from './snap';
+export {
+  itemFootprint,
+  junctionPolygons,
+  openingShape,
+  roomLabel,
+  wallOutline,
+  type OpeningShape,
+} from './shapes';
+export { dimensionLabel, wallsShowingDimensions } from './dimensions';
