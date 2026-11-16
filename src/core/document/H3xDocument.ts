@@ -15,7 +15,7 @@ import { History, deepEqual } from './history';
 export type { Command, CommandContext, EntityChange } from './changes';
 
 export interface ChangeEvent {
-  reason: 'execute' | 'undo' | 'redo' | 'load';
+  reason: 'execute' | 'undo' | 'redo' | 'load' | 'cancel';
   /** Deep-cloned snapshots. For undo, entries are inverted so `after` is always the new state. */
   changes: EntityChange[];
 }
@@ -153,6 +153,19 @@ export class H3xDocument {
 
   endCoalesce(): void {
     this.history.seal();
+  }
+
+  /**
+   * Revert the open coalesced gesture `key` as if it never happened: no undo entry
+   * and the redo stack from before it is restored. Returns false (nothing changes,
+   * nothing emitted) if the group is closed, has another key, or netted out to nothing.
+   */
+  cancelCoalesce(key: string): boolean {
+    const changes = this.history.cancel(key);
+    if (!changes) return false;
+    applyChanges(this.mutableFloor, changes, 'backward');
+    this.emitter.emit({ reason: 'cancel', changes: structuredClone(invert(changes)) });
+    return true;
   }
 
   /** Apply and validate; reverts on any issue or validator error. */

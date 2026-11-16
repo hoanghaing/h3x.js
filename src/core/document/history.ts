@@ -27,6 +27,8 @@ export class History {
   private undoStack: Entry[] = [];
   private redoStack: Entry[] = [];
   private sealed = true;
+  /** Redo stack as it was just before the open keyed group's first push. */
+  private groupRedo: Entry[] = [];
 
   get canUndo(): boolean {
     return this.undoStack.length > 0;
@@ -48,15 +50,29 @@ export class History {
         // Net no-op (e.g. dragged back to the start): leave no phantom undo step.
         this.undoStack.pop();
         this.sealed = true;
-        this.redoStack = [];
+        this.redoStack = this.groupRedo;
         return;
       }
     } else {
+      this.groupRedo = this.redoStack;
       this.undoStack.push({ changes, key });
       if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
     }
     this.sealed = key === undefined;
     this.redoStack = [];
+  }
+
+  /**
+   * Drop the open keyed group and restore the redo stack it cleared.
+   * Returns the group's changes, or undefined if no such group is open.
+   */
+  cancel(key: string): EntityChange[] | undefined {
+    const top = this.undoStack[this.undoStack.length - 1];
+    if (this.sealed || !top || top.key !== key) return undefined;
+    this.undoStack.pop();
+    this.redoStack = this.groupRedo;
+    this.sealed = true;
+    return top.changes;
   }
 
   popUndo(): EntityChange[] | undefined {
