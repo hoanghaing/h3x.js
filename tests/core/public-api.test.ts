@@ -12,6 +12,8 @@ const FUNCTIONS = [
   'splitWall',
   'removeWall',
   'removeNode',
+  'mergeNodes',
+  'dropNode',
   'addOpening',
   'moveOpening',
   'removeOpening',

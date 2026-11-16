@@ -13,7 +13,14 @@ export type {
 } from './document/H3xDocument';
 
 export { moveNode, moveWall, setWallLength } from './commands/layout';
-export { addWall, splitWall, removeWall, removeNode } from './commands/structure';
+export {
+  addWall,
+  splitWall,
+  removeWall,
+  removeNode,
+  mergeNodes,
+  dropNode,
+} from './commands/structure';
 export type { NewWall, WallEnd } from './topology/ops';
 export {
   addOpening,

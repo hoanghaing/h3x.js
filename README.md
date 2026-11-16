@@ -106,9 +106,13 @@ passed as `presets`.
   half from node `a`; `createdId` is the new node), `removeWall(wallId)` (also deletes its
   openings, wall items and nodes left without walls), `removeNode(nodeId)` (degree 2 merges the
   two walls into one straight wall, keeping the first wall id; otherwise deletes the node and
-  its walls). Openings / wall items are re-based and clamped into range. Each is one undo step
+  its walls), `mergeNodes(keep, drop)` (re-attaches the walls of `drop` to `keep`; walls that
+  would loop are deleted; of duplicate walls the one with more openings + wall items survives,
+  then the smaller id), `dropNode(nodeId, { node } | { wall, at })` (moves a node onto a node or
+  a wall point, T-junction, in one step; onto itself or its own wall is `invalid-target`).
+  Openings / wall items are re-based and clamped into range. Each is one undo step
   and re-syncs rooms (rooms keep their id and name where they overlap most). Rejections:
-  `split-too-short`, `split-cuts-opening`, `merge-drops-opening`.
+  `split-too-short`, `split-cuts-opening`, `merge-drops-opening`, `invalid-target`.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
   `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,

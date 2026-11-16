@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
-import { removeNode, removeWall, splitWall } from '../../src/core/commands/structure';
-import { diffFloors } from '../../src/core/topology/draft';
+import {
+  dropNode,
+  mergeNodes,
+  removeNode,
+  removeWall,
+  splitWall,
+} from '../../src/core/commands/structure';
+import { diffFloors, wallsAt } from '../../src/core/topology/draft';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Floor, Project, Wall, WallItem } from '../../src/core/types';
 import { oneRoomFloor, testPresets, twoRoomFloor } from '../fixtures/floors';
@@ -321,6 +327,187 @@ describe('removeNode', () => {
   it('throws not-found for a missing node', () => {
     const doc = mk(oneRoomFloor());
     expect(codeOf(() => doc.execute(removeNode('nope')))).toBe('not-found');
+  });
+});
+
+const chainFloor = (): Floor => ({
+  ...oneRoomFloor(),
+  nodes: {
+    a: { id: 'a', x: 0, y: 0 },
+    b: { id: 'b', x: 3, y: 0 },
+    c: { id: 'c', x: 3.4, y: 0 },
+    d: { id: 'd', x: 3.4, y: 3 },
+  },
+  walls: {
+    wab: { id: 'wab', a: 'a', b: 'b', thickness: 0.2, height: 3.2 },
+    wcd: { id: 'wcd', a: 'c', b: 'd', thickness: 0.2, height: 3.2 },
+  },
+  openings: {},
+  rooms: {},
+});
+
+describe('mergeNodes', () => {
+  it('joins the walls of two chains at keep and deletes drop', () => {
+    const doc = mk(chainFloor());
+    doc.execute(mergeNodes('b', 'c'));
+    const f = doc.floor;
+    expect(f.nodes.c).toBeUndefined();
+    expect(f.walls.wcd).toMatchObject({ a: 'b', b: 'd' });
+    expect(wallsAt(f, 'b').map((w) => w.id)).toEqual(['wab', 'wcd']);
+    doc.undo();
+    expect(doc.floor.nodes.c).toBeDefined();
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('deletes the wall joining the two nodes, with its openings', () => {
+    const doc = mk(oneRoomFloor());
+    doc.execute(mergeNodes('n1', 'n2'));
+    const f = doc.floor;
+    expect(f.walls.w1).toBeUndefined();
+    expect(f.openings.o1).toBeUndefined();
+    expect(f.nodes.n2).toBeUndefined();
+    expect(f.walls.w2).toMatchObject({ a: 'n1', b: 'n3' });
+    expect(Object.keys(f.rooms)).toEqual(['r1']);
+    expect(f.rooms.r1!.walls).toHaveLength(3);
+  });
+
+  it('keeps keep when the only wall between the nodes goes', () => {
+    const doc = mk(chainFloor());
+    doc.execute(mergeNodes('c', 'd'));
+    expect(doc.floor.nodes.c).toBeDefined();
+    expect(doc.floor.walls.wcd).toBeUndefined();
+  });
+
+  it('splits a room when a free wall end lands on the opposite node (identity rule)', () => {
+    const floor = oneRoomFloor();
+    floor.nodes.n5 = { id: 'n5', x: 2, y: 2 };
+    floor.walls.w5 = { id: 'w5', a: 'n1', b: 'n5', thickness: 0.2, height: 3.2 };
+    const doc = mk(floor);
+    doc.execute(mergeNodes('n3', 'n5'));
+    const f = doc.floor;
+    expect(f.walls.w5).toMatchObject({ a: 'n1', b: 'n3' });
+    expect(Object.keys(f.rooms)).toHaveLength(2);
+    expect(f.rooms.r1).toBeDefined();
+    expect(f.rooms.r1!.name).toBe('Phòng khách');
+  });
+
+  it('resolves duplicate walls: more openings + items wins, then smaller id', () => {
+    const floor = oneRoomFloor();
+    floor.items.i1 = outlet('i1', 'w2', 1);
+    floor.items.i2 = outlet('i2', 'w2', 2);
+    floor.items.i3 = outlet('i3', 'w4', 1);
+    const doc = mk(floor);
+    doc.execute(mergeNodes('n1', 'n3'));
+    const f = doc.floor;
+    // w1 (1 opening) vs w2 (2 items): w2 survives; w3 (0) vs w4 (1 item): w4 survives.
+    expect(f.walls.w1).toBeUndefined();
+    expect(f.openings.o1).toBeUndefined();
+    expect(f.walls.w2).toMatchObject({ a: 'n2', b: 'n1' });
+    expect(Object.keys(f.items).sort()).toEqual(['i1', 'i2', 'i3']);
+    expect(f.walls.w3).toBeUndefined();
+    expect(f.walls.w4).toBeDefined();
+    expect(f.rooms).toEqual({});
+  });
+
+  it('ties go to the smaller wall id', () => {
+    const doc = mk(oneRoomFloor());
+    doc.execute(mergeNodes('n1', 'n3'));
+    expect(doc.floor.walls.w1).toBeDefined(); // w1 has o1
+    expect(doc.floor.walls.w2).toBeUndefined();
+    expect(doc.floor.walls.w3).toBeDefined(); // tie at 0: w3 < w4
+    expect(doc.floor.walls.w4).toBeUndefined();
+  });
+
+  it('re-fits openings on walls that change length, or rejects', () => {
+    const floor: Floor = {
+      ...oneRoomFloor(),
+      nodes: {
+        x: { id: 'x', x: 0, y: 0 },
+        y: { id: 'y', x: 3, y: 0 },
+        k: { id: 'k', x: 0, y: 0.5 },
+      },
+      walls: { wx: { id: 'wx', a: 'x', b: 'y', thickness: 0.2, height: 3.2 } },
+      openings: { o1: { ...oneRoomFloor().openings.o1!, wall: 'wx', offset: 1.5 } },
+      rooms: {},
+    };
+    const doc = mk(floor);
+    expect(codeOf(() => doc.execute(mergeNodes('k', 'y')))).toBe('merge-drops-opening');
+  });
+
+  it('rejects merging a node with itself and unknown nodes', () => {
+    const doc = mk(oneRoomFloor());
+    expect(codeOf(() => doc.execute(mergeNodes('n1', 'n1')))).toBe('invalid-target');
+    expect(codeOf(() => doc.execute(mergeNodes('n1', 'nope')))).toBe('not-found');
+    expect(codeOf(() => doc.execute(mergeNodes('nope', 'n1')))).toBe('not-found');
+  });
+});
+
+describe('dropNode', () => {
+  it('drops onto a node it shares a wall with, in one undo step', () => {
+    const floor = chainFloor();
+    floor.nodes.c = { id: 'c', x: 3, y: 0.4 };
+    floor.nodes.d = { id: 'd', x: 3, y: 3 };
+    floor.walls.wbc = { id: 'wbc', a: 'b', b: 'c', thickness: 0.2, height: 3.2 };
+    const doc = mk(floor);
+    const original = structuredClone(doc.floor);
+    doc.execute(dropNode('b', { node: 'c' }));
+    const f = doc.floor;
+    expect(f.nodes.b).toBeUndefined();
+    expect(f.walls.wbc).toBeUndefined();
+    expect(f.walls.wab).toMatchObject({ a: 'a', b: 'c' });
+    doc.undo();
+    expect(doc.floor).toEqual(original);
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('drops onto a wall, making a T; the room splits and keeps its id', () => {
+    const floor = oneRoomFloor();
+    floor.nodes.n5 = { id: 'n5', x: 2, y: 2 };
+    floor.walls.w5 = { id: 'w5', a: 'n5', b: 'n4', thickness: 0.2, height: 3.2 };
+    const doc = mk(floor);
+    doc.execute(dropNode('n5', { wall: 'w1', at: { x: 2, y: 0.05 } }));
+    const f = doc.floor;
+    expect(f.nodes.n5).toBeUndefined();
+    const t = Object.values(f.nodes).find((n) => n.x === 2 && n.y === 0)!;
+    expect(t).toBeDefined();
+    expect(wallsAt(f, t.id)).toHaveLength(3);
+    expect(f.walls.w5).toMatchObject({ a: t.id, b: 'n4' });
+    expect(Object.keys(f.rooms)).toHaveLength(2);
+    expect(f.rooms.r1).toBeDefined();
+    doc.undo();
+    expect(doc.floor.nodes.n5).toBeDefined();
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('is deterministic when the command object runs twice on the same context', () => {
+    const floor = oneRoomFloor();
+    floor.nodes.n5 = { id: 'n5', x: 2, y: 2 };
+    floor.walls.w5 = { id: 'w5', a: 'n5', b: 'n4', thickness: 0.2, height: 3.2 };
+    const cmd = dropNode('n5', { wall: 'w1', at: { x: 2, y: 0 } });
+    const ctx = { floor, presets: testPresets };
+    // new room ids are random, so compare the structural part of the change list
+    const structure = (): unknown[] => cmd.run(ctx).filter((c) => c.kind !== 'room');
+    expect(structure()).toEqual(structure());
+  });
+
+  it('rejects dropping a node on itself or on one of its own walls', () => {
+    const doc = mk(oneRoomFloor());
+    expect(codeOf(() => doc.execute(dropNode('n1', { node: 'n1' })))).toBe('invalid-target');
+    expect(codeOf(() => doc.execute(dropNode('n1', { wall: 'w1', at: { x: 2, y: 0 } })))).toBe(
+      'invalid-target',
+    );
+    expect(codeOf(() => doc.execute(dropNode('n1', { wall: 'w4', at: { x: 0, y: 2 } })))).toBe(
+      'invalid-target',
+    );
+  });
+
+  it('throws not-found for missing node or wall', () => {
+    const doc = mk(oneRoomFloor());
+    expect(codeOf(() => doc.execute(dropNode('nope', { node: 'n1' })))).toBe('not-found');
+    expect(codeOf(() => doc.execute(dropNode('n1', { node: 'nope' })))).toBe('not-found');
+    expect(codeOf(() => doc.execute(dropNode('n1', { wall: 'nope', at: { x: 0, y: 0 } })))).toBe(
+      'not-found',
+    );
   });
 });
 

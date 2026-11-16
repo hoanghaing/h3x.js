@@ -91,15 +91,20 @@ export function splitAt(
   return newNodeId;
 }
 
-/** Deletes a wall, its openings and wall items, and any end node left with no wall. */
-export function removeWallIn(draft: Floor, wallId: Id): void {
-  const w = draft.walls[wallId];
-  if (!w) throw notFound('Wall', wallId);
+/** Deletes a wall with its openings and wall items; end nodes stay. */
+function dropWall(draft: Floor, wallId: Id): void {
   for (const o of Object.values(draft.openings)) if (o.wall === wallId) delete draft.openings[o.id];
   for (const it of Object.values(draft.items)) {
     if (it.mount === 'wall' && it.wall === wallId) delete draft.items[it.id];
   }
   delete draft.walls[wallId];
+}
+
+/** Deletes a wall, its openings and wall items, and any end node left with no wall. */
+export function removeWallIn(draft: Floor, wallId: Id): void {
+  const w = draft.walls[wallId];
+  if (!w) throw notFound('Wall', wallId);
+  dropWall(draft, wallId);
   for (const n of [w.a, w.b]) if (wallsAt(draft, n).length === 0) delete draft.nodes[n];
 }
 
@@ -174,6 +179,95 @@ function mergeAt(
   delete draft.walls[other.id];
   delete draft.nodes[nodeId];
   fitOn(draft, [keep.id], presets, 'merge-drops-opening', 'does not fit on the merged wall');
+}
+
+/** Openings plus wall items on a wall: the weight that decides which duplicate survives. */
+function attachments(draft: Floor, wallId: Id): number {
+  const openings = Object.values(draft.openings).filter((o) => o.wall === wallId).length;
+  const items = Object.values(draft.items).filter(
+    (it) => it.mount === 'wall' && it.wall === wallId,
+  ).length;
+  return openings + items;
+}
+
+/**
+ * Re-attaches the walls of `drop` to `keep` and deletes `drop`. A wall that would join
+ * `keep` to itself is deleted (with its openings / items); of two walls then joining the
+ * same nodes, the one with more openings + wall items survives (ties: smaller id) and the
+ * other's openings / items are deleted. Openings / wall items on re-attached walls are
+ * clamped to the new length, `merge-drops-opening` when one cannot fit. Same node:
+ * `invalid-target`.
+ */
+export function mergeNodesIn(draft: Floor, keep: Id, drop: Id, presets?: PresetResolver): void {
+  if (!draft.nodes[keep]) throw notFound('Node', keep);
+  if (!draft.nodes[drop]) throw notFound('Node', drop);
+  if (keep === drop) {
+    throw fail('invalid-target', [keep], `Cannot merge node ${keep} with itself`);
+  }
+  const moved: Id[] = [];
+  for (const w of wallsAt(draft, drop)) {
+    const far = w.a === drop ? w.b : w.a;
+    if (far === keep) {
+      dropWall(draft, w.id);
+      continue;
+    }
+    if (w.a === drop) w.a = keep;
+    else w.b = keep;
+    moved.push(w.id);
+  }
+  delete draft.nodes[drop];
+  const seen = new Map<Id, Wall>();
+  for (const w of wallsAt(draft, keep)) {
+    const far = w.a === keep ? w.b : w.a;
+    const other = seen.get(far);
+    if (!other) {
+      seen.set(far, w);
+      continue;
+    }
+    const [first, second] = other.id < w.id ? [other, w] : [w, other];
+    const loser = attachments(draft, second.id) > attachments(draft, first.id) ? first : second;
+    dropWall(draft, loser.id);
+    seen.set(far, loser === first ? second : first);
+  }
+  fitOn(
+    draft,
+    moved.filter((id) => draft.walls[id]),
+    presets,
+    'merge-drops-opening',
+    'does not fit on the re-attached wall',
+  );
+}
+
+/**
+ * Moves `nodeId` onto `target` and merges it, in one go: onto a node (`mergeNodesIn`) or
+ * onto a point of a wall (the wall is split there, T-junction, then merged into the new
+ * node). Dropping onto itself or onto one of its own walls: `invalid-target`.
+ */
+export function dropNodeIn(
+  draft: Floor,
+  nodeId: Id,
+  target: { node: Id } | { wall: Id; at: Vec2 },
+  ids: { wall: Id; node: Id },
+  presets?: PresetResolver,
+): void {
+  if (!draft.nodes[nodeId]) throw notFound('Node', nodeId);
+  if ('node' in target) {
+    mergeNodesIn(draft, target.node, nodeId, presets);
+    return;
+  }
+  const w = draft.walls[target.wall];
+  if (!w) throw notFound('Wall', target.wall);
+  if (w.a === nodeId || w.b === nodeId) {
+    throw fail(
+      'invalid-target',
+      [nodeId, w.id],
+      `Node ${nodeId} cannot be dropped on its own wall`,
+    );
+  }
+  assertFreeId({ floor: draft }, ids.wall);
+  assertFreeId({ floor: draft }, ids.node);
+  const t = splitAt(draft, target.wall, target.at, ids.wall, ids.node, presets);
+  mergeNodesIn(draft, t, nodeId, presets);
 }
 
 /** A wall end: an existing node, or a point (snapped to a node, or splitting a wall, when on one). */
