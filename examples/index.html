@@ -12,9 +12,34 @@
         overflow: hidden;
         font-family: system-ui, sans-serif;
       }
+      #plan,
       #app {
         position: fixed;
-        inset: 0;
+        top: 0;
+        bottom: 0;
+      }
+      #plan {
+        left: 0;
+        width: 50%;
+        border-right: 1px solid #ccc;
+        background: #fff;
+      }
+      #app {
+        left: 50%;
+        right: 0;
+      }
+      @media (max-width: 700px) {
+        #plan {
+          right: 0;
+          width: auto;
+          bottom: 50%;
+          border-right: 0;
+          border-bottom: 1px solid #ccc;
+        }
+        #app {
+          left: 0;
+          top: 50%;
+        }
       }
       #toolbar {
         position: fixed;
@@ -44,6 +69,7 @@
     </style>
   </head>
   <body>
+    <div id="plan"></div>
     <div id="app"></div>
     <div id="toolbar">
       <button id="btn-projection">Phối cảnh / Trực giao</button>

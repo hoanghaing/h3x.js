@@ -8,6 +8,7 @@ export default defineConfig({
         index: 'src/index.ts',
         'core/index': 'src/core/index.ts',
         'three/index': 'src/three/index.ts',
+        'plan/index': 'src/plan/index.ts',
       },
       formats: ['es'],
     },

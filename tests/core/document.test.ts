@@ -425,3 +425,95 @@ describe('EntityChange typing', () => {
     expect(xs).toEqual([3]);
   });
 });
+
+describe('cancelCoalesce', () => {
+  const mk = (): H3xDocument =>
+    H3xDocument.fromProject(
+      {
+        version: 1,
+        unit: 'm',
+        meta: { name: 't', created: '2026-01-01T00:00:00Z' },
+        floors: [oneRoomFloor()],
+      } as Project,
+      { presets: testPresets },
+    );
+  const n2 = (d: H3xDocument): { x: number; y: number } => {
+    const n = d.floor.nodes.n2!;
+    return { x: n.x, y: n.y };
+  };
+
+  it('reverts an open keyed gesture and leaves no undo entry', () => {
+    const doc = mk();
+    const events: ChangeEvent[] = [];
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    doc.execute(moveNode('n2', { x: 6, y: 0 }), { coalesceKey: 'g1' });
+    doc.execute(moveNode('n2', { x: 7, y: 0 }), { coalesceKey: 'g1' });
+    doc.on('change', (e) => events.push(e));
+    expect(doc.cancelCoalesce('g1')).toBe(true);
+    expect(n2(doc)).toEqual({ x: 4, y: 0 });
+    expect(doc.canUndo).toBe(false);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.reason).toBe('cancel');
+  });
+
+  it('preserves the redo stack', () => {
+    const doc = mk();
+    doc.execute(moveNode('n2', { x: 3, y: 0 }));
+    doc.undo();
+    expect(doc.canRedo).toBe(true);
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    doc.execute(moveNode('n2', { x: 6, y: 0 }), { coalesceKey: 'g1' });
+    expect(doc.canRedo).toBe(false);
+    expect(doc.cancelCoalesce('g1')).toBe(true);
+    expect(doc.canRedo).toBe(true);
+    doc.redo();
+    expect(n2(doc)).toEqual({ x: 3, y: 0 });
+  });
+
+  it('returns false for a wrong key without changes or events', () => {
+    const doc = mk();
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    let n = 0;
+    doc.on('change', () => n++);
+    expect(doc.cancelCoalesce('other')).toBe(false);
+    expect(n).toBe(0);
+    expect(n2(doc)).toEqual({ x: 5, y: 0 });
+  });
+
+  it('returns false after endCoalesce', () => {
+    const doc = mk();
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    doc.endCoalesce();
+    expect(doc.cancelCoalesce('g1')).toBe(false);
+    expect(n2(doc)).toEqual({ x: 5, y: 0 });
+  });
+
+  it('returns false when the gesture netted out to nothing', () => {
+    const doc = mk();
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    doc.execute(moveNode('n2', { x: 4, y: 0 }), { coalesceKey: 'g1' });
+    expect(doc.cancelCoalesce('g1')).toBe(false);
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('a gesture netting out to nothing keeps the redo stack from before it', () => {
+    const doc = mk();
+    doc.execute(moveNode('n2', { x: 3, y: 0 }));
+    doc.undo();
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    expect(doc.canRedo).toBe(false);
+    doc.execute(moveNode('n2', { x: 4, y: 0 }), { coalesceKey: 'g1' });
+    expect(doc.canUndo).toBe(false);
+    expect(doc.canRedo).toBe(true);
+    doc.redo();
+    expect(n2(doc)).toEqual({ x: 3, y: 0 });
+  });
+
+  it('returns false once a keyless command sealed the group', () => {
+    const doc = mk();
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    doc.execute(moveNode('n3', { x: 4, y: 5 }));
+    expect(doc.cancelCoalesce('g1')).toBe(false);
+    expect(n2(doc)).toEqual({ x: 5, y: 0 });
+  });
+});

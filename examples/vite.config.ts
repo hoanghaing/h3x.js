@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       'h3x/core': src('core/index.ts'),
       'h3x/three': src('three/index.ts'),
+      'h3x/plan': src('plan/index.ts'),
     },
   },
 });

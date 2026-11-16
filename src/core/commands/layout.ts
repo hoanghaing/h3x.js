@@ -14,8 +14,16 @@ function notFound(what: string, id: Id): H3xValidationError {
   ]);
 }
 
-/** Node moves plus re-fit of openings / wall items on walls whose length changed. */
-function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
+/**
+ * Node moves plus re-fit of openings / wall items on walls whose length changed. `shift` first
+ * adds `by` to the offsets of the openings and wall items on one wall (to keep them fixed
+ * relative to node b when node a moves).
+ */
+function applyMoves(
+  ctx: CommandContext,
+  moves: Map<Id, Vec2>,
+  shift?: { wall: Id; by: number },
+): EntityChange[] {
   const { floor } = ctx;
   const changes: EntityChange[] = [];
   const pos = (id: Id): Vec2 | undefined => moves.get(id) ?? floor.nodes[id];
@@ -34,13 +42,15 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
     if (!a0 || !b0 || !a1 || !b1) continue;
     const len = distance(a1, b1);
     if (Math.abs(distance(a0, b0) - len) < EPS) continue;
+    const by = shift?.wall === w.id ? shift.by : 0;
     for (const o of Object.values(floor.openings)) {
       if (o.wall !== w.id) continue;
       const range = openingRange(floor, o, len);
       const { lo, hi } = range;
-      if (hi < lo - GEOM_TOL) continue;
-      if (inRange(o.offset, range)) continue;
-      const offset = tidy(Math.min(Math.max(o.offset, lo), hi));
+      const start = by === 0 ? o.offset : tidy(o.offset + by);
+      const fits = hi >= lo - GEOM_TOL;
+      const offset =
+        !fits || inRange(start, range) ? start : tidy(Math.min(Math.max(start, lo), hi));
       if (offset === o.offset) continue;
       changes.push({
         kind: 'opening',
@@ -53,9 +63,12 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
       if (it.mount !== 'wall' || it.wall !== w.id) continue;
       const width = ctx.presets?.(it.preset)?.footprint.w ?? 0;
       const range = wallUsableRange(floor, w.id, { width, length: len });
-      if (range.hi < range.lo - GEOM_TOL) continue;
-      if (inRange(it.offset, range)) continue;
-      const offset = tidy(Math.min(Math.max(it.offset, range.lo), range.hi));
+      const start = by === 0 ? it.offset : tidy(it.offset + by);
+      const fits = range.hi >= range.lo - GEOM_TOL;
+      const offset =
+        !fits || inRange(start, range)
+          ? start
+          : tidy(Math.min(Math.max(start, range.lo), range.hi));
       if (Math.abs(offset - it.offset) < EPS) continue;
       const after: WallItem = { ...structuredClone(it), offset };
       changes.push({ kind: 'item', id: it.id, before: structuredClone(it), after });
@@ -94,8 +107,11 @@ export function moveWall(wallId: Id, delta: Vec2): Command {
   };
 }
 
-/** Node a stays fixed; node b moves along a to b. */
-export function setWallLength(wallId: Id, length: number): Command {
+/**
+ * Resizes a wall along its own direction. `anchor: 'a'` (default) keeps node a fixed and moves
+ * node b; `'b'` keeps node b fixed and moves node a.
+ */
+export function setWallLength(wallId: Id, length: number, opts?: { anchor?: 'a' | 'b' }): Command {
   return {
     label: 'setWallLength',
     run: (ctx) => {
@@ -115,8 +131,12 @@ export function setWallLength(wallId: Id, length: number): Command {
       if (!a || !b) throw notFound('Node', !a ? w.a : w.b);
       const cur = distance(a, b);
       if (cur < EPS) throw notFound('Direction of wall', wallId);
-      const dir = scale(sub(b, a), 1 / cur);
-      return applyMoves(ctx, new Map([[w.b, add(a, scale(dir, length))]]));
+      const anchorB = opts?.anchor === 'b';
+      const [fixed, moving, movingId] = anchorB ? [b, a, w.a] : [a, b, w.b];
+      const dir = scale(sub(moving, fixed), 1 / cur);
+      const moves = new Map([[movingId, add(fixed, scale(dir, length))]]);
+      // Offsets are measured from node a; with b fixed, shift them so contents stay put.
+      return applyMoves(ctx, moves, anchorB ? { wall: wallId, by: length - cur } : undefined);
     },
   };
 }

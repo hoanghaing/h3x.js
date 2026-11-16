@@ -12,6 +12,9 @@ This release ships `h3x/core` (the package root `h3x` re-exports it):
 - XML read / write in the `<h3x version="1" unit="m">` format,
 - small 2D geometry helpers (oriented boxes).
 
+Two optional subpaths build on it: `h3x/three` (a three.js 3D view) and `h3x/plan` (an SVG 2D
+plan editor). Both render the same `H3xDocument`, so an edit in one shows up in the other.
+
 Units are meters, plan coordinates are `(x, y)`, and item `rotation` is in radians,
 counter-clockwise, with `0` meaning the front faces +y. Core has no dependency on three.js or Vue.
 
@@ -70,9 +73,12 @@ This example is run by the test suite (`tests/core/public-api.test.ts`); keep bo
   `doc.tryExecute(cmd, opts)` returns `{ ok: true } | { ok: false, issues }`;
   `doc.preview(cmd)` returns the issues without changing anything.
 - `doc.undo()`, `doc.redo()`, `doc.canUndo`, `doc.canRedo`. Commands with the same
-  `coalesceKey` merge into one undo step until `doc.endCoalesce()`. Commands that change nothing
-  add no undo step and emit no event.
-- `doc.on('change', fn)` receives `{ reason, changes }`. `EntityChange` is a discriminated union
+  `coalesceKey` merge into one undo step until `doc.endCoalesce()`;
+  `doc.cancelCoalesce(key)` instead reverts that open group with no undo or redo trace (returns
+  `false` if it is closed or netted out). Commands that change nothing add no undo step and emit
+  no event.
+- `doc.on('change', fn)` receives `{ reason, changes }` (`reason`:
+  `'execute' | 'undo' | 'redo' | 'load' | 'cancel'`). `EntityChange` is a discriminated union
   on `kind` (`'node' | 'wall' | 'opening' | 'room' | 'item'`), so `before` / `after` narrow to
   the entity type (`null` = absent).
 - `doc.addValidator(fn)`, `doc.validateLayout()`, `doc.validatePlacements()`.
@@ -85,9 +91,11 @@ passed as `presets`.
 ### Commands
 
 - Layout: `moveNode(nodeId, to)`, `moveWall(wallId, delta)` (projected on the wall normal),
-  `setWallLength(wallId, length)` (node `a` stays fixed). Openings and wall items on resized
-  walls are re-fitted into range. Topology (adding / removing nodes and walls) is fixed in this
-  release.
+  `setWallLength(wallId, length, { anchor? })` (`anchor: 'a'` default keeps node `a` fixed and
+  moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items stay
+  where they are relative to the fixed end (their distance from node `a`, or from node `b` with
+  `anchor: 'b'`), and are re-fitted into range on the resized wall. Topology (adding / removing
+  nodes and walls) is fixed in this release.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
   `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
@@ -197,6 +205,95 @@ Try it with the example page, a 4 x 16 m tube house (`examples/layouts/nha-ong-4
 ```sh
 pnpm dev   # http://localhost:5173
 ```
+
+## h3x/plan
+
+`h3x/plan` draws an `H3xDocument` as an SVG plan you can pan, zoom, select in and edit: drag
+nodes and walls, nudge with the keyboard, and ask for a typed wall length. It does not need
+`three`, only a DOM (`h3x/core` and the package root stay DOM-free).
+
+```ts
+import { H3xDocument } from 'h3x/core';
+import { H3xScene, H3xViewer } from 'h3x/three';
+import { H3xPlan } from 'h3x/plan';
+
+const doc = H3xDocument.fromXML(xml);
+const plan = new H3xPlan(document.getElementById('plan')!, doc);
+const viewer = new H3xViewer(document.getElementById('view3d')!, new H3xScene(doc));
+plan.fitToContent();
+viewer.fitToContent();
+
+plan.on('selectionchange', (sel) => console.log(sel)); // { kind: 'wall', id: 'w1' } | null
+```
+
+Dragging a wall in the plan edits `doc`, so the 3D view follows, and `doc.undo()` reverts it in
+both views.
+
+- **View.** `plan.view` (a copy of `{ cx, cy, scale, width, height }`, `scale` in px per meter),
+  `plan.setView({ cx?, cy?, scale? })`, `plan.fitToContent(paddingPx?)`,
+  `plan.planToScreen(p)` and `plan.screenToPlan(p)`. Dragging empty space pans, the wheel zooms
+  around the cursor, and two fingers pinch and pan. The view follows its container's size. The
+  svg sets `touch-action: none` so touch gestures reach the plan instead of scrolling the page.
+- **Selection.** `plan.selection` is `{ kind, id } | null` (`kind`: `'node'`, `'wall'`,
+  `'room'`, `'opening'` or `'item'`); `plan.select(sel)` sets it (an unknown id selects
+  nothing). Clicking selects nodes and walls. `plan.getElement(kind, id)` returns the entity's
+  `<g>`.
+- **Events.** `plan.on(type, fn)` returns an unsubscribe function.
+  - `selectionchange` receives the new `Selection | null`, only when it changes.
+  - `lengthEditRequest` receives `{ wallId, length, anchor, anchorRect }` when the user
+    double-clicks a wall's dimension label. `length` is in meters, `anchor` is the end the
+    plan suggests keeping fixed, and `anchorRect` is the label's rect in px, so you can place
+    an input over it.
+  - `issues` receives `{ rejected, standing }`. `rejected` holds the issues of the last
+    rejected edit (flashed for 600 ms, then cleared with another event). `standing` holds the
+    layout and placement issues of the document as it is now.
+- **The library ships no inputs; the editor attaches them.** The plan never creates a text
+  field. On `lengthEditRequest` your editor shows its own input, then calls
+  `plan.setWallLength(wallId, length, { anchor? })`. That runs `setWallLength` through
+  `doc.tryExecute`, returns `{ ok: true } | { ok: false, issues }` and flashes a rejection.
+  Without `anchor` the plan picks one with `pickAnchor(floor, wallId)`: the end with more walls
+  attached stays, and on a tie node `a` stays. The `anchor` suggested in `lengthEditRequest`
+  uses `pickAnchor(floor, wallId, near)` with the double-click point, so there a tie keeps the
+  end farther from the double-click. `pickAnchor` is exported. `plan.reportRejected(issues)`
+  flashes issues from your own edits.
+- **Tools.** `plan.setTool(tool | null)` swaps the active tool (the old one is deactivated
+  first); `plan.tool` is the current one. The default is `new SelectEditTool()`; `tool: null`
+  leaves a plan that only pans and zooms. A `Tool` implements `activate(ctx)`, `deactivate()`
+  and optionally `onPointerDown / Move / Up`, `onDoubleClick` and `onKeyDown`, which receive
+  plan and screen coordinates and the hit target. `SelectEditTool` supports:
+  - click a node or wall to select it, click empty space to clear;
+  - drag a node, or a wall (it moves along its normal). A drag snaps to a 5 cm grid and to
+    alignment with other nodes (guide lines are drawn); hold **Alt** to disable snapping. The
+    whole drag is one undo step;
+  - **Esc** during a drag cancels it with no undo or redo trace (`doc.cancelCoalesce`); with no
+    drag it clears the selection;
+  - arrow keys nudge the selected node or wall by 1 cm, **Shift** + arrow by 10 cm (up is +y);
+  - double-click a dimension label to request a length edit.
+
+  Length labels show on the selected wall, on the walls of a selected or dragged node, and,
+  with nothing selected, on walls that border fewer than two rooms.
+
+- **Interrupted gestures.** If the document changes under a drag for any reason other than the
+  tool's own steps (undo, redo, a load, another editor's command), the drag ends where it is
+  and the rest of that press is ignored. Known limitation: an external `doc.endCoalesce()` in
+  the middle of a drag cannot be detected, because it emits no event, so the drag's next steps
+  start a new undo step.
+- **Options.** `new H3xPlan(container, doc, { grid?, snap?: { grid?, align? }, classPrefix?,
+presets?, tool? })`. Defaults: grid shown, `snap` 0.05 m with alignment on, prefix
+  `h3x-plan`, `presets` taken from the document.
+- **Styling.** The plan injects a stylesheet scoped under the root class (`h3x-plan`, or your
+  `classPrefix`); override it with more specific rules. Every entity is a `<g>` with class
+  `h3x-plan-<kind>` (`node`, `wall`, `room`, `opening`, `item`) and attributes `data-h3x-kind`
+  and `data-h3x-id`. Junction fills carry `data-h3x-node` (class `h3x-plan-join`) and dimension
+  labels `data-h3x-wall` (class `h3x-plan-dimension`). State classes on entity elements:
+  `h3x-plan-selected`, `h3x-plan-invalid` (the entity is in a standing issue) and
+  `h3x-plan-rejected` (flashed after a rejected edit).
+- **Ownership.** One plan per container: it appends its own `<svg>` (`plan.svg`) and removes it
+  on `dispose()`, which also drops the document subscription and listeners and can be called
+  more than once. It does not dispose the document.
+
+The example page shows the plan and the 3D view side by side on one document, with a demo input
+wired to `lengthEditRequest` (`pnpm dev`).
 
 ## Tolerance
 
