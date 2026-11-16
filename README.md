@@ -85,7 +85,8 @@ passed as `presets`.
 ### Commands
 
 - Layout: `moveNode(nodeId, to)`, `moveWall(wallId, delta)` (projected on the wall normal),
-  `setWallLength(wallId, length)` (node `a` stays fixed). Openings and wall items on resized
+  `setWallLength(wallId, length, { anchor? })` (`anchor: 'a'` default keeps node `a` fixed, `'b'` keeps node `b`).
+  Openings and wall items on resized
   walls are re-fitted into range. Topology (adding / removing nodes and walls) is fixed in this
   release.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,

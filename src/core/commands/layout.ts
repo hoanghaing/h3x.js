@@ -94,8 +94,11 @@ export function moveWall(wallId: Id, delta: Vec2): Command {
   };
 }
 
-/** Node a stays fixed; node b moves along a to b. */
-export function setWallLength(wallId: Id, length: number): Command {
+/**
+ * Resizes a wall along its own direction. `anchor: 'a'` (default) keeps node a fixed and moves
+ * node b; `'b'` keeps node b fixed and moves node a.
+ */
+export function setWallLength(wallId: Id, length: number, opts?: { anchor?: 'a' | 'b' }): Command {
   return {
     label: 'setWallLength',
     run: (ctx) => {
@@ -115,8 +118,9 @@ export function setWallLength(wallId: Id, length: number): Command {
       if (!a || !b) throw notFound('Node', !a ? w.a : w.b);
       const cur = distance(a, b);
       if (cur < EPS) throw notFound('Direction of wall', wallId);
-      const dir = scale(sub(b, a), 1 / cur);
-      return applyMoves(ctx, new Map([[w.b, add(a, scale(dir, length))]]));
+      const [fixed, moving, movingId] = opts?.anchor === 'b' ? [b, a, w.a] : [a, b, w.b];
+      const dir = scale(sub(moving, fixed), 1 / cur);
+      return applyMoves(ctx, new Map([[movingId, add(fixed, scale(dir, length))]]));
     },
   };
 }

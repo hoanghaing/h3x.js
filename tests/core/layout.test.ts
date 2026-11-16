@@ -43,6 +43,37 @@ describe('layout commands', () => {
     expect(doc.floor.nodes.n2!.y).toBeCloseTo(0);
   });
 
+  it('setWallLength anchor b keeps b fixed and moves a; undo restores', () => {
+    const doc = mk(oneRoomFloor());
+    doc.execute(setWallLength('w1', 3, { anchor: 'b' }));
+    expect(doc.floor.nodes.n1!.x).toBeCloseTo(1);
+    expect(doc.floor.nodes.n1!.y).toBeCloseTo(0);
+    expect(doc.floor.nodes.n2).toMatchObject({ x: 4, y: 0 });
+    doc.undo();
+    expect(doc.floor.nodes.n1).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it('setWallLength with no opts and anchor a both keep a fixed', () => {
+    for (const opts of [undefined, { anchor: 'a' as const }]) {
+      const doc = mk(oneRoomFloor());
+      doc.execute(setWallLength('w1', 3, opts));
+      expect(doc.floor.nodes.n1).toMatchObject({ x: 0, y: 0 });
+      expect(doc.floor.nodes.n2!.x).toBeCloseTo(3);
+      expect(doc.floor.nodes.n2!.y).toBeCloseTo(0);
+    }
+  });
+
+  it('setWallLength anchor b below minimum throws wall-too-short', () => {
+    const doc = mk(oneRoomFloor());
+    try {
+      doc.execute(setWallLength('w1', 0.2, { anchor: 'b' }));
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xValidationError);
+      expect((e as H3xValidationError).issues[0]!.code).toBe('wall-too-short');
+    }
+  });
+
   it('setWallLength below minimum throws', () => {
     const doc = mk(oneRoomFloor());
     try {
