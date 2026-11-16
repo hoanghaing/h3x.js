@@ -3,7 +3,7 @@ import { computeJoins } from '../../src/shared/walls/joins';
 import { hitTest, type HitScene } from '../../src/plan/hit';
 import { planToScreen, type View } from '../../src/plan/view';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
-import type { FloorItem } from '../../src/core';
+import type { Floor, FloorItem } from '../../src/core';
 
 const view: View = { cx: 2, cy: 2, scale: 50, width: 400, height: 400 };
 
@@ -64,5 +64,45 @@ describe('hitTest', () => {
       dimensions: [{ wallId: 'w1', rect: { x: p.x - 10, y: p.y - 5, width: 20, height: 10 } }],
     });
     expect(hitTest(s, p)).toEqual({ kind: 'dimension', id: 'w1' });
+  });
+  it('skips an open room instead of throwing', () => {
+    const s = scene();
+    s.floor.rooms['r1']!.walls = ['w1', 'w2'];
+    expect(() => hitTest(s, at(2, 2))).not.toThrow();
+    expect(hitTest(s, at(2, 2))).toBeNull();
+    expect(hitTest(s, { x: 5, y: 5 })).toBeNull();
+  });
+
+  it('picks the nearest of two nodes within reach', () => {
+    const s = scene();
+    s.floor.nodes['n5'] = { id: 'n5', x: 4.1, y: 0 }; // 5 px right of n2
+    const n2 = at(4, 0);
+    expect(hitTest(s, { x: n2.x + 4, y: n2.y })).toEqual({ kind: 'node', id: 'n5' });
+    expect(hitTest(s, { x: n2.x + 1, y: n2.y })).toEqual({ kind: 'node', id: 'n2' });
+  });
+
+  it("a wall's outline beats another wall's tolerance band", () => {
+    // T-junction: a thin wall stands on a thick one; the thin wall is listed first.
+    const floor: Floor = {
+      ...oneRoomFloor(),
+      nodes: {
+        a: { id: 'a', x: 0, y: 0 },
+        m: { id: 'm', x: 2, y: 0 },
+        b: { id: 'b', x: 4, y: 0 },
+        t: { id: 't', x: 2, y: 3 },
+      },
+      walls: {
+        wt: { id: 'wt', a: 'm', b: 't', thickness: 0.02, height: 3 },
+        w1a: { id: 'w1a', a: 'a', b: 'm', thickness: 0.6, height: 3 },
+        w1b: { id: 'w1b', a: 'm', b: 'b', thickness: 0.6, height: 3 },
+      },
+      openings: {},
+      rooms: {},
+    };
+    const s: HitScene = { floor, view, corners: computeJoins(floor).corners, dimensions: [] };
+    // 3.5 px right of the thin wall's centre line, inside the thick wall's outline.
+    expect(hitTest(s, at(2.07, 0.25))).toEqual({ kind: 'wall', id: 'w1b' });
+    // Away from any outline the band still picks the thin wall.
+    expect(hitTest(s, at(2.07, 1.5))).toEqual({ kind: 'wall', id: 'wt' });
   });
 });
