@@ -63,6 +63,42 @@ describe('layout commands', () => {
     }
   });
 
+  it('setWallLength anchor b keeps openings fixed relative to node b; undo restores', () => {
+    const f = oneRoomFloor();
+    f.openings.o1!.offset = 3;
+    const doc = mk(f);
+    doc.execute(setWallLength('w1', 3, { anchor: 'b' }));
+    expect(doc.floor.openings.o1!.offset).toBeCloseTo(2);
+    doc.undo();
+    expect(doc.floor.openings.o1!.offset).toBe(3);
+  });
+
+  it('setWallLength anchor b keeps wall items fixed relative to node b; undo restores', () => {
+    const f = oneRoomFloor();
+    f.openings = {};
+    f.items.i1 = {
+      id: 'i1',
+      preset: 'outlet-01',
+      mount: 'wall',
+      wall: 'w1',
+      side: 'left',
+      offset: 3,
+      elevation: 0.3,
+    };
+    const doc = mk(f);
+    doc.execute(setWallLength('w1', 3, { anchor: 'b' }));
+    expect((doc.floor.items.i1 as { offset: number }).offset).toBeCloseTo(2);
+    doc.undo();
+    expect((doc.floor.items.i1 as { offset: number }).offset).toBe(3);
+  });
+
+  it('setWallLength anchor b still re-fits contents that end up out of range', () => {
+    const doc = mk(oneRoomFloor());
+    // o1 (0.9 wide) sits 2.8 m from n2; on a 2 m wall that shift lands it at -0.8, clamped to 0.55.
+    doc.execute(setWallLength('w1', 2, { anchor: 'b' }));
+    expect(doc.floor.openings.o1!.offset).toBeCloseTo(0.55);
+  });
+
   it('setWallLength anchor b below minimum throws wall-too-short', () => {
     const doc = mk(oneRoomFloor());
     try {
