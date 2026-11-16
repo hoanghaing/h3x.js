@@ -224,7 +224,7 @@ describe('tool dispatch', () => {
     const near = ctx.snapDraw({ x: n1.x + reach * 0.9, y: n1.y }, undefined, false);
     expect(near.target).toEqual({ kind: 'node', id: 'n1' });
     expect(near.point).toEqual({ x: n1.x, y: n1.y });
-    const far = ctx.snapDraw({ x: n1.x + reach * 1.5, y: n1.y + 5 }, undefined, false);
+    const far = ctx.snapDraw({ x: n1.x + reach * 1.5, y: n1.y }, undefined, false);
     expect(far.target.kind).not.toBe('node');
     const off = ctx.snapDraw({ x: n1.x + 0.001, y: n1.y }, undefined, true);
     expect(off).toEqual({
