@@ -107,6 +107,23 @@ describe('openingShape', () => {
     expect(s.arc!.center.x).toBeCloseTo(1.65);
   });
 
+  it.each([
+    [false, { x: 0.75, y: 0.9 }, { x: 1.65, y: 0 }, { x: 0.75, y: 0 }],
+    [true, { x: 1.65, y: -0.9 }, { x: 0.75, y: 0 }, { x: 1.65, y: 0 }],
+  ])('arc geometry for flip=%s', (flip, from, to, center) => {
+    const floor = oneRoomFloor();
+    const s = openingShape(floor, { ...floor.openings['o1']!, flip });
+    const arc = s.arc!;
+    expect(arc.from.x).toBeCloseTo(from.x);
+    expect(arc.from.y).toBeCloseTo(from.y);
+    expect(arc.to.x).toBeCloseTo(to.x);
+    expect(arc.to.y).toBeCloseTo(to.y);
+    expect(arc.center.x).toBeCloseTo(center.x);
+    expect(arc.center.y).toBeCloseTo(center.y);
+    // both go clockwise in plan space (+y up), so the SVG flag is 0
+    expect(arc.sweep).toBe(0);
+  });
+
   it('builds a window with three lines', () => {
     const floor = oneRoomFloor();
     const o = { ...floor.openings['o1']!, sill: 0.9 };
