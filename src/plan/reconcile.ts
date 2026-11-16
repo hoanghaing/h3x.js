@@ -1,4 +1,5 @@
 import type { EntityChange, Floor, Id } from '../core';
+import { KINDS, LAYER_OF, entitiesOf, isPlanKind, type PlanDom } from './kinds';
 import type { Joins } from '../shared/walls/joins';
 import {
   createEntityElement,
@@ -12,37 +13,6 @@ import {
 import { junctionPolygons } from './shapes';
 import type { PlanKind } from './types';
 
-export const LAYERS = [
-  'grid',
-  'rooms',
-  'walls',
-  'joins',
-  'openings',
-  'items',
-  'dimensions',
-  'nodes',
-  'overlay',
-] as const;
-export type LayerName = (typeof LAYERS)[number];
-
-export const KINDS: readonly PlanKind[] = ['node', 'wall', 'room', 'opening', 'item'];
-export const LAYER_OF: Record<PlanKind, LayerName> = {
-  node: 'nodes',
-  wall: 'walls',
-  room: 'rooms',
-  opening: 'openings',
-  item: 'items',
-};
-export const COLLECTION = {
-  node: 'nodes',
-  wall: 'walls',
-  room: 'rooms',
-  opening: 'openings',
-  item: 'items',
-} as const satisfies Record<PlanKind, keyof Floor>;
-
-const isPlanKind = (kind: string): kind is PlanKind => kind in LAYER_OF;
-
 /**
  * The entities whose elements must be re-synced after `changes`: the changed ones, plus every
  * wall whose corners depend on them (walls sharing a node with a changed wall or moved node,
@@ -52,13 +22,10 @@ export function dirtyEntities(
   floor: Readonly<Floor>,
   changes: EntityChange[],
 ): Record<PlanKind, Set<Id>> {
-  const changed: Record<PlanKind, Set<Id>> = {
-    node: new Set(),
-    wall: new Set(),
-    room: new Set(),
-    opening: new Set(),
-    item: new Set(),
-  };
+  const changed = Object.fromEntries(KINDS.map((k) => [k, new Set<Id>()])) as Record<
+    PlanKind,
+    Set<Id>
+  >;
   for (const c of changes) if (isPlanKind(c.kind)) changed[c.kind].add(c.id);
 
   // Corners depend on neighbouring walls' directions: take the walls touching any moved
@@ -91,7 +58,9 @@ export function dirtyEntities(
     if (dirtyWalls.has(o.wall)) dirty.opening.add(o.id);
   }
   for (const r of Object.values(floor.rooms)) {
-    if (r.walls.some((id) => dirtyWalls.has(id))) dirty.room.add(r.id);
+    if ([...r.walls, ...(r.holes?.flat() ?? [])].some((id) => dirtyWalls.has(id))) {
+      dirty.room.add(r.id);
+    }
   }
   for (const it of Object.values(floor.items)) {
     if (it.mount === 'wall' && dirtyWalls.has(it.wall)) dirty.item.add(it.id);
@@ -100,15 +69,9 @@ export function dirtyEntities(
 }
 
 /** Creates, updates or removes the element of one entity to match the floor. */
-export function syncEntity(
-  kind: PlanKind,
-  id: Id,
-  els: Map<Id, SVGGElement>,
-  layers: Record<LayerName, SVGGElement>,
-  prefix: string,
-  ctx: RenderContext,
-): void {
-  const entity = (ctx.floor[COLLECTION[kind]] as Record<Id, unknown>)[id];
+export function syncEntity(kind: PlanKind, id: Id, dom: PlanDom, ctx: RenderContext): void {
+  const els = dom.elements[kind];
+  const entity = entitiesOf(kind, ctx.floor, ctx.site)[id];
   let g = els.get(id);
   if (!entity) {
     g?.remove();
@@ -116,20 +79,16 @@ export function syncEntity(
     return;
   }
   if (!g) {
-    g = createEntityElement(kind, id, prefix);
+    g = createEntityElement(kind, id, dom.prefix);
     els.set(id, g);
-    layers[LAYER_OF[kind]].appendChild(g);
+    dom.layers[LAYER_OF[kind]].appendChild(g);
   }
   updateEntityElement(g, { kind, entity } as KindEntity, ctx);
 }
 
 /** Junction fills, keyed by node id; recomputed every change (they are cheap). */
-export function syncJoins(
-  joins: Joins,
-  joinEls: Map<Id, SVGGElement>,
-  layer: SVGGElement,
-  prefix: string,
-): void {
+export function syncJoins(joins: Joins, dom: PlanDom): void {
+  const joinEls = dom.joins;
   const polys = junctionPolygons(joins);
   for (const [id, g] of joinEls) {
     if (polys[id]) continue;
@@ -139,9 +98,9 @@ export function syncJoins(
   for (const [id, pts] of Object.entries(polys)) {
     let g = joinEls.get(id);
     if (!g) {
-      g = createJoinElement(id, prefix);
+      g = createJoinElement(id, dom.prefix);
       joinEls.set(id, g);
-      layer.appendChild(g);
+      dom.layers.joins.appendChild(g);
     }
     setAttr(g.firstElementChild!, 'points', pointsAttr(pts));
   }

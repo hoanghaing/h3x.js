@@ -1,7 +1,8 @@
-import type { Floor, Id, Item, Opening, PresetResolver, Room, Vec2 } from '../core';
-import { roomArea, roomPolygon } from '../core';
+import type { Column, Floor, Id, Item, Opening, PresetResolver, Room, Vec2 } from '../core';
+import { roomArea, roomShape } from '../core';
 import { GEOM_TOL } from '../core/constants';
 import { add, cross, leftNormal, normalize, scale, sub } from '../core/geometry/vec';
+import { obbCorners } from '../core/geometry/obb';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { Joins, WallCorners } from '../shared/walls/joins';
 
@@ -37,11 +38,17 @@ function centroidY(poly: Vec2[]): number {
   return cy / (3 * a2);
 }
 
+/** Inside the outer ring and outside every hole. */
+export function inRoomShape(p: Vec2, shape: { outer: Vec2[]; holes: Vec2[][] }): boolean {
+  return pointInPolygon(p, shape.outer) && !shape.holes.some((h) => pointInPolygon(p, h));
+}
+
 /**
- * Midpoint of a widest horizontal chord through the polygon, sampled at several heights; among
- * chords about as wide as the widest, the one nearest the polygon's vertical middle.
+ * Midpoint of a widest horizontal chord through the net area, sampled at several heights; among
+ * chords about as wide as the widest, the one nearest the outline's vertical middle.
  */
-function labelPoint(poly: Vec2[]): Vec2 {
+function labelPoint(shape: { outer: Vec2[]; holes: Vec2[][] }): Vec2 {
+  const poly = shape.outer;
   const minY = Math.min(...poly.map((p) => p.y));
   const maxY = Math.max(...poly.map((p) => p.y));
   const chords: Array<{ mid: Vec2; width: number }> = [];
@@ -49,14 +56,16 @@ function labelPoint(poly: Vec2[]): Vec2 {
   for (let s = 1; s < STEPS; s++) {
     const y = minY + ((maxY - minY) * s) / STEPS;
     const xs: number[] = [];
-    poly.forEach((p, i) => {
-      const q = poly[(i + 1) % poly.length]!;
-      if (p.y > y !== q.y > y) xs.push(p.x + ((y - p.y) / (q.y - p.y)) * (q.x - p.x));
-    });
+    for (const ring of [poly, ...shape.holes]) {
+      ring.forEach((p, i) => {
+        const q = ring[(i + 1) % ring.length]!;
+        if (p.y > y !== q.y > y) xs.push(p.x + ((y - p.y) / (q.y - p.y)) * (q.x - p.x));
+      });
+    }
     xs.sort((a, b) => a - b);
     for (let k = 0; k + 1 < xs.length; k += 2) {
       const mid = { x: (xs[k]! + xs[k + 1]!) / 2, y };
-      if (pointInPolygon(mid, poly)) chords.push({ mid, width: xs[k + 1]! - xs[k]! });
+      if (inRoomShape(mid, shape)) chords.push({ mid, width: xs[k + 1]! - xs[k]! });
     }
   }
   if (chords.length > 0) {
@@ -73,11 +82,34 @@ function labelPoint(poly: Vec2[]): Vec2 {
 }
 
 export function roomLabel(floor: Floor, room: Room): { at: Vec2; name: string; area: string } {
-  const poly = roomPolygon(floor, room, 'inner');
   return {
-    at: labelPoint(poly),
+    at: labelPoint(roomShape(floor, room, 'inner')),
     name: room.name,
     area: `${roomArea(floor, room, 'inner').toFixed(1)} m²`,
+  };
+}
+
+/** One SVG path (outer ring, then each hole) meant to be filled with `fill-rule="evenodd"`. */
+export function roomPath(shape: { outer: Vec2[]; holes: Vec2[][] }): string {
+  return [shape.outer, ...shape.holes]
+    .filter((ring) => ring.length > 0)
+    .map((ring) => `M${ring.map((p) => `${p.x},${p.y}`).join('L')}Z`)
+    .join('');
+}
+
+/** A column's plan shape: a circle, or the (rotated) rectangle's corners. */
+export function columnShape(
+  c: Column,
+): { kind: 'circle'; cx: number; cy: number; r: number } | { kind: 'polygon'; points: Vec2[] } {
+  if (c.shape === 'round') return { kind: 'circle', cx: c.x, cy: c.y, r: c.width / 2 };
+  return {
+    kind: 'polygon',
+    points: obbCorners({
+      center: { x: c.x, y: c.y },
+      halfW: c.width / 2,
+      halfD: (c.depth ?? c.width) / 2,
+      rotation: c.rotation,
+    }),
   };
 }
 

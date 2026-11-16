@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EntityChange } from '../../src/core';
 import { dirtyEntities } from '../../src/plan/reconcile';
-import { twoRoomFloor } from '../fixtures/floors';
+import { holedRoomFloor, twoRoomFloor } from '../fixtures/floors';
 
 describe('dirtyEntities', () => {
   it('propagates a moved node to its corners, openings and rooms', () => {
@@ -30,10 +30,22 @@ describe('dirtyEntities', () => {
     expect([...dirty.room].sort()).toEqual(['r1', 'r2']);
   });
 
-  it('ignores column and site changes', () => {
+  it('marks column and site changes dirty without touching walls or rooms', () => {
     const dirty = dirtyEntities(twoRoomFloor(), [
       { kind: 'column', id: 'c1', before: null, after: null },
+      { kind: 'site', id: 'site', before: null, after: null },
     ] as unknown as EntityChange[]);
-    expect(Object.values(dirty).every((s) => s.size === 0)).toBe(true);
+    expect([...dirty.column]).toEqual(['c1']);
+    expect([...dirty.site]).toEqual(['site']);
+    expect(dirty.wall.size + dirty.room.size + dirty.node.size).toBe(0);
+  });
+
+  it('re-renders the room containing a changed hole wall', () => {
+    const floor = holedRoomFloor();
+    const w = floor.walls['hw1']!;
+    const dirty = dirtyEntities(floor, [
+      { kind: 'wall', id: 'hw1', before: w, after: { ...w, thickness: 0.3 } },
+    ]);
+    expect([...dirty.room]).toEqual(['r1']);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeJoins } from '../../src/shared/walls/joins';
 import { hitTest, type HitScene } from '../../src/plan/hit';
 import { planToScreen, type View } from '../../src/plan/view';
-import { oneRoomFloor, testPresets } from '../fixtures/floors';
+import { holedRoomFloor, oneRoomFloor, testPresets } from '../fixtures/floors';
 import type { Floor, FloorItem } from '../../src/core';
 
 const view: View = { cx: 2, cy: 2, scale: 50, width: 400, height: 400 };
@@ -104,5 +104,58 @@ describe('hitTest', () => {
     expect(hitTest(s, at(2.07, 0.25))).toEqual({ kind: 'wall', id: 'w1b' });
     // Away from any outline the band still picks the thin wall.
     expect(hitTest(s, at(2.07, 1.5))).toEqual({ kind: 'wall', id: 'wt' });
+  });
+});
+
+describe('hitTest columns, site and holes', () => {
+  const big: View = { cx: 5, cy: 5, scale: 40, width: 500, height: 500 };
+  const bigAt = (x: number, y: number) => planToScreen(big, { x, y });
+  const holed = (extra: Partial<HitScene> = {}): HitScene => {
+    const floor = holedRoomFloor();
+    return { floor, view: big, corners: computeJoins(floor).corners, dimensions: [], ...extra };
+  };
+
+  it('does not hit the outer room inside a hole', () => {
+    expect(hitTest(holed(), bigAt(5, 5))).toBeNull();
+  });
+
+  it('hits the room beside the hole', () => {
+    expect(hitTest(holed(), bigAt(2, 5))).toEqual({ kind: 'room', id: 'r1' });
+  });
+
+  it('hits a column inside a room', () => {
+    const s = holed();
+    s.floor.columns['c1'] = { id: 'c1', x: 2, y: 5, shape: 'round', width: 0.6, rotation: 0 };
+    expect(hitTest(s, bigAt(2.2, 5))).toEqual({ kind: 'column', id: 'c1' });
+    expect(hitTest(s, bigAt(2.5, 5))).toEqual({ kind: 'room', id: 'r1' });
+  });
+
+  it('hits a square column by its rotated outline', () => {
+    const s = holed();
+    s.floor.columns['c1'] = {
+      id: 'c1',
+      x: 2,
+      y: 5,
+      shape: 'square',
+      width: 1,
+      rotation: Math.PI / 4,
+    };
+    expect(hitTest(s, bigAt(2.6, 5))).toEqual({ kind: 'column', id: 'c1' });
+    expect(hitTest(s, bigAt(2.45, 5.45))).toEqual({ kind: 'room', id: 'r1' });
+  });
+
+  it('hits a site edge but not its interior', () => {
+    const site = {
+      id: 'site' as const,
+      points: [
+        { x: -2, y: -2 },
+        { x: 12, y: -2 },
+        { x: 12, y: 12 },
+        { x: -2, y: 12 },
+      ],
+    };
+    const s = holed({ site });
+    expect(hitTest(s, bigAt(5, -2))).toEqual({ kind: 'site', id: 'site' });
+    expect(hitTest(s, bigAt(-1, 5))).toBeNull();
   });
 });

@@ -11,11 +11,14 @@ const wallsAtNode = (floor: Floor, node: Id): Id[] =>
     .filter((w) => w.a === node || w.b === node)
     .map((w) => w.id);
 
+/** What decides which dimensions show; editing state is supplied by tools. */
+export interface DimensionState {
+  selection: Selection | null;
+  draggingNode: Id | null;
+}
+
 /** Walls whose length label should currently be visible. */
-export function wallsShowingDimensions(
-  floor: Floor,
-  state: { selection: Selection | null; draggingNode: Id | null },
-): Id[] {
+export function wallsShowingDimensions(floor: Floor, state: DimensionState): Id[] {
   if (state.draggingNode) return wallsAtNode(floor, state.draggingNode);
   const sel = state.selection;
   if (sel?.kind === 'wall') return [sel.id];

@@ -91,3 +91,28 @@ export const testPresets: PresetResolver = (id) => {
   const p = presets[id];
   return p ? { ...p, footprint: { ...p.footprint } } : undefined;
 };
+
+/** A 10 x 10 room (r1, walls w1-w4) with a 2 x 2 hole (walls hw0-hw3, clockwise) at its centre. */
+export function holedRoomFloor(): Floor {
+  const f = oneRoomFloor();
+  f.openings = {};
+  [
+    [0, 0],
+    [10, 0],
+    [10, 10],
+    [0, 10],
+  ].forEach(([x, y], i) => (f.nodes[`n${i + 1}`] = { id: `n${i + 1}`, x: x!, y: y! }));
+  const ring = [
+    [4, 4],
+    [4, 6],
+    [6, 6],
+    [6, 4],
+  ];
+  ring.forEach(([x, y], i) => (f.nodes[`hn${i}`] = { id: `hn${i}`, x: x!, y: y! }));
+  ring.forEach((_, i) => {
+    const id = `hw${i}`;
+    f.walls[id] = wall(id, `hn${i}`, `hn${(i + 1) % 4}`);
+  });
+  f.rooms.r1!.holes = [['hw0', 'hw1', 'hw2', 'hw3']];
+  return f;
+}
