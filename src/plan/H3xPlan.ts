@@ -7,6 +7,7 @@ import { PlanInput } from './input';
 import { hitTest, type HitScene, type HitTarget } from './hit';
 import { snapPoint, type SnapResult } from './snap';
 import type { Tool, ToolContext } from './tools/Tool';
+import { SelectEditTool } from './tools/SelectEditTool';
 import { dimensionLabel, wallsShowingDimensions } from './dimensions';
 import {
   NON_SCALING,
@@ -46,7 +47,7 @@ export interface H3xPlanOptions {
   classPrefix?: string;
   /** Resolves item presets (footprints). Default `doc.presets`. */
   presets?: PresetResolver;
-  /** Editing tool. Omitted or `null` means no tool (the plan only pans and zooms). */
+  /** Editing tool. Default `new SelectEditTool()`; `null` means no tool (the plan only pans and zooms). */
   tool?: Tool | null;
 }
 
@@ -216,7 +217,7 @@ export class H3xPlan {
       },
     };
     this.input = new PlanInput(this);
-    this.setTool(opts.tool ?? null);
+    this.setTool(opts.tool === undefined ? new SelectEditTool() : opts.tool);
 
     this.fitToContent();
   }
