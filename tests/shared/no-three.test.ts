@@ -16,10 +16,10 @@ function tsFiles(dir: string): string[] {
 
 /**
  * An import/export-from/dynamic import/require whose specifier is `three`,
- * `three/...`, or a relative path that goes through a `three` directory.
+ * `three/...`, the `h3x/three` alias, or a relative path that goes through a `three` directory.
  */
 const THREE_IMPORT =
-  /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](?:three(?:\/[^'"]*)?|(?:\.{1,2}\/)+(?:[^'"]*\/)?three(?:\/[^'"]*)?)['"]/;
+  /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](?:three(?:\/[^'"]*)?|h3x\/three(?:\/[^'"]*)?|(?:\.{1,2}\/)+(?:[^'"]*\/)?three(?:\/[^'"]*)?)['"]/;
 
 describe('THREE_IMPORT pattern', () => {
   it.each([
@@ -30,6 +30,8 @@ describe('THREE_IMPORT pattern', () => {
     "const t = require('three');",
     "import { x } from '../three';",
     "export * from '../../three/scene';",
+    "import { View } from 'h3x/three';",
+    'import { x } from "h3x/three/scene";',
   ])('matches %s', (line) => {
     expect(line).toMatch(THREE_IMPORT);
   });
@@ -38,6 +40,7 @@ describe('THREE_IMPORT pattern', () => {
     '// see src/three/ for the renderer',
     "import { a } from '../core';",
     "import x from 'threejs-thing';",
+    "import { a } from 'h3x/plan';",
   ])('does not match %s', (line) => {
     expect(line).not.toMatch(THREE_IMPORT);
   });

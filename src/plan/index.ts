@@ -10,3 +10,4 @@ export {
   zoomAt,
   type View,
 } from './view';
+export { snapPoint, snapScalar, type SnapGuide, type SnapOptions, type SnapResult } from './snap';
