@@ -26,7 +26,8 @@ export { setWallFinish, setRoomFinish, renameRoom } from './commands/finishes';
 
 export { validateLayout } from './validate/layout';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';
-export { detectRooms, roomPolygon, roomArea } from './rooms/detect';
+export { detectRooms, roomPolygon, roomShape, roomArea } from './rooms/detect';
+export { polygonOverlapArea } from './geometry/clip';
 export { projectToXML } from './xml/serialize';
 export { projectFromXML } from './xml/parse';
 export { obbCorners, wallOBB } from './geometry/obb';

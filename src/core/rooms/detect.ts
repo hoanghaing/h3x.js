@@ -134,6 +134,22 @@ export function roomPolygon(floor: Floor, room: Room, kind: 'center' | 'inner'):
   return insetPolygon(pts, dists);
 }
 
+/**
+ * Outer outline and hole outlines of a room. Holes are stored clockwise, so
+ * insetting a hole loop by half each wall's thickness outsets it ('inner').
+ */
+export function roomShape(
+  floor: Floor,
+  room: Room,
+  kind: 'center' | 'inner',
+): { outer: Vec2[]; holes: Vec2[][] } {
+  const outer = roomPolygon(floor, room, kind);
+  const holes = (room.holes ?? []).map((walls) => roomPolygon(floor, { ...room, walls }, kind));
+  return { outer, holes };
+}
+
+/** Outer area minus hole areas (negative for a flipped outline). */
 export function roomArea(floor: Floor, room: Room, kind: 'center' | 'inner' = 'inner'): number {
-  return signedArea(roomPolygon(floor, room, kind));
+  const { outer, holes } = roomShape(floor, room, kind);
+  return signedArea(outer) - holes.reduce((sum, h) => sum + Math.abs(signedArea(h)), 0);
 }

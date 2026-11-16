@@ -134,7 +134,7 @@ export class H3xDocument {
 
   /** All layout issues, including non-blocking ones. */
   validateLayout(): Issue[] {
-    return validateLayout(this.floor as Floor);
+    return validateLayout(this.floor as Floor, this._project.site);
   }
 
   /** All placement issues for openings and items, including pre-existing ones. */
