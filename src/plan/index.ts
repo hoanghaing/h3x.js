@@ -20,3 +20,5 @@ export {
   type OpeningShape,
 } from './shapes';
 export { dimensionLabel, wallsShowingDimensions } from './dimensions';
+export { hitTest, type HitScene, type HitTarget } from './hit';
+export { pickAnchor } from './anchor';
