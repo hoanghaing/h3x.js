@@ -1,4 +1,4 @@
-import { MIN_ROOM_AREA } from '../constants';
+import { GEOM_TOL, MIN_ROOM_AREA } from '../constants';
 import { H3xValidationError } from '../errors';
 import { EPS } from '../geometry/vec';
 import { insetPolygon, isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygon';
@@ -20,12 +20,23 @@ export interface DetectedRoom {
 
 const heKey = (from: Id, to: Id, wall: Id): string => `${from}>${to}>${wall}`;
 
+/** True when a room's net inner area is below MIN_ROOM_AREA beyond GEOM_TOL. */
+export function isBelowMinRoomArea(innerArea: number): boolean {
+  return innerArea < MIN_ROOM_AREA - GEOM_TOL;
+}
+
 /** Walls that are bridges of the wall graph (iterative Tarjan, multi-edge safe). */
 function findBridges(walls: Wall[]): Set<Id> {
   const adj = new Map<Id, Array<{ to: Id; wall: Id }>>();
   for (const w of walls) {
-    adj.set(w.a, [...(adj.get(w.a) ?? []), { to: w.b, wall: w.id }]);
-    adj.set(w.b, [...(adj.get(w.b) ?? []), { to: w.a, wall: w.id }]);
+    for (const [from, to] of [
+      [w.a, w.b],
+      [w.b, w.a],
+    ] as const) {
+      const list = adj.get(from) ?? [];
+      list.push({ to, wall: w.id });
+      adj.set(from, list);
+    }
   }
   const disc = new Map<Id, number>();
   const low = new Map<Id, number>();
@@ -85,13 +96,20 @@ function splitLoop(loop: HalfEdge[]): HalfEdge[][] {
  * separate parts) are ignored. Each face is split at pinch nodes: its CCW loop
  * is the room outline, its CW loops are holes. A component's outer boundary
  * becomes a hole of the smallest face of another component containing it.
- * Faces with a non-simple outline or a net inner area below MIN_ROOM_AREA are
- * dropped.
+ * Faces with a non-simple outline or a net inner area below MIN_ROOM_AREA
+ * (with GEOM_TOL) are dropped. Of coincident walls (same node pair) only the
+ * one with the smallest id is used.
  */
 export function detectRooms(floor: Floor): DetectedRoom[] {
-  const valid = Object.values(floor.walls).filter(
-    (w) => w.a !== w.b && floor.nodes[w.a] && floor.nodes[w.b],
-  );
+  // One wall per unordered node pair (smallest id); coincident duplicates are ignored.
+  const byPair = new Map<string, Wall>();
+  for (const w of Object.values(floor.walls)) {
+    if (w.a === w.b || !floor.nodes[w.a] || !floor.nodes[w.b]) continue;
+    const key = w.a < w.b ? `${w.a}|${w.b}` : `${w.b}|${w.a}`;
+    const kept = byPair.get(key);
+    if (!kept || w.id < kept.id) byPair.set(key, w);
+  }
+  const valid = [...byPair.values()];
   const bridges = findBridges(valid);
   const live = valid.filter((w) => !bridges.has(w.id));
 
@@ -184,7 +202,7 @@ export function detectRooms(floor: Floor): DetectedRoom[] {
       nodes: f.outer.map((e) => e.from),
       holes: f.holes.map(walls),
     }))
-    .filter((r) => roomArea(floor, { id: '', name: '', ...r }, 'inner') >= MIN_ROOM_AREA);
+    .filter((r) => !isBelowMinRoomArea(roomArea(floor, { id: '', name: '', ...r }, 'inner')));
 }
 
 function openError(room: Room, message: string): H3xValidationError {
