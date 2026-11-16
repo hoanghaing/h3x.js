@@ -27,11 +27,9 @@ interface Gesture {
   key: string;
   kind: 'node' | 'wall';
   id: Id;
-  /** Wall drags: unit normal and the offset along it applied so far. */
+  /** Wall drags: unit normal and node a's position at gesture start. */
   normal: Vec2;
-  applied: number;
-  /** The last step was rejected. */
-  failed: boolean;
+  startA: Vec2;
 }
 
 const ARROWS: Record<string, Vec2> = {
@@ -53,6 +51,8 @@ export class SelectEditTool implements Tool {
   private gestureCount = 0;
   /** True while the tool's own document calls run, so their change events are not interruptions. */
   private issuing = false;
+  /** The tool's last drag step or nudge was rejected and is still flashed. */
+  private rejecting = false;
 
   constructor(opts: SelectEditToolOptions = {}) {
     this.threshold = opts.dragThresholdPx ?? 4;
@@ -62,6 +62,8 @@ export class SelectEditTool implements Tool {
 
   activate(ctx: ToolContext): void {
     this.ctx = ctx;
+    // Known limitation: an external `doc.endCoalesce()` mid-drag emits no change event, so it
+    // goes unnoticed; the drag's later steps then start a new undo step under the same key.
     this.unsubscribe = ctx.doc.on('change', () => {
       if (this.gesture && !this.issuing) this.endGesture(false);
     });
@@ -124,6 +126,7 @@ export class SelectEditTool implements Tool {
         const { key } = this.gesture;
         this.issue(() => ctx.doc.cancelCoalesce(key));
         this.endGesture(false);
+        this.rejecting = false;
         ctx.plan.reportRejected([]);
       } else {
         ctx.plan.select(null);
@@ -143,8 +146,7 @@ export class SelectEditTool implements Tool {
       if (!n) return false;
       cmd = moveNode(sel.id, { x: n.x + d.x, y: n.y + d.y });
     }
-    const res = this.issue(() => ctx.doc.tryExecute(cmd));
-    if (!res.ok) ctx.plan.reportRejected(res.issues);
+    this.run(cmd);
     return true;
   }
 
@@ -153,12 +155,14 @@ export class SelectEditTool implements Tool {
     const t = press.target;
     if (t?.kind !== 'node' && t?.kind !== 'wall') return;
     let normal: Vec2 = { x: 0, y: 0 };
+    let startA: Vec2 = { x: 0, y: 0 };
     if (t.kind === 'wall') {
       const w = ctx.doc.floor.walls[t.id];
       const a = w && ctx.doc.floor.nodes[w.a];
       const b = w && ctx.doc.floor.nodes[w.b];
       if (!a || !b) return;
       normal = leftNormal(sub(b, a));
+      startA = { x: a.x, y: a.y };
     } else if (!ctx.doc.floor.nodes[t.id]) {
       return;
     }
@@ -167,8 +171,7 @@ export class SelectEditTool implements Tool {
       kind: t.kind,
       id: t.id,
       normal,
-      applied: 0,
-      failed: false,
+      startA,
     };
     ctx.plan.select({ kind: t.kind, id: t.id });
     if (t.kind === 'node') ctx.setDragging(t.id);
@@ -178,30 +181,35 @@ export class SelectEditTool implements Tool {
     const ctx = this.ctx!;
     const g = this.gesture!;
     const free = (e.native as MouseEvent).altKey;
-    let cmd: Command;
-    let wanted = 0;
     if (g.kind === 'node') {
       const r = ctx.snap(e.plan, [g.id], free);
-      ctx.showGuides(r.guides);
-      cmd = moveNode(g.id, r.point);
-    } else {
-      wanted = dot(sub(e.plan, this.press!.plan), g.normal);
-      if (!free) wanted = snapScalar(wanted, ctx.plan.snapOptions.grid);
-      const delta = wanted - g.applied;
-      if (delta === 0) return;
-      cmd = moveWall(g.id, scale(g.normal, delta));
-    }
-    const res = this.issue(() => ctx.doc.tryExecute(cmd, { coalesceKey: g.key }));
-    if (!res.ok) {
-      g.failed = true;
-      ctx.plan.reportRejected(res.issues);
+      ctx.showGuides(this.run(moveNode(g.id, r.point), g.key) ? r.guides : []);
       return;
     }
-    g.applied = wanted;
-    if (g.failed) {
-      g.failed = false;
+    const floor = ctx.doc.floor;
+    const a = floor.nodes[floor.walls[g.id]?.a ?? ''];
+    if (!a) return;
+    let wanted = dot(sub(e.plan, this.press!.plan), g.normal);
+    if (!free) wanted = snapScalar(wanted, ctx.plan.snapOptions.grid);
+    // Against the wall's current offset (moveWall is relative), so errors do not accumulate.
+    const delta = wanted - dot(sub(a, g.startA), g.normal);
+    if (delta !== 0) this.run(moveWall(g.id, scale(g.normal, delta)), g.key);
+  }
+
+  /** Runs one of the tool's own commands; flashes a rejection, clears it after a success. */
+  private run(cmd: Command, coalesceKey?: string): boolean {
+    const ctx = this.ctx!;
+    const res = this.issue(() => ctx.doc.tryExecute(cmd, { coalesceKey }));
+    if (!res.ok) {
+      this.rejecting = true;
+      ctx.plan.reportRejected(res.issues);
+      return false;
+    }
+    if (this.rejecting) {
+      this.rejecting = false;
       ctx.plan.reportRejected([]);
     }
+    return true;
   }
 
   /** Ends the gesture in progress; `seal` closes its coalesce group (it is still open). */

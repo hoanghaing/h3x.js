@@ -50,7 +50,7 @@ export class History {
         // Net no-op (e.g. dragged back to the start): leave no phantom undo step.
         this.undoStack.pop();
         this.sealed = true;
-        this.redoStack = [];
+        this.redoStack = this.groupRedo;
         return;
       }
     } else {
