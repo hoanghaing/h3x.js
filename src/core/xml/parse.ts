@@ -237,7 +237,12 @@ function parseFloor(fe: Element): Floor {
   if (Object.keys(floor.rooms).length === 0) {
     for (const d of detectRooms(floor)) {
       const id = createId();
-      floor.rooms[id] = { id, walls: d.walls, name: '' };
+      floor.rooms[id] = {
+        id,
+        walls: d.walls,
+        name: '',
+        ...(d.holes.length ? { holes: d.holes } : {}),
+      };
     }
   } else {
     normalizeRoomOrientation(floor, (room, err, attribute) => {

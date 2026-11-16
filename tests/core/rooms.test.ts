@@ -8,10 +8,55 @@ import {
   roomPolygon,
   roomShape,
 } from '../../src/core/rooms/detect';
+import type { DetectedRoom } from '../../src/core/rooms/detect';
 import type { Floor } from '../../src/core/types';
 import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
 
 const sorted = (a: string[]): string[] => [...a].sort();
+
+/** Square room `o` of the given size at the origin plus free-standing square boxes. */
+function boxFloor(
+  size: number,
+  boxes: Array<{ prefix: string; x: number; y: number; size: number }>,
+): Floor {
+  const floor = oneRoomFloor();
+  floor.nodes = {};
+  floor.walls = {};
+  floor.rooms = {};
+  floor.openings = {};
+  const square = (prefix: string, x: number, y: number, s: number): void => {
+    const corners = [
+      [x, y],
+      [x + s, y],
+      [x + s, y + s],
+      [x, y + s],
+    ] as const;
+    corners.forEach(([cx, cy], i) => {
+      floor.nodes[`${prefix}_${i}`] = { id: `${prefix}_${i}`, x: cx, y: cy };
+    });
+    for (let i = 0; i < 4; i++) {
+      floor.walls[`${prefix}${i}`] = {
+        id: `${prefix}${i}`,
+        a: `${prefix}_${i}`,
+        b: `${prefix}_${(i + 1) % 4}`,
+        thickness: 0.2,
+        height: 3.2,
+      };
+    }
+  };
+  square('o', 0, 0, size);
+  for (const b of boxes) square(b.prefix, b.x, b.y, b.size);
+  return floor;
+}
+
+const faceWith = (faces: DetectedRoom[], wall: string): DetectedRoom => {
+  const f = faces.find((x) => x.walls.includes(wall));
+  if (!f) throw new Error(`no face with ${wall}`);
+  return f;
+};
+
+const loopArea = (floor: Floor, walls: string[]): number =>
+  signedArea(roomNodeLoop(floor, { id: 'x', name: '', walls }).map((id) => floor.nodes[id]!));
 
 describe('detectRooms', () => {
   it('finds one face in a single room', () => {
@@ -87,6 +132,106 @@ describe('detectRooms', () => {
     const faces = detectRooms(floor);
     expect(faces).toHaveLength(1);
     expect(sorted(faces[0]!.walls)).toEqual(['w1', 'w2', 'w3', 'w4']);
+  });
+
+  it('partial wall leaves one room', () => {
+    const floor = oneRoomFloor();
+    floor.nodes.p = { id: 'p', x: 2, y: 1.5 };
+    floor.walls.wp = { id: 'wp', a: 'n2', b: 'p', thickness: 0.2, height: 3.2 };
+    const faces = detectRooms(floor);
+    expect(faces).toHaveLength(1);
+    expect(faces[0]!.walls).not.toContain('wp');
+    expect(faces[0]!.holes).toEqual([]);
+  });
+
+  it('inner box is a hole', () => {
+    const floor = boxFloor(6, [{ prefix: 'b', x: 2, y: 2, size: 2 }]);
+    const faces = detectRooms(floor);
+    expect(faces).toHaveLength(2);
+    const outer = faceWith(faces, 'o0');
+    const box = faceWith(faces, 'b0');
+    expect(outer.holes).toHaveLength(1);
+    expect(sorted(outer.holes[0]!)).toEqual(['b0', 'b1', 'b2', 'b3']);
+    expect(loopArea(floor, outer.holes[0]!)).toBeLessThan(0);
+    expect(box.holes).toEqual([]);
+    expect(sorted(box.walls)).toEqual(['b0', 'b1', 'b2', 'b3']);
+  });
+
+  it('bridge to inner box is ignored', () => {
+    const floor = boxFloor(6, [{ prefix: 'b', x: 2, y: 2, size: 2 }]);
+    floor.walls.br = { id: 'br', a: 'o_0', b: 'b_0', thickness: 0.2, height: 3.2 };
+    const faces = detectRooms(floor);
+    expect(faces).toHaveLength(2);
+    for (const f of faces) {
+      expect(f.walls).not.toContain('br');
+      for (const h of f.holes) expect(h).not.toContain('br');
+    }
+    const outer = faceWith(faces, 'o0');
+    expect(sorted(outer.walls)).toEqual(['o0', 'o1', 'o2', 'o3']);
+    expect(outer.holes.map((h) => sorted(h))).toEqual([['b0', 'b1', 'b2', 'b3']]);
+    expect(faceWith(faces, 'b0').holes).toEqual([]);
+  });
+
+  it('pinched hole', () => {
+    // Quad (0,0) (2,1) (3,3) (1,2) touches the outer ring only at corner o_0.
+    const floor = boxFloor(6, [{ prefix: 'b', x: 1, y: 1, size: 2 }]);
+    delete floor.nodes.b_0;
+    floor.nodes.b_1 = { id: 'b_1', x: 2, y: 1 };
+    floor.nodes.b_2 = { id: 'b_2', x: 3, y: 3 };
+    floor.nodes.b_3 = { id: 'b_3', x: 1, y: 2 };
+    floor.walls.b0!.a = 'o_0';
+    floor.walls.b3!.b = 'o_0';
+    const faces = detectRooms(floor);
+    expect(faces).toHaveLength(2);
+    const outer = faceWith(faces, 'o0');
+    expect(sorted(outer.walls)).toEqual(['o0', 'o1', 'o2', 'o3']);
+    expect(new Set(outer.nodes).size).toBe(4);
+    expect(outer.holes.map((h) => sorted(h))).toEqual([['b0', 'b1', 'b2', 'b3']]);
+    expect(loopArea(floor, outer.holes[0]!)).toBeLessThan(0);
+    expect(faceWith(faces, 'b0').holes).toEqual([]);
+  });
+
+  it('nested', () => {
+    const floor = boxFloor(10, [
+      { prefix: 'b', x: 2, y: 2, size: 6 },
+      { prefix: 'c', x: 4, y: 4, size: 2 },
+    ]);
+    const faces = detectRooms(floor);
+    expect(faces).toHaveLength(3);
+    expect(faceWith(faces, 'o0').holes.map((h) => sorted(h))).toEqual([['b0', 'b1', 'b2', 'b3']]);
+    expect(faceWith(faces, 'b0').holes.map((h) => sorted(h))).toEqual([['c0', 'c1', 'c2', 'c3']]);
+    expect(faceWith(faces, 'c0').holes).toEqual([]);
+  });
+
+  it('tiny face dropped', () => {
+    // 4x4 room whose left wall is split at (0,2); a 0.3 x 2 strip is closed off
+    // by a wall parallel to it at x = 0.3.
+    const pts = [
+      ['a', 0, 0],
+      ['b', 0.3, 0],
+      ['c', 4, 0],
+      ['d', 4, 4],
+      ['e', 0, 4],
+      ['f', 0, 2],
+    ] as const;
+    const floor = oneRoomFloor();
+    floor.nodes = {};
+    floor.walls = {};
+    floor.rooms = {};
+    floor.openings = {};
+    pts.forEach(([id, x, y]) => (floor.nodes[id] = { id, x, y }));
+    floor.nodes.g = { id: 'g', x: 0.3, y: 2 };
+    const wall = (id: string, a: string, b: string): void => {
+      floor.walls[id] = { id, a, b, thickness: 0.2, height: 3.2 };
+    };
+    pts.forEach(([id], i) => wall(`w${i}`, id, pts[(i + 1) % pts.length]![0]));
+    wall('s1', 'b', 'g');
+    wall('s2', 'g', 'f');
+    const faces = detectRooms(floor);
+    expect(faces).toHaveLength(1);
+    expect(faces[0]!.walls).toContain('w2');
+    expect(faces[0]!.walls).not.toContain('w0');
+    expect(faces[0]!.walls).not.toContain('w5');
   });
 });
 

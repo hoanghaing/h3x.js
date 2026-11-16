@@ -141,6 +141,25 @@ describe('xml', () => {
     expect([...rooms[0]!.walls].sort()).toEqual(['w1', 'w2', 'w3', 'w4']);
   });
 
+  it('detects room holes when rooms are absent', () => {
+    const nodes = `<node id="n1" x="0" y="0"/><node id="n2" x="6" y="0"/>
+<node id="n3" x="6" y="6"/><node id="n4" x="0" y="6"/>
+<node id="h1" x="2" y="2"/><node id="h2" x="4" y="2"/>
+<node id="h3" x="4" y="4"/><node id="h4" x="2" y="4"/>`;
+    const walls = `${WALLS}
+<wall id="hw1" a="h1" b="h2" thickness="0.1" height="3.2"/>
+<wall id="hw2" a="h2" b="h3" thickness="0.1" height="3.2"/>
+<wall id="hw3" a="h3" b="h4" thickness="0.1" height="3.2"/>
+<wall id="hw4" a="h4" b="h1" thickness="0.1" height="3.2"/>`;
+    const f = projectFromXML(doc({ room: '', nodes, walls })).floors[0]!;
+    const rooms = Object.values(f.rooms);
+    expect(rooms).toHaveLength(2);
+    const outer = rooms.find((r) => r.walls.includes('w1'))!;
+    const box = rooms.find((r) => r.walls.includes('hw1'))!;
+    expect(outer.holes!.map((h) => [...h].sort())).toEqual([['hw1', 'hw2', 'hw3', 'hw4']]);
+    expect(box).not.toHaveProperty('holes');
+  });
+
   it('normalizes CW rooms to CCW', () => {
     const f = projectFromXML(doc({ room: '<room id="r1" walls="w4 w3 w2 w1"/>' })).floors[0]!;
     expect(signedArea(roomPolygon(f, f.rooms.r1!, 'center'))).toBeGreaterThan(0);
