@@ -215,6 +215,25 @@ describe('tool dispatch', () => {
     expect(plan.svg.querySelectorAll('.h3x-plan-layer-dimensions text')).toHaveLength(2);
   });
 
+  it('snapDraw uses the plan snap options and an 8px reach', () => {
+    const { tool } = fakeTool(true);
+    const plan = makePlan(tool);
+    const ctx = vi.mocked(tool.activate).mock.calls[0]![0];
+    const n1 = plan.doc.floor.nodes['n1']!;
+    const reach = 8 / plan.view.scale;
+    const near = ctx.snapDraw({ x: n1.x + reach * 0.9, y: n1.y }, undefined, false);
+    expect(near.target).toEqual({ kind: 'node', id: 'n1' });
+    expect(near.point).toEqual({ x: n1.x, y: n1.y });
+    const far = ctx.snapDraw({ x: n1.x + reach * 1.5, y: n1.y + 5 }, undefined, false);
+    expect(far.target.kind).not.toBe('node');
+    const off = ctx.snapDraw({ x: n1.x + 0.001, y: n1.y }, undefined, true);
+    expect(off).toEqual({
+      point: { x: n1.x + 0.001, y: n1.y },
+      guides: [],
+      target: { kind: 'free' },
+    });
+  });
+
   it('setTool mid-gesture: the new tool sees nothing of that press and panning works again', () => {
     const a = fakeTool(true);
     const b = fakeTool(true);

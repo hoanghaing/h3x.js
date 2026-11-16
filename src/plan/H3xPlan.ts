@@ -5,7 +5,7 @@ import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
 import { PlanInput } from './input';
 import { hitTest, type HitScene, type HitTarget } from './hit';
-import { snapPoint, type SnapResult } from './snap';
+import { snapDraw, snapPoint, type SnapResult } from './snap';
 import type { Tool, ToolContext } from './tools/Tool';
 import { SelectEditTool } from './tools/SelectEditTool';
 import {
@@ -169,6 +169,18 @@ export class H3xPlan {
           grid: this.snapOptions.grid,
           align: this.snapOptions.align,
           alignRadius: ALIGN_RADIUS_PX / this._view.scale,
+        });
+      },
+      snapDraw: (p, from, disabled, extra) => {
+        if (disabled) return { point: p, guides: [], target: { kind: 'free' } };
+        const radius = ALIGN_RADIUS_PX / this._view.scale;
+        return snapDraw(p, doc.floor, {
+          grid: this.snapOptions.grid,
+          align: this.snapOptions.align,
+          alignRadius: radius,
+          reach: radius,
+          ...(from ? { from } : {}),
+          ...(extra ? { extra } : {}),
         });
       },
       showGuides: (g) => this.showGuides(g),
