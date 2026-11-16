@@ -128,9 +128,10 @@ export class SelectEditTool implements Tool {
         this.endGesture(false);
         this.rejecting = false;
         ctx.plan.reportRejected([]);
-      } else {
-        ctx.plan.select(null);
+        return true;
       }
+      if (!ctx.plan.selection) return false;
+      ctx.plan.select(null);
       return true;
     }
     const dir = ARROWS[e.key];

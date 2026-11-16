@@ -177,8 +177,17 @@ describe('SelectEditTool', () => {
   it('Esc without a gesture clears the selection', () => {
     const plan = makePlan();
     plan.select({ kind: 'node', id: 'n1' });
-    key(plan, 'Escape');
+    const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    plan.svg.dispatchEvent(e);
     expect(plan.selection).toBeNull();
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('Esc with nothing selected and no gesture is not handled', () => {
+    const plan = makePlan();
+    const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    plan.svg.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(false);
   });
 
   it('a document change from elsewhere ends the gesture', () => {
