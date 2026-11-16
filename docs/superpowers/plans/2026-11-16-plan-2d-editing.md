@@ -68,7 +68,7 @@ examples/*                      split view demo
 **Interfaces:**
 - Produces: `computeWallCorners(floor): Record<Id, WallCorners>`, `computeJoins(floor): Joins`, types `WallCorners`, `Junction`, `Joins`, `MITER_LIMIT` importable from `src/shared/walls/joins`. Public `h3x/three` exports unchanged.
 
-- [ ] **Step 1: Write the failing test** `tests/shared/no-three.test.ts`: read every `.ts` file under `src/shared` and (later) `src/plan` with `node:fs` (recursive), assert none contains `from 'three'`, `from "three"`, `'three/` or `/three/` import paths; also assert `src/shared/walls/joins.ts` exists.
+- [ ] **Step 1: Write the failing test** `tests/shared/no-three.test.ts`: read every `.ts` file under `src/shared` and (later) `src/plan` with `node:fs` (recursive), assert none contains `from 'three'`, `from "three"`, `'three/` or `/three/` import paths (a missing `src/plan` directory counts as zero files); also assert `src/shared/walls/joins.ts` exists.
 - [ ] **Step 2: Run** `pnpm vitest run tests/shared` — expect FAIL (file missing).
 - [ ] **Step 3: Move the file** with `git mv`, fix relative imports, add the re-export stub at the old path.
 - [ ] **Step 4: Run** `pnpm test` — expect all existing tests (joins, junctions, scene) PASS unchanged.
@@ -111,7 +111,7 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
   - wrong key → `false`, state unchanged, no event.
   - after `endCoalesce()` → `false`.
   - net no-op: move `n2` away and back to `(4,0)` with key `'g1'` (history pops the group) → `cancelCoalesce('g1')` is `false` and `canUndo === false`.
-  - a keyless command between two keyed moves → cancel only reverts nothing (`false`, the group was sealed).
+  - a keyed move with `'g1'`, then a keyless command → `cancelCoalesce('g1')` is `false` and the state is unchanged (the keyless push sealed the group).
 - [ ] **Step 2: Run** `pnpm vitest run tests/core/document.test.ts` — FAIL (`cancelCoalesce` missing).
 - [ ] **Step 3: Implement** in `History` and `H3xDocument` as described.
 - [ ] **Step 4: Run** `pnpm test` (H3xScene must handle reason `'cancel'` — it rebuilds for any reason; confirm `tests/three/scene.test.ts` still passes). README: add `doc.cancelCoalesce(key)` next to `endCoalesce`, and `'cancel'` to the reasons.
@@ -219,7 +219,6 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
   interface H3xPlanOptions {
     grid?: boolean;                                     // default true
     snap?: { grid?: number; align?: boolean };          // default { grid: 0.05, align: true }
-    tool?: Tool;                                        // default new SelectEditTool() (Task 10/11)
     classPrefix?: string;                               // default 'h3x-plan'
     presets?: PresetResolver;                           // default doc.presets
   }
@@ -250,7 +249,7 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
   - `dispose()` removes the SVG from the container, a later doc change does not throw and touches nothing; calling `dispose()` twice is fine.
   - grep-style guard: `tests/shared/no-three.test.ts` now also scans `src/plan` (already written in Task 1 — confirm it covers the new files).
 - [ ] **Step 2: Run** `pnpm vitest run tests/plan/H3xPlan.test.ts` — FAIL.
-- [ ] **Step 3: Implement** `H3xPlan` rendering, sync, view, resize, dispose and `style.ts` (tool hook-up stubbed: store `opts.tool`, wire it in Task 10).
+- [ ] **Step 3: Implement** `H3xPlan` rendering, sync, view, resize, dispose and `style.ts` (no tool support yet: Task 10 adds the `tool` option and dispatch).
 - [ ] **Step 4: Run** `pnpm test` — PASS.
 - [ ] **Step 5: Commit** `feat(plan): H3xPlan renders a document as retained SVG`
 
@@ -318,6 +317,8 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
     onKeyDown?(e: KeyboardEvent): boolean;
   }
   // H3xPlan: setTool(tool: Tool | null): void; get tool(): Tool | null
+  // H3xPlanOptions gains `tool?: Tool | null` (Task 11 makes `new SelectEditTool()` the default when omitted; `null` = no tool)
+  // The tool receives pointermove/up even when its onPointerDown returned false (it just has no gesture); the plan pans in that case.
   ```
   `H3xPlan` listens on `svg`: `pointerdown/move/up/cancel`, `dblclick`, `wheel` (`passive: false`), `keydown` (svg has `tabindex="0"`; focus on pointerdown). Pointer capture on pointerdown. Wheel: `zoomAt(view, cursor, Math.exp(-deltaY * 0.0015))`, `preventDefault`. Pan: pointerdown not consumed by the tool (or middle button) → drag pans the view. Pinch: two active pointers → zoom about their midpoint by distance ratio, pan by midpoint motion; the tool gets no events while two pointers are down. `pointercancel` is delivered to the tool as `onPointerUp`. `setTool` calls `deactivate` on the old tool before `activate` on the new; `dispose` deactivates.
 
