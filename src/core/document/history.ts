@@ -29,6 +29,8 @@ export class History {
   private sealed = true;
   /** Redo stack as it was just before the open keyed group's first push. */
   private groupRedo: Entry[] = [];
+  /** Oldest entry trimmed (HISTORY_LIMIT) when the open group was created; restored if it is dropped. */
+  private groupTrimmed: Entry | undefined;
 
   get canUndo(): boolean {
     return this.undoStack.length > 0;
@@ -48,15 +50,14 @@ export class History {
       top.changes = mergeChanges(top.changes, changes);
       if (top.changes.every((c) => deepEqual(c.before, c.after))) {
         // Net no-op (e.g. dragged back to the start): leave no phantom undo step.
-        this.undoStack.pop();
-        this.sealed = true;
-        this.redoStack = this.groupRedo;
+        this.dropGroup();
         return;
       }
     } else {
       this.groupRedo = this.redoStack;
       this.undoStack.push({ changes, key });
-      if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
+      this.groupTrimmed =
+        this.undoStack.length > HISTORY_LIMIT ? this.undoStack.shift() : undefined;
     }
     this.sealed = key === undefined;
     this.redoStack = [];
@@ -69,10 +70,17 @@ export class History {
   cancel(key: string): EntityChange[] | undefined {
     const top = this.undoStack[this.undoStack.length - 1];
     if (this.sealed || !top || top.key !== key) return undefined;
+    this.dropGroup();
+    return top.changes;
+  }
+
+  /** Pops the open group, restoring the redo stack it cleared and the entry it trimmed. */
+  private dropGroup(): void {
     this.undoStack.pop();
+    if (this.groupTrimmed) this.undoStack.unshift(this.groupTrimmed);
+    this.groupTrimmed = undefined;
     this.redoStack = this.groupRedo;
     this.sealed = true;
-    return top.changes;
   }
 
   popUndo(): EntityChange[] | undefined {
