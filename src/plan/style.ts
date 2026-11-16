@@ -26,5 +26,6 @@ ${p} .${prefix}-node:hover circle, ${p} .${prefix}-node.${prefix}-selected circl
 ${p} .${prefix}-selected polygon { stroke: #2563eb; stroke-width: 2; }
 ${p} .${prefix}-invalid polygon, ${p} .${prefix}-invalid path { stroke: #dc2626; }
 ${p} .${prefix}-rejected polygon, ${p} .${prefix}-rejected path { stroke: #dc2626; stroke-width: 3; }
+${p} .${prefix}-guide { stroke: #db2777; stroke-width: 1; stroke-dasharray: 4 3; }
 `.trimStart();
 }
