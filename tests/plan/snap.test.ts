@@ -151,3 +151,16 @@ describe('snapDraw structure option', () => {
     expect(wall.point).toEqual({ x: 2, y: 0.05 });
   });
 });
+
+describe('snapDraw exclude option', () => {
+  it('skips excluded nodes as targets and alignment points, and walls touching them', () => {
+    // Node b would win, then w1 (touching a): both excluded, c is out of reach.
+    const r = snapDraw({ x: 3.93, y: 0.04 }, floor, { ...dopts, exclude: ['a', 'b'] });
+    expect(r.target).toEqual({ kind: 'free' });
+    expect(r.point).toEqual({ x: 3.95, y: 0.05 });
+    expect(r.guides).toEqual([]);
+    // c still aligns.
+    const c = snapDraw({ x: 3.97, y: 2.02 }, floor, { ...dopts, exclude: ['b'] });
+    expect(c.point.x).toBe(4);
+  });
+});

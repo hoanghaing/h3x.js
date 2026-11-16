@@ -75,14 +75,22 @@ const ANGLE_TOLERANCE = (5 * Math.PI) / 180;
  * Snap for drawing tools. Priority: node within `reach` > closest point on a
  * wall center line within `reach` > alignment to nodes and `extra` > 45-degree
  * angle lock from `from` (length grid-snapped) > grid. With `structure: false` the node and
- * wall targets are skipped (nodes still serve as alignment points).
+ * wall targets are skipped (nodes still serve as alignment points). `exclude` nodes are neither
+ * targets nor alignment points, and walls touching them are not targets.
  */
 export function snapDraw(
   p: Vec2,
   floor: Readonly<Floor>,
-  opts: SnapOptions & { reach: number; from?: Vec2; extra?: Vec2[]; structure?: boolean },
+  opts: SnapOptions & {
+    reach: number;
+    from?: Vec2;
+    extra?: Vec2[];
+    structure?: boolean;
+    exclude?: Id[];
+  },
 ): DrawSnapResult {
-  const nodes = Object.values(floor.nodes);
+  const skip = new Set(opts.exclude);
+  const nodes = Object.values(floor.nodes).filter((n) => !skip.has(n.id));
 
   const structure = opts.structure ?? true;
   let nodeHit: { id: Id; d: number; at: Vec2 } | undefined;
@@ -95,6 +103,7 @@ export function snapDraw(
 
   let wallHit: { id: Id; d: number; at: Vec2 } | undefined;
   for (const w of structure ? Object.values(floor.walls) : []) {
+    if (skip.has(w.a) || skip.has(w.b)) continue;
     const a = floor.nodes[w.a];
     const b = floor.nodes[w.b];
     if (!a || !b) continue;
