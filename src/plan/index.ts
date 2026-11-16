@@ -22,3 +22,4 @@ export {
 export { dimensionLabel, wallsShowingDimensions } from './dimensions';
 export { hitTest, type HitScene, type HitTarget } from './hit';
 export { pickAnchor } from './anchor';
+export { H3xPlan, type H3xPlanOptions } from './H3xPlan';
