@@ -132,3 +132,22 @@ describe('snapDraw', () => {
     expect(r.point.y).not.toBeCloseTo(10 + 2 * Math.sin(Math.PI / 4), 3);
   });
 });
+
+describe('snapDraw structure option', () => {
+  it('structure: false ignores node and wall targets but falls through to grid', () => {
+    const node = snapDraw({ x: 4.06, y: 0.05 }, floor, {
+      ...dopts,
+      align: false,
+      structure: false,
+    });
+    expect(node.target).toEqual({ kind: 'free' });
+    expect(node.point).toEqual({ x: 4.05, y: 0.05 });
+    const wall = snapDraw({ x: 2.013, y: 0.07 }, floor, {
+      ...dopts,
+      align: false,
+      structure: false,
+    });
+    expect(wall.target).toEqual({ kind: 'free' });
+    expect(wall.point).toEqual({ x: 2, y: 0.05 });
+  });
+});

@@ -74,17 +74,19 @@ const ANGLE_TOLERANCE = (5 * Math.PI) / 180;
 /**
  * Snap for drawing tools. Priority: node within `reach` > closest point on a
  * wall center line within `reach` > alignment to nodes and `extra` > 45-degree
- * angle lock from `from` (length grid-snapped) > grid.
+ * angle lock from `from` (length grid-snapped) > grid. With `structure: false` the node and
+ * wall targets are skipped (nodes still serve as alignment points).
  */
 export function snapDraw(
   p: Vec2,
   floor: Readonly<Floor>,
-  opts: SnapOptions & { reach: number; from?: Vec2; extra?: Vec2[] },
+  opts: SnapOptions & { reach: number; from?: Vec2; extra?: Vec2[]; structure?: boolean },
 ): DrawSnapResult {
   const nodes = Object.values(floor.nodes);
 
+  const structure = opts.structure ?? true;
   let nodeHit: { id: Id; d: number; at: Vec2 } | undefined;
-  for (const n of nodes) {
+  for (const n of structure ? nodes : []) {
     const d = Math.hypot(n.x - p.x, n.y - p.y);
     if (d <= opts.reach && (!nodeHit || d < nodeHit.d))
       nodeHit = { id: n.id, d, at: { x: n.x, y: n.y } };
@@ -92,7 +94,7 @@ export function snapDraw(
   if (nodeHit) return { point: nodeHit.at, guides: [], target: { kind: 'node', id: nodeHit.id } };
 
   let wallHit: { id: Id; d: number; at: Vec2 } | undefined;
-  for (const w of Object.values(floor.walls)) {
+  for (const w of structure ? Object.values(floor.walls) : []) {
     const a = floor.nodes[w.a];
     const b = floor.nodes[w.b];
     if (!a || !b) continue;
