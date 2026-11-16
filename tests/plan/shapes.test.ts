@@ -53,6 +53,24 @@ describe('roomLabel', () => {
     expect(l.at.y).toBeLessThan(3.9);
   });
 
+  it('centres the label in a rectangular room', () => {
+    const floor = oneRoomFloor();
+    const { at } = roomLabel(floor, floor.rooms['r1']!);
+    expect(at.x).toBeCloseTo(2);
+    expect(at.y).toBeCloseTo(2);
+  });
+
+  it('centres the label vertically in a wide, short room', () => {
+    const floor = oneRoomFloor();
+    floor.nodes['n2']!.x = 7;
+    floor.nodes['n3']!.x = 7;
+    floor.nodes['n3']!.y = 2.5;
+    floor.nodes['n4']!.y = 2.5;
+    const { at } = roomLabel(floor, floor.rooms['r1']!);
+    expect(at.x).toBeCloseTo(3.5);
+    expect(at.y).toBeCloseTo(1.25);
+  });
+
   it('puts the label inside an L-shaped room', () => {
     const floor = oneRoomFloor();
     const pts = [
