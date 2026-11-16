@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { H3xDocument, type Floor, type Project } from '../../src/core';
 import { H3xPlan } from '../../src/plan/H3xPlan';
 import type { PlanPointerEvent, Tool, ToolContext } from '../../src/plan/tools/Tool';
+import { DEFAULT_CSS } from '../../src/plan/style';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
 
 function docOf(floor: Floor): H3xDocument {
@@ -210,5 +211,52 @@ describe('tool dispatch', () => {
     ctx.setDragging('n1');
     // only the two walls touching n1 show their lengths while it is dragged
     expect(plan.svg.querySelectorAll('.h3x-plan-layer-dimensions text')).toHaveLength(2);
+  });
+
+  it('setTool mid-gesture: the new tool sees nothing of that press and panning works again', () => {
+    const a = fakeTool(true);
+    const b = fakeTool(true);
+    const plan = makePlan(a.tool);
+    pointer(plan.svg, 'pointerdown', 400, 300);
+    plan.setTool(b.tool);
+    pointer(plan.svg, 'pointermove', 450, 300);
+    pointer(plan.svg, 'pointerup', 450, 300);
+    expect(b.tool.onPointerMove).not.toHaveBeenCalled();
+    expect(b.tool.onPointerUp).not.toHaveBeenCalled();
+    plan.setTool(null);
+    const before = plan.view;
+    pointer(plan.svg, 'pointerdown', 400, 300);
+    pointer(plan.svg, 'pointermove', 500, 300);
+    pointer(plan.svg, 'pointerup', 500, 300);
+    expect(plan.view.cx).toBeCloseTo(before.cx - 100 / before.scale);
+  });
+
+  it('a second pointer ends a consumed gesture with exactly one pointer up', () => {
+    const { tool } = fakeTool(true);
+    const plan = makePlan(tool);
+    pointer(plan.svg, 'pointerdown', 300, 300, { pointerId: 1 });
+    pointer(plan.svg, 'pointerdown', 500, 300, { pointerId: 2 });
+    pointer(plan.svg, 'pointerup', 300, 300, { pointerId: 1 });
+    pointer(plan.svg, 'pointerup', 500, 300, { pointerId: 2 });
+    expect(tool.onPointerUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('after dispose no events reach the tool', () => {
+    const { tool } = fakeTool(true);
+    const plan = makePlan(tool);
+    const svg = plan.svg;
+    plan.dispose();
+    pointer(svg, 'pointerdown', 400, 300);
+    pointer(svg, 'pointermove', 410, 300);
+    pointer(svg, 'pointerup', 410, 300);
+    svg.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(tool.onPointerDown).not.toHaveBeenCalled();
+    expect(tool.onPointerMove).not.toHaveBeenCalled();
+    expect(tool.onKeyDown).not.toHaveBeenCalled();
+  });
+
+  it('the default stylesheet disables browser touch gestures', () => {
+    expect(DEFAULT_CSS('h3x-plan')).toContain('touch-action: none');
   });
 });

@@ -49,6 +49,14 @@ export class PlanInput {
     });
   }
 
+  /** Forgets the gesture in progress (the tool was swapped); the held pointer is ignored until released. */
+  cancelGesture(): void {
+    if (this.mode === 'pinch') return;
+    this.mode = 'none';
+    this.toolSawDown = false;
+    this.primary = -1;
+  }
+
   dispose(): void {
     for (const [type, fn, opts] of this.listeners)
       this.host.svg.removeEventListener(type, fn, opts);
@@ -87,7 +95,7 @@ export class PlanInput {
         /* the pointer may already be gone */
       }
     }
-    svg.focus?.();
+    svg.focus?.({ preventScroll: true });
 
     if (this.pointers.size === 2) {
       // A second finger ends whatever the first one started; the tool sees nothing more.

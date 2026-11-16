@@ -7,7 +7,7 @@ export const NODE_RADIUS_PX = 5;
 export function DEFAULT_CSS(prefix: string): string {
   const p = `.${prefix}`;
   return `
-${p} { background: #fafaf9; user-select: none; font-family: system-ui, sans-serif; }
+${p} { background: #fafaf9; user-select: none; touch-action: none; font-family: system-ui, sans-serif; }
 ${p} .${prefix}-grid-minor { stroke: #e7e5e4; stroke-width: 1; fill: none; }
 ${p} .${prefix}-grid-major { stroke: #d6d3d1; stroke-width: 1; fill: none; }
 ${p} .${prefix}-room polygon { fill: #f5f5f4; stroke: none; }
