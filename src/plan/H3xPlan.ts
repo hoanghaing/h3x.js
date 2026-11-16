@@ -1,4 +1,7 @@
-import type { ChangeEvent, Floor, H3xDocument, Id, PresetResolver, Vec2 } from '../core';
+import type { ChangeEvent, Floor, H3xDocument, Id, Issue, PresetResolver, Vec2 } from '../core';
+import { Emitter } from '../core/document/emitter';
+import { setWallLength } from '../core';
+import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
 import { dimensionLabel, wallsShowingDimensions } from './dimensions';
 import {
@@ -19,7 +22,7 @@ import {
 } from './render';
 import { junctionPolygons, wallOutline } from './shapes';
 import { DEFAULT_CSS, DIMENSION_FONT_PX } from './style';
-import type { PlanKind, Rect, ScreenPoint, Selection } from './types';
+import type { PlanIssues, PlanKind, Rect, ScreenPoint, Selection } from './types';
 import {
   DEFAULT_SCALE,
   MAX_SCALE,
@@ -77,6 +80,20 @@ const FIT_PADDING_PX = 40;
 /** fitToContent frames at least this many meters on each axis. */
 const MIN_FIT_EXTENT = 1;
 
+/** How long a rejected edit stays flashed. */
+const REJECTED_FLASH_MS = 600;
+
+export interface LengthEditRequest {
+  wallId: Id;
+  length: number;
+  anchor: 'a' | 'b';
+  /** Screen rect (px) of the wall's dimension label. */
+  anchorRect: Rect;
+}
+
+const issueKey = (list: Issue[]): string =>
+  list.map((i) => `${i.code}:${[...i.ids].join(',')}`).join('|');
+
 /** An SVG 2D plan of an H3xDocument's floor, kept in sync as retained elements. */
 export class H3xPlan {
   readonly svg: SVGSVGElement;
@@ -109,6 +126,13 @@ export class H3xPlan {
   private readonly resizeObserver: ResizeObserver | undefined;
   private readonly onWindowResize = (): void => this.resize();
   private disposed = false;
+  private _selection: Selection | null = null;
+  private standing: Issue[] = [];
+  private rejected: Issue[] = [];
+  private rejectedTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly selectionEmitter = new Emitter<Selection | null>();
+  private readonly lengthEmitter = new Emitter<LengthEditRequest>();
+  private readonly issuesEmitter = new Emitter<PlanIssues>();
 
   constructor(
     private readonly container: HTMLElement,
@@ -146,6 +170,7 @@ export class H3xPlan {
       this.layers.grid.append(this.grid.minor, this.grid.major);
     }
 
+    this.standing = this.computeStanding();
     this.reconcileAll();
     container.appendChild(this.svg);
     this.unsubscribe = doc.on('change', (e) => this.onChange(e));
@@ -206,11 +231,87 @@ export class H3xPlan {
     return this.dimensionRectsById;
   }
 
+  get selection(): Selection | null {
+    return this._selection;
+  }
+
+  /** Selects an entity; an unknown id selects nothing. Fires only when the selection changes. */
+  select(sel: Selection | null): void {
+    const next = sel && this.elements[sel.kind].has(sel.id) ? { kind: sel.kind, id: sel.id } : null;
+    const prev = this._selection;
+    if (prev?.kind === next?.kind && prev?.id === next?.id) return;
+    this._selection = next;
+    this.dimensionState.selection = next;
+    this.refreshDimensions();
+    this.refreshMarks();
+    this.selectionEmitter.emit(next);
+  }
+
+  get issues(): PlanIssues {
+    return { rejected: [...this.rejected], standing: [...this.standing] };
+  }
+
+  /** Flashes the entities of rejected edits for a moment; `[]` clears. */
+  reportRejected(issues: Issue[]): void {
+    if (this.disposed) return;
+    clearTimeout(this.rejectedTimer);
+    this.rejectedTimer = undefined;
+    const before = this.rejected;
+    this.rejected = [...issues];
+    this.refreshMarks();
+    if (issues.length > 0) {
+      this.rejectedTimer = setTimeout(() => this.reportRejected([]), REJECTED_FLASH_MS);
+    }
+    if (before.length > 0 || issues.length > 0) this.issuesEmitter.emit(this.issues);
+  }
+
+  /** Sets a wall's length, keeping one end fixed; rejected edits are flashed. */
+  setWallLength(
+    wallId: Id,
+    length: number,
+    opts: { anchor?: 'a' | 'b' } = {},
+  ): { ok: true } | { ok: false; issues: Issue[] } {
+    const anchor = opts.anchor ?? pickAnchor(this.doc.floor, wallId);
+    const res = this.doc.tryExecute(setWallLength(wallId, length, { anchor }));
+    if (!res.ok) this.reportRejected(res.issues);
+    return res;
+  }
+
+  on(type: 'selectionchange', fn: (s: Selection | null) => void): () => void;
+  on(type: 'lengthEditRequest', fn: (e: LengthEditRequest) => void): () => void;
+  on(type: 'issues', fn: (e: PlanIssues) => void): () => void;
+  on(
+    type: 'selectionchange' | 'lengthEditRequest' | 'issues',
+    fn: ((s: Selection | null) => void) &
+      ((e: LengthEditRequest) => void) &
+      ((e: PlanIssues) => void),
+  ): () => void {
+    if (type === 'selectionchange') return this.selectionEmitter.on(fn);
+    if (type === 'lengthEditRequest') return this.lengthEmitter.on(fn);
+    return this.issuesEmitter.on(fn);
+  }
+
+  /** @internal Asks the host to open a length editor for a wall (used by tools). */
+  emitLengthEditRequest(wallId: Id, near?: Vec2): void {
+    const wall = this.doc.floor.walls[wallId];
+    const a = wall && this.doc.floor.nodes[wall.a];
+    const b = wall && this.doc.floor.nodes[wall.b];
+    if (!wall || !a || !b) return;
+    const at = planToScreen(this._view, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    this.lengthEmitter.emit({
+      wallId,
+      length: Math.hypot(b.x - a.x, b.y - a.y),
+      anchor: pickAnchor(this.doc.floor, wallId, near),
+      anchorRect: this.dimensionRectsById.get(wallId) ?? { x: at.x, y: at.y, width: 0, height: 0 },
+    });
+  }
+
   /** Idempotent: drops the document subscription, resize listeners and the SVG. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.unsubscribe();
+    clearTimeout(this.rejectedTimer);
     this.resizeObserver?.disconnect();
     if (typeof window !== 'undefined') window.removeEventListener('resize', this.onWindowResize);
     this.svg.remove();
@@ -250,6 +351,7 @@ export class H3xPlan {
 
   private onChange(e: ChangeEvent): void {
     if (this.disposed) return;
+    this.refreshStanding();
     if (e.reason === 'load' || e.changes.length > FULL_RECONCILE_THRESHOLD) {
       this.reconcileAll();
       return;
@@ -304,6 +406,7 @@ export class H3xPlan {
     for (const kind of KINDS) for (const id of dirty[kind]) this.syncEntity(kind, id);
     this.syncJoins();
     this.refreshDimensions();
+    this.refreshMarks();
   }
 
   private reconcileAll(): void {
@@ -316,6 +419,36 @@ export class H3xPlan {
     }
     this.syncJoins();
     this.refreshDimensions();
+    this.refreshMarks();
+  }
+
+  private computeStanding(): Issue[] {
+    return [...this.doc.validateLayout(), ...this.doc.validatePlacements()];
+  }
+
+  /** Recomputes standing problems and fires `issues` when their content changed. */
+  private refreshStanding(): void {
+    const before = issueKey(this.standing);
+    this.standing = this.computeStanding();
+    if (issueKey(this.standing) !== before) this.issuesEmitter.emit(this.issues);
+  }
+
+  /** Toggles selected / invalid / rejected classes on every entity element. */
+  private refreshMarks(): void {
+    const invalid = new Set(this.standing.flatMap((i) => i.ids));
+    const rejected = new Set(this.rejected.flatMap((i) => i.ids));
+    const sel = this._selection;
+    if (sel && !this.elements[sel.kind].has(sel.id)) {
+      this.select(null); // the selected entity was removed
+      return;
+    }
+    for (const kind of KINDS) {
+      for (const [id, g] of this.elements[kind]) {
+        g.classList.toggle(`${this.prefix}-selected`, sel?.kind === kind && sel.id === id);
+        g.classList.toggle(`${this.prefix}-invalid`, invalid.has(id));
+        g.classList.toggle(`${this.prefix}-rejected`, rejected.has(id));
+      }
+    }
   }
 
   /** Creates, updates or removes the element of one entity to match the document. */
