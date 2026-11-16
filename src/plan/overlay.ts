@@ -1,10 +1,11 @@
-import type { Floor } from '../core';
+import type { Floor, Vec2 } from '../core';
 import { dimensionLabel, wallsShowingDimensions, type DimensionState } from './dimensions';
 import type { PlanDom } from './kinds';
 import {
   NON_SCALING,
   createDimensionElement,
   labelRect,
+  screenSpaceTransform,
   svgEl,
   updateDimensionElement,
 } from './render';
@@ -12,14 +13,20 @@ import type { SnapGuide } from './snap';
 import { DIMENSION_FONT_PX } from './style';
 import { screenToPlan, type View } from './view';
 
-/** Replaces the overlay layer's content with one full-view line per alignment guide. */
+/** Segments and optional label a drawing tool previews. */
+export interface PreviewState {
+  segments: Array<[Vec2, Vec2]>;
+  label?: { at: Vec2; text: string };
+}
+
+/** Replaces the overlay layer's guides with one full-view line per alignment guide. */
 export function renderGuides(
   layer: SVGGElement,
   view: View,
   prefix: string,
   guides: readonly SnapGuide[],
 ): void {
-  layer.replaceChildren();
+  for (const el of Array.from(layer.querySelectorAll(`.${prefix}-guide`))) el.remove();
   const min = screenToPlan(view, { x: 0, y: view.height });
   const max = screenToPlan(view, { x: view.width, y: 0 });
   for (const g of guides) {
@@ -33,6 +40,38 @@ export function renderGuides(
         ...NON_SCALING,
       }),
     );
+  }
+}
+
+/** Replaces the overlay layer's preview (segments as lines, the label in screen space). */
+export function renderPreview(
+  layer: SVGGElement,
+  view: View,
+  prefix: string,
+  preview: PreviewState | null,
+): void {
+  const old = layer.querySelectorAll(`.${prefix}-preview, .${prefix}-preview-label`);
+  for (const el of Array.from(old)) el.remove();
+  if (!preview) return;
+  for (const [a, b] of preview.segments) {
+    layer.appendChild(
+      svgEl('line', {
+        class: `${prefix}-preview`,
+        x1: String(a.x),
+        y1: String(a.y),
+        x2: String(b.x),
+        y2: String(b.y),
+        ...NON_SCALING,
+      }),
+    );
+  }
+  if (preview.label) {
+    const text = svgEl('text', {
+      class: `${prefix}-preview-label`,
+      transform: screenSpaceTransform(view, preview.label.at),
+    });
+    text.textContent = preview.label.text;
+    layer.appendChild(text);
   }
 }
 

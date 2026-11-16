@@ -17,7 +17,7 @@ import {
   type RenderContext,
 } from './render';
 import type { DimensionState } from './dimensions';
-import { renderGuides, syncDimensions } from './overlay';
+import { renderGuides, renderPreview, syncDimensions, type PreviewState } from './overlay';
 import { KINDS, LAYERS, entitiesOf, type LayerName, type PlanDom } from './kinds';
 import { dirtyEntities, syncEntity, syncJoins } from './reconcile';
 import { wallOutline } from './shapes';
@@ -67,6 +67,16 @@ export interface LengthEditRequest {
   anchorRect: Rect;
 }
 
+/** Asks the host for the length of the wall segment being drawn. */
+export interface SegmentLengthRequest {
+  /** Start of the segment. */
+  from: Vec2;
+  /** Unit direction of the current preview, or zero when the pointer has not moved yet. */
+  direction: Vec2;
+  /** Current length (0 when the segment starts). */
+  length: number;
+}
+
 const issueKey = (list: Issue[]): string =>
   list.map((i) => `${i.code}:${[...i.ids].join(',')}`).join('|');
 
@@ -99,6 +109,8 @@ export class H3xPlan {
   private readonly selectionEmitter = new Emitter<Selection | null>();
   private readonly lengthEmitter = new Emitter<LengthEditRequest>();
   private readonly issuesEmitter = new Emitter<PlanIssues>();
+  private readonly segmentEmitter = new Emitter<SegmentLengthRequest>();
+  private preview: PreviewState | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -226,6 +238,13 @@ export class H3xPlan {
     renderGuides(this.dom.layers.overlay, this._view, this.prefix, guides);
   }
 
+  /** @internal Draws a drawing tool's preview segments and label in the overlay; `null` clears. */
+  showPreview(segments: Array<[Vec2, Vec2]> | null, label?: { at: Vec2; text: string }): void {
+    if (this.disposed) return;
+    this.preview = segments ? { segments, ...(label ? { label } : {}) } : null;
+    renderPreview(this.dom.layers.overlay, this._view, this.prefix, this.preview);
+  }
+
   /** The current view (a copy). */
   get view(): View {
     return { ...this._view };
@@ -322,15 +341,33 @@ export class H3xPlan {
   on(type: 'selectionchange', fn: (s: Selection | null) => void): () => void;
   on(type: 'lengthEditRequest', fn: (e: LengthEditRequest) => void): () => void;
   on(type: 'issues', fn: (e: PlanIssues) => void): () => void;
+  /** Fires when a drawing tool starts a new segment; answer with `setPendingSegmentLength`. */
+  on(type: 'segmentLengthRequest', fn: (e: SegmentLengthRequest) => void): () => void;
   on(
-    type: 'selectionchange' | 'lengthEditRequest' | 'issues',
+    type: 'selectionchange' | 'lengthEditRequest' | 'issues' | 'segmentLengthRequest',
     fn: ((s: Selection | null) => void) &
       ((e: LengthEditRequest) => void) &
-      ((e: PlanIssues) => void),
+      ((e: PlanIssues) => void) &
+      ((e: SegmentLengthRequest) => void),
   ): () => void {
     if (type === 'selectionchange') return this.selectionEmitter.on(fn);
     if (type === 'lengthEditRequest') return this.lengthEmitter.on(fn);
+    if (type === 'segmentLengthRequest') return this.segmentEmitter.on(fn);
     return this.issuesEmitter.on(fn);
+  }
+
+  /**
+   * Commits the segment the active drawing tool is drawing at `length` (meters) along the
+   * current preview direction. False when no segment is being drawn or it was rejected.
+   */
+  setPendingSegmentLength(length: number): boolean {
+    if (this.disposed) return false;
+    return this._tool?.setPendingSegmentLength?.(length) ?? false;
+  }
+
+  /** @internal Asks the host for a segment length (used by drawing tools). */
+  emitSegmentLengthRequest(e: SegmentLengthRequest): void {
+    this.segmentEmitter.emit(e);
   }
 
   /** @internal Asks the host to open a length editor for a wall (used by tools). */
@@ -390,6 +427,7 @@ export class H3xPlan {
       }
     }
     this.refreshDimensions();
+    if (this.preview) renderPreview(this.dom.layers.overlay, next, this.prefix, this.preview);
   }
 
   // ---- document sync ----------------------------------------------------
