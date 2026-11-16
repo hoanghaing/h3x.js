@@ -14,7 +14,7 @@ const notFound = (what: string, id: Id): H3xValidationError =>
 /** Ids are unique per floor across all entity kinds; re-running a create command must not overwrite. */
 function assertFreeId(ctx: CommandContext, id: Id): void {
   const f = ctx.floor;
-  if (f.nodes[id] || f.walls[id] || f.openings[id] || f.rooms[id] || f.items[id]) {
+  if (f.nodes[id] || f.walls[id] || f.openings[id] || f.rooms[id] || f.items[id] || f.columns[id]) {
     throw fail('duplicate-id', [id], 'Id ' + id + ' already exists in the floor');
   }
 }

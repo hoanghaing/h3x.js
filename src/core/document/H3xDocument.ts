@@ -8,7 +8,7 @@ import type { Floor, Issue, PresetResolver, Project } from '../types';
 import { projectFromXML } from '../xml/parse';
 import { projectToXML } from '../xml/serialize';
 import { applyChanges, swapChange } from './changes';
-import type { Command, EntityChange } from './changes';
+import type { Command, CommandContext, EntityChange } from './changes';
 import { Emitter } from './emitter';
 import { History, deepEqual } from './history';
 
@@ -65,6 +65,7 @@ export class H3xDocument {
       openings: {},
       rooms: {},
       items: {},
+      columns: {},
     };
     return new H3xDocument(
       {
@@ -118,8 +119,13 @@ export class H3xDocument {
     return this._project.floors[0]!;
   }
 
-  private get mutableFloor(): Floor {
-    return this._project.floors[0]!;
+  private ctx(): CommandContext {
+    const site = this._project.site;
+    return {
+      floor: this.floor,
+      ...(site ? { site } : {}),
+      presets: this.presets,
+    };
   }
 
   toXML(opts: { pretty?: boolean } = {}): string {
@@ -163,25 +169,25 @@ export class H3xDocument {
   cancelCoalesce(key: string): boolean {
     const changes = this.history.cancel(key);
     if (!changes) return false;
-    applyChanges(this.mutableFloor, changes, 'backward');
+    applyChanges(this._project, changes, 'backward');
     this.emitter.emit({ reason: 'cancel', changes: structuredClone(invert(changes)) });
     return true;
   }
 
   /** Apply and validate; reverts on any issue or validator error. */
   private attempt(cmd: Command): { changes: EntityChange[]; issues: Issue[] } {
-    const changes = structuredClone(cmd.run({ floor: this.floor, presets: this.presets }));
+    const changes = structuredClone(cmd.run(this.ctx()));
     const bad = numberIssues(changes);
     if (bad.length > 0) return { changes, issues: bad };
-    applyChanges(this.mutableFloor, changes, 'forward');
+    applyChanges(this._project, changes, 'forward');
     let issues: Issue[];
     try {
       issues = this.validators.flatMap((v) => v(this, changes));
     } catch (err) {
-      applyChanges(this.mutableFloor, changes, 'backward');
+      applyChanges(this._project, changes, 'backward');
       throw err;
     }
-    if (issues.length > 0) applyChanges(this.mutableFloor, changes, 'backward');
+    if (issues.length > 0) applyChanges(this._project, changes, 'backward');
     return { changes, issues };
   }
 
@@ -227,25 +233,25 @@ export class H3xDocument {
   preview(cmd: Command): Issue[] {
     let changes: EntityChange[];
     try {
-      changes = structuredClone(cmd.run({ floor: this.floor, presets: this.presets }));
+      changes = structuredClone(cmd.run(this.ctx()));
     } catch (err) {
       if (err instanceof H3xValidationError) return err.issues;
       throw err;
     }
     const bad = numberIssues(changes);
     if (bad.length > 0) return bad;
-    applyChanges(this.mutableFloor, changes, 'forward');
+    applyChanges(this._project, changes, 'forward');
     try {
       return this.validators.flatMap((v) => v(this, changes));
     } finally {
-      applyChanges(this.mutableFloor, changes, 'backward');
+      applyChanges(this._project, changes, 'backward');
     }
   }
 
   undo(): boolean {
     const changes = this.history.popUndo();
     if (!changes) return false;
-    applyChanges(this.mutableFloor, changes, 'backward');
+    applyChanges(this._project, changes, 'backward');
     this.emitter.emit({ reason: 'undo', changes: structuredClone(invert(changes)) });
     return true;
   }
@@ -253,7 +259,7 @@ export class H3xDocument {
   redo(): boolean {
     const changes = this.history.popRedo();
     if (!changes) return false;
-    applyChanges(this.mutableFloor, changes, 'forward');
+    applyChanges(this._project, changes, 'forward');
     this.emitter.emit({ reason: 'redo', changes: structuredClone(changes) });
     return true;
   }
