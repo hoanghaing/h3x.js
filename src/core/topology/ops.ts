@@ -408,7 +408,8 @@ export function addWallIn(
  * a single other wall along the normal (within COLLINEAR_TOL) is slid (longer / shorter,
  * openings re-fitted, `push-pull-cuts-opening` when one cannot fit); otherwise a new node
  * and a connector wall (same thickness / height) from the old position replace the end.
- * A slid neighbour or connector below MIN_WALL_LENGTH: `wall-too-short`.
+ * Openings / wall items on the pushed wall are re-fitted too when an end got a connector
+ * (the meeting wall changes its usable range). A slid neighbour or connector below MIN_WALL_LENGTH: `wall-too-short`.
  * `ids` supplies up to 2 new node and 2 new wall ids (end `a`, then end `b`).
  */
 export function pushPullIn(
@@ -475,6 +476,7 @@ export function pushPullIn(
       height: w.height,
     };
     w[end] = newNode;
+    if (!resized.includes(wallId)) resized.push(wallId);
   }
   fitOn(draft, resized, presets, 'push-pull-cuts-opening', 'does not fit after the push / pull');
 }
