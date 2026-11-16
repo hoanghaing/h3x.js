@@ -1,4 +1,5 @@
 import type {
+  Column,
   EntityKind,
   Floor,
   Id,
@@ -6,7 +7,9 @@ import type {
   Opening,
   PlanNode,
   PresetResolver,
+  Project,
   Room,
+  Site,
   Wall,
 } from '../types';
 
@@ -16,6 +19,8 @@ interface EntityByKind {
   opening: Opening;
   room: Room;
   item: Item;
+  column: Column;
+  site: Site;
 }
 
 /**
@@ -33,6 +38,7 @@ export type EntityChange = {
 
 export interface CommandContext {
   floor: Readonly<Floor>;
+  site?: Readonly<Site>;
   presets?: PresetResolver;
 }
 
@@ -48,24 +54,34 @@ const COLLECTION = {
   opening: 'openings',
   room: 'rooms',
   item: 'items',
+  column: 'columns',
 } as const;
 
-function put(floor: Floor, c: EntityChange, snap: EntityChange['after']): void {
+function put(project: Project, c: EntityChange, snap: EntityChange['after']): void {
+  if (c.kind === 'site') {
+    if (snap === null) delete project.site;
+    else project.site = structuredClone(snap) as Site;
+    return;
+  }
+  const floor = project.floors[0] as Floor;
   const rec = floor[COLLECTION[c.kind]] as Record<Id, unknown>;
   if (snap === null) delete rec[c.id];
   else rec[c.id] = structuredClone(snap);
 }
 
-/** Mutates floor. Snapshots are deep-cloned in; backward applies in reverse order. */
+/**
+ * Mutates the project: floor kinds go to floors[0], `site` to project.site.
+ * Snapshots are deep-cloned in; backward applies in reverse order.
+ */
 export function applyChanges(
-  floor: Floor,
+  project: Project,
   changes: EntityChange[],
   dir: 'forward' | 'backward',
 ): void {
   if (dir === 'forward') {
-    for (const c of changes) put(floor, c, c.after);
+    for (const c of changes) put(project, c, c.after);
   } else {
-    for (let i = changes.length - 1; i >= 0; i--) put(floor, changes[i]!, changes[i]!.before);
+    for (let i = changes.length - 1; i >= 0; i--) put(project, changes[i]!, changes[i]!.before);
   }
 }
 

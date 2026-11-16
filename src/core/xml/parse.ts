@@ -4,7 +4,20 @@ import { createId } from '../ids';
 import { detectRooms } from '../rooms/detect';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { checkRefs } from '../validate/refs';
-import type { Floor, Id, Item, Opening, PlanNode, Project, Room, Wall } from '../types';
+import { signedArea } from '../geometry/polygon';
+import type {
+  Column,
+  Floor,
+  Id,
+  Item,
+  Opening,
+  PlanNode,
+  Project,
+  Room,
+  Site,
+  Vec2,
+  Wall,
+} from '../types';
 
 function req(e: Element, attr: string): string {
   const v = e.getAttribute(attr);
@@ -80,6 +93,53 @@ function parseItem(e: Element): Item {
   }
 }
 
+function parseColumn(e: Element): Column {
+  const shape = req(e, 'shape');
+  if (shape !== 'round' && shape !== 'square') {
+    throw new H3xParseError(`<column> attribute "shape" must be round or square: "${shape}"`, {
+      element: 'column',
+      attribute: 'shape',
+    });
+  }
+  const c: Column = {
+    id: req(e, 'id'),
+    x: num(e, 'x'),
+    y: num(e, 'y'),
+    shape,
+    width: num(e, 'width'),
+    rotation: num(e, 'rotation', 0),
+  };
+  if (e.getAttribute('depth') !== null) c.depth = num(e, 'depth');
+  if (e.getAttribute('height') !== null) c.height = num(e, 'height');
+  return c;
+}
+
+function parseSite(e: Element): Site {
+  const bad = (message: string): H3xParseError =>
+    new H3xParseError(message, { element: 'site', attribute: 'points' });
+  const points: Vec2[] = req(e, 'points')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((pair) => {
+      const parts = pair.split(',');
+      const x = Number(parts[0]);
+      const y = Number(parts[1]);
+      if (
+        parts.length !== 2 ||
+        parts.some((s) => s.trim() === '') ||
+        !Number.isFinite(x) ||
+        !Number.isFinite(y)
+      ) {
+        throw bad(`<site> point is not "x,y" with finite numbers: "${pair}"`);
+      }
+      return { x, y };
+    });
+  if (points.length < 3) throw bad('<site> needs at least 3 points');
+  // CW input is reversed to CCW, keeping the first point first.
+  const ccw = signedArea(points) < 0 ? [points[0]!, ...points.slice(1).reverse()] : points;
+  return { id: 'site', points: ccw };
+}
+
 function parseFloor(fe: Element): Floor {
   const floor: Floor = {
     id: req(fe, 'id'),
@@ -91,6 +151,7 @@ function parseFloor(fe: Element): Floor {
     openings: {},
     rooms: {},
     items: {},
+    columns: {},
   };
   const seen = new Set<Id>();
   const add = <T extends { id: Id }>(rec: Record<Id, T>, ent: T, element: string): void => {
@@ -149,11 +210,22 @@ function parseFloor(fe: Element): Floor {
         };
         const ff = opt(e, 'floorFinish');
         if (ff !== undefined) r.floorFinish = ff;
+        const rawHoles = opt(e, 'holes');
+        if (rawHoles !== undefined) {
+          const holes = rawHoles
+            .split(';')
+            .map((h) => h.split(/\s+/).filter(Boolean))
+            .filter((h) => h.length > 0);
+          if (holes.length > 0) r.holes = holes;
+        }
         add(floor.rooms, r, 'room');
         break;
       }
       case 'item':
         add(floor.items, parseItem(e), 'item');
+        break;
+      case 'column':
+        add(floor.columns, parseColumn(e), 'column');
         break;
       default:
         break; // unknown elements are ignored
@@ -168,10 +240,10 @@ function parseFloor(fe: Element): Floor {
       floor.rooms[id] = { id, walls: d.walls, name: '' };
     }
   } else {
-    normalizeRoomOrientation(floor, (room, err) => {
-      throw new H3xParseError(`room "${room.id}" walls do not form a loop: ${err.message}`, {
+    normalizeRoomOrientation(floor, (room, err, attribute) => {
+      throw new H3xParseError(`room "${room.id}" ${attribute} do not form a loop: ${err.message}`, {
         element: 'room',
-        attribute: 'walls',
+        attribute,
       });
     });
   }
@@ -219,6 +291,11 @@ export function projectFromXML(xml: string): Project {
     throw new H3xParseError('<h3x> has no floor', { element: 'h3x' });
   }
   const metaEl = children(root, 'meta')[0];
+  const siteEls = children(root, 'site');
+  if (siteEls.length > 1) {
+    throw new H3xParseError('<h3x> has more than one <site>', { element: 'site' });
+  }
+  const site = siteEls[0] ? parseSite(siteEls[0]) : undefined;
   return {
     version,
     unit: 'm',
@@ -227,5 +304,6 @@ export function projectFromXML(xml: string): Project {
       created: metaEl?.getAttribute('created') ?? '',
     },
     floors: floorEls.map(parseFloor),
+    ...(site ? { site } : {}),
   };
 }

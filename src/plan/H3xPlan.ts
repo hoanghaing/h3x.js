@@ -451,7 +451,9 @@ export class H3xPlan {
       opening: new Set(),
       item: new Set(),
     };
-    for (const c of e.changes) changed[c.kind].add(c.id);
+    for (const c of e.changes) {
+      if (c.kind !== 'column' && c.kind !== 'site') changed[c.kind].add(c.id);
+    }
 
     // Corners depend on neighbouring walls' directions: take the walls touching any moved
     // node or changed wall, then every wall sharing a node with those.
