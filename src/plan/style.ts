@@ -28,6 +28,8 @@ ${p} .${prefix}-node:hover circle, ${p} .${prefix}-node.${prefix}-selected circl
 ${p} .${prefix}-selected polygon, ${p} .${prefix}-selected circle, ${p} .${prefix}-room.${prefix}-selected path { stroke: #2563eb; stroke-width: 2; }
 ${p} .${prefix}-invalid polygon, ${p} .${prefix}-invalid circle, ${p} .${prefix}-invalid path { stroke: #dc2626; }
 ${p} .${prefix}-rejected polygon, ${p} .${prefix}-rejected circle, ${p} .${prefix}-rejected path { stroke: #dc2626; stroke-width: 3; }
+${p} .${prefix}-preview { stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 4; }
+${p} .${prefix}-preview-label { fill: #1d4ed8; font-size: ${DIMENSION_FONT_PX}px; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: #fafaf9; stroke-width: 3px; }
 ${p} .${prefix}-guide { stroke: #db2777; stroke-width: 1; stroke-dasharray: 4 3; }
 `.trimStart();
 }
