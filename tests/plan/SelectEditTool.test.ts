@@ -115,6 +115,8 @@ describe('SelectEditTool', () => {
     fire(plan, 'pointermove', at(plan, 'n1'));
     expect(at(plan, 'n2')).toEqual({ x: 3.5, y: 0 });
     expect(plan.issues.rejected[0]?.code).toBe('wall-too-short');
+    // The guide of the snapped (rejected) point is not shown.
+    expect(plan.svg.querySelector('.h3x-plan-layer-overlay')!.children.length).toBe(0);
     fire(plan, 'pointermove', { x: 3, y: 0 });
     expect(at(plan, 'n2')).toEqual({ x: 3, y: 0 });
     expect(plan.issues.rejected).toEqual([]);
@@ -145,8 +147,8 @@ describe('SelectEditTool', () => {
   it('dragging a wall moves both nodes along its normal as one undo step', () => {
     const plan = makePlan();
     drag(plan, { x: 2, y: 4 }, { x: 2.2, y: 4.51 });
-    expect(node(plan, 'n3').y).toBeCloseTo(4.5, 9);
-    expect(node(plan, 'n4').y).toBeCloseTo(4.5, 9);
+    expect(node(plan, 'n3').y).toBe(4.5);
+    expect(node(plan, 'n4').y).toBe(4.5);
     expect(node(plan, 'n3').x).toBe(4);
     expect(plan.selection).toEqual({ kind: 'wall', id: 'w3' });
     plan.doc.undo();
@@ -195,15 +197,38 @@ describe('SelectEditTool', () => {
     expect(plan.doc.canRedo).toBe(canRedo);
   });
 
-  it('dragging back to the exact start then Esc is harmless', () => {
+  it('a keyless command from elsewhere ends the gesture, keeping its own undo step', () => {
     const plan = makePlan();
+    drag(plan, at(plan, 'n2'), { x: 5, y: 0 }, 5, {}, true);
+    plan.doc.execute(moveNode('n4', { x: -0.5, y: 4 }));
+    fire(plan, 'pointermove', { x: 6, y: 0 });
+    expect(at(plan, 'n2')).toEqual({ x: 5, y: 0 });
+    key(plan, 'Escape');
+    expect(at(plan, 'n2')).toEqual({ x: 5, y: 0 });
+    fire(plan, 'pointerup', { x: 6, y: 0 });
+    expect(at(plan, 'n2')).toEqual({ x: 5, y: 0 });
+    plan.doc.undo();
+    expect(at(plan, 'n4')).toEqual({ x: 0, y: 4 });
+    expect(at(plan, 'n2')).toEqual({ x: 5, y: 0 });
+    plan.doc.undo();
+    expect(at(plan, 'n2')).toEqual({ x: 4, y: 0 });
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('dragging back to the exact start then Esc is harmless and keeps the redo stack', () => {
+    const plan = makePlan();
+    plan.doc.execute(moveNode('n4', { x: -0.5, y: 4 }));
+    plan.doc.undo();
     fire(plan, 'pointerdown', at(plan, 'n2'));
     fire(plan, 'pointermove', { x: 5, y: 0 });
     fire(plan, 'pointermove', { x: 4, y: 0 });
     expect(at(plan, 'n2')).toEqual({ x: 4, y: 0 });
     expect(() => key(plan, 'Escape')).not.toThrow();
     expect(plan.doc.canUndo).toBe(false);
+    expect(plan.doc.canRedo).toBe(true);
     fire(plan, 'pointerup', { x: 4, y: 0 });
+    plan.doc.redo();
+    expect(at(plan, 'n4')).toEqual({ x: -0.5, y: 4 });
   });
 
   it('arrow keys nudge the selection, each press its own undo step', () => {
@@ -230,6 +255,9 @@ describe('SelectEditTool', () => {
     key(plan, 'ArrowLeft');
     expect(at(plan, 'n2')).toEqual({ x: 4, y: 0 });
     expect(plan.issues.rejected.length).toBeGreaterThan(0);
+    key(plan, 'ArrowDown');
+    expect(at(plan, 'n2')).toEqual({ x: 4, y: -3.9 });
+    expect(plan.issues.rejected).toEqual([]);
   });
 
   it('double-clicking a dimension label requests a length edit', () => {

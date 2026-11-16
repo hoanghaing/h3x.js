@@ -496,6 +496,19 @@ describe('cancelCoalesce', () => {
     expect(doc.canUndo).toBe(false);
   });
 
+  it('a gesture netting out to nothing keeps the redo stack from before it', () => {
+    const doc = mk();
+    doc.execute(moveNode('n2', { x: 3, y: 0 }));
+    doc.undo();
+    doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
+    expect(doc.canRedo).toBe(false);
+    doc.execute(moveNode('n2', { x: 4, y: 0 }), { coalesceKey: 'g1' });
+    expect(doc.canUndo).toBe(false);
+    expect(doc.canRedo).toBe(true);
+    doc.redo();
+    expect(n2(doc)).toEqual({ x: 3, y: 0 });
+  });
+
   it('returns false once a keyless command sealed the group', () => {
     const doc = mk();
     doc.execute(moveNode('n2', { x: 5, y: 0 }), { coalesceKey: 'g1' });
