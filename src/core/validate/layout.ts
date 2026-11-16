@@ -13,7 +13,7 @@ import { obbCorners } from '../geometry/obb';
 import { isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygon';
 import { segmentsIntersect } from '../geometry/segment';
 import { distance } from '../geometry/vec';
-import { roomArea, roomPolygon } from '../rooms/detect';
+import { isBelowMinRoomArea, roomArea, roomPolygon } from '../rooms/detect';
 import type { Column, Floor, Id, Issue, Site, Vec2 } from '../types';
 
 export function wallLength(floor: Floor, id: Id): number {
@@ -149,7 +149,7 @@ function roomIssue(floor: Floor, roomId: Id): Issue | null {
     }
   }
   const inner = roomArea(floor, room, 'inner');
-  if (inner < MIN_ROOM_AREA - GEOM_TOL)
+  if (isBelowMinRoomArea(inner))
     return bad(`inner area ${inner.toFixed(3)} m2 is below ${MIN_ROOM_AREA}`);
   return null;
 }

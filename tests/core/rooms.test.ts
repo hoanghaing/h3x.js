@@ -235,6 +235,132 @@ describe('detectRooms', () => {
   });
 });
 
+describe('detectRooms edge cases', () => {
+  const emptyFloor = (): Floor => {
+    const f = oneRoomFloor();
+    f.nodes = {};
+    f.walls = {};
+    f.rooms = {};
+    f.openings = {};
+    return f;
+  };
+  const addNode = (f: Floor, id: string, x: number, y: number): void => {
+    f.nodes[id] = { id, x, y };
+  };
+  const addWall = (f: Floor, id: string, a: string, b: string): void => {
+    f.walls[id] = { id, a, b, thickness: 0.2, height: 3.2 };
+  };
+
+  it('keeps a room whose inner area is 1.0 m2 within float noise', () => {
+    // 1.2 m square, 0.2 m walls: inner area 1.0 computes as 0.9999999999999997 here.
+    const f = emptyFloor();
+    const pts = [
+      [0, 0],
+      [1.2, 0],
+      [1.2, 1.2],
+      [0, 1.2],
+    ] as const;
+    pts.forEach(([x, y], i) => addNode(f, `n${i}`, x, y));
+    for (let i = 0; i < 4; i++) addWall(f, `w${i}`, `n${i}`, `n${(i + 1) % 4}`);
+    const faces = detectRooms(f);
+    expect(faces).toHaveLength(1);
+    const area = roomArea(f, { id: 'r', name: '', walls: faces[0]!.walls }, 'inner');
+    expect(area).toBeLessThan(1);
+    expect(area).toBeCloseTo(1, 9);
+  });
+
+  /** Two 2x2 squares touching at the corner node `p` (at x0+2, y0+2). */
+  const cornerPair = (f: Floor, x0: number, y0: number): void => {
+    addNode(f, 'a1', x0, y0);
+    addNode(f, 'a2', x0 + 2, y0);
+    addNode(f, 'p', x0 + 2, y0 + 2);
+    addNode(f, 'a4', x0, y0 + 2);
+    addWall(f, 'a1w', 'a1', 'a2');
+    addWall(f, 'a2w', 'a2', 'p');
+    addWall(f, 'a3w', 'p', 'a4');
+    addWall(f, 'a4w', 'a4', 'a1');
+    addNode(f, 'b2', x0 + 4, y0 + 2);
+    addNode(f, 'b3', x0 + 4, y0 + 4);
+    addNode(f, 'b4', x0 + 2, y0 + 4);
+    addWall(f, 'b1w', 'p', 'b2');
+    addWall(f, 'b2w', 'b2', 'b3');
+    addWall(f, 'b3w', 'b3', 'b4');
+    addWall(f, 'b4w', 'b4', 'p');
+  };
+
+  it('two squares touching at one corner from outside are two rooms without holes', () => {
+    const f = emptyFloor();
+    cornerPair(f, 0, 0);
+    const faces = detectRooms(f);
+    expect(faces).toHaveLength(2);
+    expect(faces.map((x) => sorted(x.walls).join(',')).sort()).toEqual([
+      'a1w,a2w,a3w,a4w',
+      'b1w,b2w,b3w,b4w',
+    ]);
+    for (const x of faces) expect(x.holes).toEqual([]);
+  });
+
+  it('an enclosing room gets both corner-touching squares as holes', () => {
+    const f = emptyFloor();
+    const outer = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ] as const;
+    outer.forEach(([x, y], i) => addNode(f, `o${i}`, x, y));
+    for (let i = 0; i < 4; i++) addWall(f, `ow${i}`, `o${i}`, `o${(i + 1) % 4}`);
+    cornerPair(f, 3, 3);
+    const faces = detectRooms(f);
+    expect(faces).toHaveLength(3);
+    const room = faceWith(faces, 'ow0');
+    expect(room.holes.map((h) => sorted(h).join(',')).sort()).toEqual([
+      'a1w,a2w,a3w,a4w',
+      'b1w,b2w,b3w,b4w',
+    ]);
+    for (const h of room.holes) expect(loopArea(f, h)).toBeLessThan(0);
+    expect(faceWith(faces, 'a1w').holes).toEqual([]);
+    expect(faceWith(faces, 'b1w').holes).toEqual([]);
+  });
+
+  it('ignores a coincident duplicate wall, keeping the smallest id', () => {
+    // L of three 4x4 squares; the edge c-e shared by two squares is duplicated.
+    const f = emptyFloor();
+    const nodes = [
+      ['a', 0, 0],
+      ['b', 4, 0],
+      ['c', 8, 0],
+      ['d', 8, 4],
+      ['e', 4, 4],
+      ['g', 0, 4],
+      ['h', 0, 8],
+      ['i', 4, 8],
+    ] as const;
+    nodes.forEach(([id, x, y]) => addNode(f, id, x, y));
+    addWall(f, 'w01', 'a', 'b');
+    addWall(f, 'w02', 'b', 'c');
+    addWall(f, 'w03', 'c', 'd');
+    addWall(f, 'w04', 'd', 'e');
+    addWall(f, 'w05', 'b', 'e');
+    addWall(f, 'w06', 'e', 'g');
+    addWall(f, 'w07', 'g', 'a');
+    addWall(f, 'w08', 'e', 'i');
+    addWall(f, 'w09', 'i', 'h');
+    addWall(f, 'w10', 'h', 'g');
+    addWall(f, 'w00', 'e', 'b'); // duplicate of w05, smaller id
+    const faces = detectRooms(f);
+    expect(faces.map((x) => sorted(x.walls).join(',')).sort()).toEqual([
+      'w00,w01,w06,w07',
+      'w00,w02,w03,w04',
+      'w06,w08,w09,w10',
+    ]);
+    for (const x of faces) {
+      expect(x.walls).not.toContain('w05');
+      expect(x.holes).toEqual([]);
+    }
+  });
+});
+
 describe('roomArea / roomPolygon', () => {
   it('computes center and inner area', () => {
     const f = oneRoomFloor();
