@@ -201,6 +201,23 @@ describe('H3xDocument', () => {
     expect(undos).toBe(200);
   });
 
+  it('a cancelled or net no-op group at the limit keeps the entry its creation trimmed', () => {
+    const d = docWithNode();
+    for (let i = 1; i <= 200; i++) d.execute(setX(i));
+    // Cancel + re-execute per step, as a live gesture does: nothing old may be lost.
+    for (let step = 0; step < 5; step++) {
+      d.cancelCoalesce('g');
+      d.execute(setX(1000 + step), { coalesceKey: 'g' });
+    }
+    expect(d.cancelCoalesce('g')).toBe(true);
+    d.execute(setX(300), { coalesceKey: 'h' });
+    d.execute(setX(200), { coalesceKey: 'h' }); // back to the start: net no-op
+    let undos = 0;
+    while (d.undo()) undos++;
+    expect(undos).toBe(200);
+    expect(d.floor.nodes.n1!.x).toBe(0);
+  });
+
   it('undo event is inverted', () => {
     const d = docWithNode();
     d.execute(setX(1));

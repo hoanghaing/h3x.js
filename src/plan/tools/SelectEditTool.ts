@@ -17,7 +17,7 @@ import {
 } from '../../core';
 import { add, dot, leftNormal, scale, sub } from '../../core/geometry/vec';
 import type { HitTarget } from '../hit';
-import { snapScalar } from '../snap';
+import { snapScalar, type SnapGuide } from '../snap';
 import type { ScreenPoint } from '../types';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
 
@@ -66,6 +66,9 @@ const ARROWS: Record<string, Vec2> = {
 };
 
 type Selectable = 'node' | 'wall' | 'column' | 'site';
+/** |normal component| above which a wall counts as moving along that axis (push / pull guides). */
+const AXIS_PARALLEL = 1 - 1e-9;
+
 const SELECTABLE: ReadonlySet<string> = new Set<Selectable>(['node', 'wall', 'column', 'site']);
 const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
 
@@ -184,7 +187,7 @@ export class SelectEditTool implements Tool {
     }
     const sel = ctx.plan.selection;
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (this.gesture || !sel) return false;
+      if (this.gesture || !sel || e.altKey || e.ctrlKey || e.metaKey) return false;
       const cmd =
         sel.kind === 'node'
           ? removeNode(sel.id)
@@ -270,8 +273,8 @@ export class SelectEditTool implements Tool {
 
   /**
    * Snaps onto other nodes and walls (not the node itself or its walls). On a join target the
-   * node stays put and the target is marked; a neighbour (sharing a wall) is no join target,
-   * since joining it would collapse that wall, so the move there is tried (and rejected).
+   * node stays put and the target is marked. A neighbour (sharing a wall) is a target too:
+   * dropping onto it merges the two nodes and collapses their wall.
    */
   private stepNode(g: Gesture, p: Vec2, free: boolean): void {
     const ctx = this.ctx!;
@@ -279,7 +282,7 @@ export class SelectEditTool implements Tool {
     const t = r.target;
     let drop: Drop | null = null;
     if (t.kind === 'wall') drop = { wall: t.id, at: r.point };
-    else if (t.kind === 'node' && !this.neighbours(g.id, t.id)) drop = { node: t.id, at: r.point };
+    else if (t.kind === 'node') drop = { node: t.id, at: r.point };
     g.drop = drop;
     ctx.plan.showDropTarget(drop ? drop.at : null);
     if (drop) {
@@ -305,7 +308,7 @@ export class SelectEditTool implements Tool {
     const floor = ctx.doc.floor;
     const a = floor.nodes[floor.walls[g.id]?.a ?? ''];
     if (!a) return;
-    const wanted = this.wantedOffset(g, p, free);
+    const wanted = this.gridOffset(g, p, free);
     // Against the wall's current offset (moveWall is relative), so errors do not accumulate.
     const delta = wanted - dot(sub(a, g.start), g.normal);
     if (delta !== 0) this.run(moveWall(g.id, scale(g.normal, delta)), g.key);
@@ -315,12 +318,16 @@ export class SelectEditTool implements Tool {
    * Push / pull is relative and may add connector walls, so each step reverts the open group
    * and re-runs `pushPullWall` with the total distance against the original geometry: one undo
    * step, and Esc (`cancelCoalesce`) restores the start. A step that fails is undone back to
-   * the last good distance; `wall-too-short` (a connector below the minimum) is not flashed.
+   * the last good distance; `wall-too-short` (a connector below the minimum) is not flashed and
+   * keeps the snap guides.
    */
   private stepPush(g: Gesture, p: Vec2, free: boolean): void {
     const ctx = this.ctx!;
-    const wanted = this.wantedOffset(g, p, free);
-    if (wanted === g.applied) return;
+    const { d: wanted, guides } = this.pushOffset(g, p, free);
+    if (wanted === g.applied) {
+      ctx.showGuides(guides);
+      return;
+    }
     const exec = (d: number) =>
       this.issue(() => {
         ctx.doc.cancelCoalesce(g.key);
@@ -332,16 +339,36 @@ export class SelectEditTool implements Tool {
     if (res.ok) {
       g.applied = wanted;
       this.clearRejection();
+      ctx.showGuides(guides);
       return;
     }
     if (g.applied !== 0) exec(g.applied);
-    this.reject(res.issues.filter((i) => i.code !== 'wall-too-short'));
+    const issues = res.issues.filter((i) => i.code !== 'wall-too-short');
+    this.reject(issues);
+    ctx.showGuides(issues.length === 0 ? guides : []);
   }
 
   /** Signed pointer travel along the wall's original left normal; grid-snapped unless `free`. */
-  private wantedOffset(g: Gesture, p: Vec2, free: boolean): number {
+  private gridOffset(g: Gesture, p: Vec2, free: boolean): number {
     const d = dot(sub(p, this.press!.plan), g.normal);
     return free ? d : snapScalar(d, this.ctx!.plan.snapOptions.grid);
+  }
+
+  /**
+   * Push / pull distance: the grabbed point, moved along the normal, aligns to other nodes on
+   * the axis the wall moves along (axis-parallel walls only) with a guide; else grid offset.
+   */
+  private pushOffset(g: Gesture, p: Vec2, free: boolean): { d: number; guides: SnapGuide[] } {
+    const ctx = this.ctx!;
+    const d = this.gridOffset(g, p, free);
+    const w = ctx.doc.floor.walls[g.id];
+    if (free || !w) return { d, guides: [] };
+    const origin = this.press!.plan;
+    const raw = add(origin, scale(g.normal, dot(sub(p, origin), g.normal)));
+    const r = ctx.snap(raw, [w.a, w.b], false);
+    const guides = r.guides.filter((gd) => Math.abs(g.normal[gd.axis]) > AXIS_PARALLEL);
+    if (guides.length === 0) return { d, guides: [] };
+    return { d: dot(sub(r.point, origin), g.normal), guides };
   }
 
   /** Ends a released drag: a node over a join target is dropped there in the same undo step. */
@@ -352,20 +379,18 @@ export class SelectEditTool implements Tool {
       const target =
         'node' in g.drop ? { node: g.drop.node } : { wall: g.drop.wall, at: g.drop.at };
       if (this.run(dropNode(g.id, target), g.key)) {
-        const at = g.drop.at;
-        const kept = Object.values(ctx.doc.floor.nodes).find(
-          (n) => Math.hypot(n.x - at.x, n.y - at.y) < GEOM_TOL,
-        );
-        ctx.plan.select(kept ? { kind: 'node', id: kept.id } : null);
+        const drop = g.drop;
+        // A wall drop keeps the new junction node, found at the drop point.
+        const kept =
+          'node' in drop
+            ? drop.node
+            : Object.values(ctx.doc.floor.nodes).find(
+                (n) => Math.hypot(n.x - drop.at.x, n.y - drop.at.y) < GEOM_TOL,
+              )?.id;
+        ctx.plan.select(kept ? { kind: 'node', id: kept } : null);
       }
     }
     this.endGesture(true);
-  }
-
-  private neighbours(a: Id, b: Id): boolean {
-    return Object.values(this.ctx!.doc.floor.walls).some(
-      (w) => (w.a === a && w.b === b) || (w.a === b && w.b === a),
-    );
   }
 
   /** Runs one of the tool's own commands; flashes a rejection, clears it after a success. */

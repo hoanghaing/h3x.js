@@ -12,6 +12,7 @@ import {
   type Project,
   type Vec2,
 } from '../../src/core';
+import { HISTORY_LIMIT } from '../../src/core/document/history';
 import { H3xPlan, type H3xPlanOptions, type LengthEditRequest } from '../../src/plan/H3xPlan';
 import { SelectEditTool } from '../../src/plan/tools/SelectEditTool';
 import { SelectEditTool as Exported } from '../../src/plan';
@@ -123,7 +124,8 @@ describe('SelectEditTool', () => {
     fire(plan, 'pointerdown', at(plan, 'n2'));
     fire(plan, 'pointermove', { x: 3.5, y: 0 });
     expect(at(plan, 'n2')).toEqual({ x: 3.5, y: 0 });
-    fire(plan, 'pointermove', at(plan, 'n1'));
+    // Aligned with n1 (a guide) but too close to it: w1 would be 0.2 m.
+    fire(plan, 'pointermove', { x: 0.2, y: 0.02 });
     expect(at(plan, 'n2')).toEqual({ x: 3.5, y: 0 });
     expect(plan.issues.rejected[0]?.code).toBe('wall-too-short');
     // The guide of the snapped (rejected) point is not shown.
@@ -312,8 +314,8 @@ function dblclick(plan: H3xPlan, p: Vec2): void {
   plan.svg.dispatchEvent(new MouseEvent('dblclick', { clientX: s.x, clientY: s.y, bubbles: true }));
 }
 
-function keyEvent(plan: H3xPlan, k: string): KeyboardEvent {
-  const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+function keyEvent(plan: H3xPlan, k: string, mods: KeyboardEventInit = {}): KeyboardEvent {
+  const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...mods });
   plan.svg.dispatchEvent(e);
   return e;
 }
@@ -408,6 +410,16 @@ describe('SelectEditTool structural gestures', () => {
     expect(plan.doc.canUndo).toBe(false);
   });
 
+  it('Delete / Backspace with Ctrl, Meta or Alt held are not handled', () => {
+    const plan = makePlan();
+    plan.select({ kind: 'node', id: 'n2' });
+    expect(keyEvent(plan, 'Delete', { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(keyEvent(plan, 'Backspace', { metaKey: true }).defaultPrevented).toBe(false);
+    expect(keyEvent(plan, 'Delete', { altKey: true }).defaultPrevented).toBe(false);
+    expect(plan.doc.floor.nodes.n2).toBeDefined();
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
   it('dragging a column moves it snapped as one undo step; Alt is free', () => {
     const plan = makePlan();
     const add = addColumn({ x: 2, y: 2, shape: 'square', width: 0.3 });
@@ -474,6 +486,65 @@ describe('SelectEditTool structural gestures', () => {
     expect(plan.doc.floor).toEqual(before);
   });
 
+  /** Fills the undo stack to HISTORY_LIMIT with distinct steps (moving n4 back and forth). */
+  function fillHistory(plan: H3xPlan): void {
+    for (let i = 1; i <= HISTORY_LIMIT; i++) {
+      plan.doc.execute(moveNode('n4', { x: i % 2 ? -0.1 : 0, y: 4 }));
+    }
+  }
+  function undoDepth(plan: H3xPlan): number {
+    let n = 0;
+    while (plan.doc.undo()) n++;
+    return n;
+  }
+
+  it('push / pull on a full history keeps every old entry (release and Esc)', () => {
+    // Released with a push applied: one new entry (the oldest is trimmed as usual).
+    const plan = makePlan();
+    middleSegment(plan);
+    fillHistory(plan);
+    drag(plan, { x: 4, y: 1.5 }, { x: 5, y: 1.5 }, 3, { shiftKey: true }, true);
+    fire(plan, 'pointermove', { x: 4, y: 1.5 }, { shiftKey: true });
+    fire(plan, 'pointermove', { x: 5, y: 1.5 }, { shiftKey: true });
+    fire(plan, 'pointerup', { x: 5, y: 1.5 }, { shiftKey: true });
+    plan.doc.undo(); // the push
+    expect(undoDepth(plan)).toBe(HISTORY_LIMIT - 1);
+
+    // Out and back to zero (the group is dropped), released: no entry lost.
+    const back = makePlan();
+    middleSegment(back);
+    fillHistory(back);
+    drag(back, { x: 4, y: 1.5 }, { x: 5, y: 1.5 }, 3, { shiftKey: true }, true);
+    fire(back, 'pointermove', { x: 4, y: 1.5 }, { shiftKey: true });
+    fire(back, 'pointerup', { x: 4, y: 1.5 }, { shiftKey: true });
+    expect(undoDepth(back)).toBe(HISTORY_LIMIT);
+
+    // Esc: no entry lost.
+    const esc = makePlan();
+    middleSegment(esc);
+    fillHistory(esc);
+    drag(esc, { x: 4, y: 1.5 }, { x: 5, y: 1.5 }, 3, { shiftKey: true }, true);
+    key(esc, 'Escape');
+    fire(esc, 'pointerup', { x: 5, y: 1.5 }, { shiftKey: true });
+    expect(undoDepth(esc)).toBe(HISTORY_LIMIT);
+  });
+
+  it('push / pull below the connector minimum still shows alignment guides', () => {
+    const plan = makePlan();
+    middleSegment(plan);
+    plan.doc.execute(
+      addWall({ from: { at: { x: 4.2, y: 5 } }, to: { at: { x: 4.2, y: 6 } }, thickness: 0.2 }),
+    );
+    const before = structuredClone(plan.doc.floor);
+    const guides = () => plan.svg.querySelectorAll('.h3x-plan-guide').length;
+    drag(plan, { x: 4, y: 1.5 }, { x: 4.213, y: 1.5 }, 5, { shiftKey: true }, true);
+    expect(plan.doc.floor).toEqual(before);
+    expect(guides()).toBe(1);
+    fire(plan, 'pointerup', { x: 4.213, y: 1.5 }, { shiftKey: true });
+    expect(guides()).toBe(0);
+    expect(plan.doc.floor).toEqual(before);
+  });
+
   it('push / pull below the connector minimum leaves the document unchanged; Esc cancels', () => {
     const plan = makePlan();
     const mid = middleSegment(plan);
@@ -505,6 +576,22 @@ describe('SelectEditTool structural gestures', () => {
     expect(plan.selection).toEqual({ kind: 'node', id: 'n1' });
     plan.doc.undo();
     expect(at(plan, 'n3')).toEqual({ x: 4, y: 4 });
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('a node dragged onto its neighbour merges them, collapsing their wall, one undo step', () => {
+    const plan = makePlan();
+    drag(plan, at(plan, 'n2'), at(plan, 'n3'), 5, {}, true);
+    expect(dropMarks(plan)).toBe(1);
+    expect(plan.issues.rejected).toEqual([]);
+    fire(plan, 'pointerup', at(plan, 'n3'));
+    expect(plan.doc.floor.nodes.n2).toBeUndefined();
+    expect(plan.doc.floor.walls.w2).toBeUndefined();
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(3);
+    expect(plan.selection).toEqual({ kind: 'node', id: 'n3' });
+    plan.doc.undo();
+    expect(at(plan, 'n2')).toEqual({ x: 4, y: 0 });
+    expect(plan.doc.floor.walls.w2).toBeDefined();
     expect(plan.doc.canUndo).toBe(false);
   });
 
