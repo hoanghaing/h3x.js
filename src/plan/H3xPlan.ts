@@ -3,6 +3,10 @@ import { Emitter } from '../core/document/emitter';
 import { setWallLength } from '../core';
 import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
+import { PlanInput } from './input';
+import { hitTest, type HitScene, type HitTarget } from './hit';
+import { snapPoint, type SnapResult } from './snap';
+import type { Tool, ToolContext } from './tools/Tool';
 import { dimensionLabel, wallsShowingDimensions } from './dimensions';
 import {
   NON_SCALING,
@@ -42,6 +46,8 @@ export interface H3xPlanOptions {
   classPrefix?: string;
   /** Resolves item presets (footprints). Default `doc.presets`. */
   presets?: PresetResolver;
+  /** Editing tool. Omitted or `null` means no tool (the plan only pans and zooms). */
+  tool?: Tool | null;
 }
 
 const LAYERS = [
@@ -79,6 +85,9 @@ const FULL_RECONCILE_THRESHOLD = 50;
 const FIT_PADDING_PX = 40;
 /** fitToContent frames at least this many meters on each axis. */
 const MIN_FIT_EXTENT = 1;
+
+/** Alignment reach of tool snapping, in screen px. */
+const ALIGN_RADIUS_PX = 8;
 
 /** How long a rejected edit stays flashed. */
 const REJECTED_FLASH_MS = 600;
@@ -126,6 +135,9 @@ export class H3xPlan {
   private readonly resizeObserver: ResizeObserver | undefined;
   private readonly onWindowResize = (): void => this.resize();
   private disposed = false;
+  private readonly input: PlanInput;
+  private _tool: Tool | null = null;
+  private readonly toolContext: ToolContext;
   private _selection: Selection | null = null;
   private standing: Issue[] = [];
   private rejected: Issue[] = [];
@@ -182,7 +194,76 @@ export class H3xPlan {
       window.addEventListener('resize', this.onWindowResize);
     }
 
+    this.svg.setAttribute('tabindex', '0');
+    this.toolContext = {
+      plan: this,
+      doc,
+      hit: (s) => this.hitAt(s),
+      snap: (p, exclude, disabled) => {
+        if (disabled) return { point: p, guides: [] };
+        const skip = new Set(exclude);
+        const others = Object.values(doc.floor.nodes).filter((n) => !skip.has(n.id));
+        return snapPoint(p, others, {
+          grid: this.snapOptions.grid,
+          align: this.snapOptions.align,
+          alignRadius: ALIGN_RADIUS_PX / this._view.scale,
+        });
+      },
+      showGuides: (g) => this.showGuides(g),
+      setDragging: (id) => {
+        this.dimensionState.draggingNode = id;
+        this.refreshDimensions();
+      },
+    };
+    this.input = new PlanInput(this);
+    this.setTool(opts.tool ?? null);
+
     this.fitToContent();
+  }
+
+  /** The active tool, or null. */
+  get tool(): Tool | null {
+    return this._tool;
+  }
+
+  /** Swaps the editing tool; the old one is deactivated first. */
+  setTool(tool: Tool | null): void {
+    if (this.disposed) return;
+    this._tool?.deactivate();
+    this._tool = tool;
+    tool?.activate(this.toolContext);
+  }
+
+  /** @internal What is under a screen point. */
+  hitAt(s: ScreenPoint): HitTarget {
+    const scene: HitScene = {
+      floor: this.doc.floor,
+      view: this._view,
+      corners: this.joins.corners,
+      dimensions: [...this.dimensionRectsById].map(([wallId, rect]) => ({ wallId, rect })),
+      presets: this.presets,
+    };
+    return hitTest(scene, s);
+  }
+
+  private showGuides(guides: SnapResult['guides']): void {
+    const layer = this.layers.overlay;
+    layer.replaceChildren();
+    const v = this._view;
+    const min = screenToPlan(v, { x: 0, y: v.height });
+    const max = screenToPlan(v, { x: v.width, y: 0 });
+    for (const g of guides) {
+      layer.appendChild(
+        svgEl('line', {
+          class: `${this.prefix}-guide`,
+          x1: String(g.axis === 'x' ? g.value : min.x),
+          x2: String(g.axis === 'x' ? g.value : max.x),
+          y1: String(g.axis === 'y' ? g.value : min.y),
+          y2: String(g.axis === 'y' ? g.value : max.y),
+          ...NON_SCALING,
+        }),
+      );
+    }
   }
 
   /** The current view (a copy). */
@@ -310,6 +391,9 @@ export class H3xPlan {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.input.dispose();
+    this._tool?.deactivate();
+    this._tool = null;
     this.unsubscribe();
     clearTimeout(this.rejectedTimer);
     this.resizeObserver?.disconnect();
