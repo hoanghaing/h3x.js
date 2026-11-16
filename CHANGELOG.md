@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+Milestone 3: `h3x/plan`.
+
+- `H3xPlan`: SVG plan of an `H3xDocument` with pan, zoom, pinch, selection, live dimensions,
+  `selectionchange` / `lengthEditRequest` / `issues` events and CSS state classes. It does not
+  need `three`.
+- `SelectEditTool`: select and drag nodes and walls with grid and alignment snapping, arrow-key
+  nudging, Esc to cancel a drag; custom tools through the `Tool` interface.
+- `plan.setWallLength` picks the anchor automatically (`pickAnchor`); the library ships no
+  inputs, the editor attaches them.
+- `setWallLength` takes `{ anchor: 'a' | 'b' }` to choose which end stays fixed.
+- `doc.cancelCoalesce(key)` and the `'cancel'` change reason revert an open drag with no undo
+  trace.
+
 Milestone 2: `h3x/three`.
 
 - `H3xScene`: wall and floor meshes kept in sync with an `H3xDocument`, with mitered joins,
