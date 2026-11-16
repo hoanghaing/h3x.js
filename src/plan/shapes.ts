@@ -1,7 +1,7 @@
 import type { Floor, Id, Item, Opening, PresetResolver, Room, Vec2 } from '../core';
 import { roomArea, roomPolygon } from '../core';
 import { GEOM_TOL } from '../core/constants';
-import { add, leftNormal, normalize, scale, sub } from '../core/geometry/vec';
+import { add, cross, leftNormal, normalize, scale, sub } from '../core/geometry/vec';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { Joins, WallCorners } from '../shared/walls/joins';
 
@@ -65,7 +65,7 @@ export interface OpeningShape {
   kind: 'door' | 'window';
   gap: [Vec2, Vec2, Vec2, Vec2];
   leaf?: [Vec2, Vec2];
-  /** `sweep` is the SVG sweep flag in screen space (plan y is flipped on screen). */
+  /** `sweep` is the SVG sweep flag for plan-space coordinates (1 = increasing angle, CCW with +y up). */
   arc?: { from: Vec2; to: Vec2; center: Vec2; r: number; sweep: 0 | 1 };
   lines?: [Vec2, Vec2][];
 }
@@ -104,7 +104,13 @@ export function openingShape(floor: Floor, o: Opening): OpeningShape {
     kind: 'door',
     gap,
     leaf: [hinge, leafEnd],
-    arc: { from: leafEnd, to: closed, center: hinge, r: o.width, sweep: 1 },
+    arc: {
+      from: leafEnd,
+      to: closed,
+      center: hinge,
+      r: o.width,
+      sweep: cross(sub(leafEnd, hinge), sub(closed, hinge)) > 0 ? 1 : 0,
+    },
   };
 }
 
