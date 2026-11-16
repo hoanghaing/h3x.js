@@ -104,17 +104,19 @@ describe('snapDraw', () => {
   });
 
   it('alignment beats angle lock', () => {
-    const r = snapDraw({ x: 4.03, y: 5 }, floor, { ...dopts, from: { x: 1, y: 1 } });
-    expect(r.point.x).toBe(4);
+    // ~44.8 degrees from (0,-2): inside the lock tolerance, and x is within alignRadius of node b
+    const r = snapDraw({ x: 4.03, y: 2 }, floor, { ...dopts, from: { x: 0, y: -2 } });
+    expect(r.point).toEqual({ x: 4, y: 2 });
+    expect(r.guides).toHaveLength(1);
     expect(r.angleLock).toBeUndefined();
   });
 
   it('locks to 45 degrees at 44 degrees and grid-snaps the length', () => {
     const from = { x: 10, y: 10 };
     const t = (44 * Math.PI) / 180;
-    const p = { x: 10 + 2 * Math.cos(t), y: 10 + 2 * Math.sin(t) };
+    const p = { x: 10 + 2.03 * Math.cos(t), y: 10 + 2.03 * Math.sin(t) };
     const r = snapDraw(p, floor, { ...dopts, from });
-    const d = Math.SQRT1_2 * 2;
+    const d = Math.SQRT1_2 * 2.05;
     expect(r.point.x).toBeCloseTo(10 + d, 6);
     expect(r.point.y).toBeCloseTo(10 + d, 6);
     expect(r.target).toEqual({ kind: 'free' });
