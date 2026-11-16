@@ -1,7 +1,14 @@
 import type { Command } from '../document/changes';
 import { createId } from '../ids';
 import { structural } from '../topology/draft';
-import { addWallIn, removeNodeIn, removeWallIn, splitAt } from '../topology/ops';
+import {
+  addWallIn,
+  dropNodeIn,
+  mergeNodesIn,
+  removeNodeIn,
+  removeWallIn,
+  splitAt,
+} from '../topology/ops';
 import type { NewWall } from '../topology/ops';
 import type { Id, Vec2 } from '../types';
 import { assertFreeId } from './shared';
@@ -52,4 +59,24 @@ export function removeWall(wallId: Id): Command {
 /** Degree 2 merges the two walls; otherwise deletes the node and its walls. Rooms re-sync. */
 export function removeNode(nodeId: Id): Command {
   return structural('removeNode', (draft, ctx) => removeNodeIn(draft, nodeId, ctx.presets));
+}
+
+/**
+ * Re-attaches the walls of `drop` to `keep` and deletes `drop`. Self-loop walls go; of
+ * duplicate walls the one with more openings + wall items survives (then smaller id).
+ * Rooms re-sync.
+ */
+export function mergeNodes(keep: Id, drop: Id): Command {
+  return structural('mergeNodes', (draft, ctx) => mergeNodesIn(draft, keep, drop, ctx.presets));
+}
+
+/**
+ * Moves a node onto a node (merge) or onto a point of a wall (T-junction) as one change
+ * list; a plain `moveNode` there would pass through a too-short wall. Rooms re-sync.
+ */
+export function dropNode(nodeId: Id, target: { node: Id } | { wall: Id; at: Vec2 }): Command {
+  const ids = { wall: createId(), node: createId() };
+  return structural('dropNode', (draft, ctx) =>
+    dropNodeIn(draft, nodeId, target, ids, ctx.presets),
+  );
 }
