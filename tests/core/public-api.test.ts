@@ -8,6 +8,7 @@ const FUNCTIONS = [
   'moveNode',
   'moveWall',
   'setWallLength',
+  'addWall',
   'splitWall',
   'removeWall',
   'removeNode',

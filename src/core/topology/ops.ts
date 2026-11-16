@@ -1,6 +1,8 @@
-import { fail, notFound } from '../commands/shared';
+import { assertFreeId, fail, notFound } from '../commands/shared';
 import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
-import { add, distance, dot, scale, sub, tidy } from '../geometry/vec';
+import { closestPointOnSegment } from '../geometry/segment';
+import { EPS, add, cross, distance, dot, scale, sub, tidy } from '../geometry/vec';
+import { createId } from '../ids';
 import { clampIntoRange, openingRange, wallUsableRange } from '../validate/layout';
 import type { Floor, Id, PresetResolver, Vec2, Wall } from '../types';
 import { wallsAt } from './draft';
@@ -172,4 +174,137 @@ function mergeAt(
   delete draft.walls[other.id];
   delete draft.nodes[nodeId];
   fitOn(draft, [keep.id], presets, 'merge-drops-opening', 'does not fit on the merged wall');
+}
+
+/** A wall end: an existing node, or a point (snapped to a node, or splitting a wall, when on one). */
+export type WallEnd = { node: Id } | { at: Vec2 };
+
+export interface NewWall {
+  from: WallEnd;
+  to: WallEnd;
+  thickness: number;
+  height?: number;
+}
+
+/** A point the new wall passes through: an existing node, a wall to split, or a free point. */
+interface Stop {
+  t: number;
+  p: Vec2;
+  node?: Id;
+  wall?: Id;
+}
+
+function endPoint(draft: Floor, end: WallEnd): Vec2 {
+  if ('at' in end) return end.at;
+  const n = draft.nodes[end.node];
+  if (!n) throw notFound('Node', end.node);
+  return n;
+}
+
+/** The existing node an end stands on: the given node, or the nearest node within GEOM_TOL. */
+function nodeOf(draft: Floor, end: WallEnd): Id | undefined {
+  if ('node' in end) return end.node;
+  let best: { id: Id; d: number } | undefined;
+  for (const n of Object.values(draft.nodes)) {
+    const d = distance(n, end.at);
+    if (d < GEOM_TOL && (!best || d < best.d)) best = { id: n.id, d };
+  }
+  return best?.id;
+}
+
+const offLine = (c: Vec2, p: Vec2, q: Vec2): number =>
+  Math.abs(cross(sub(q, p), sub(c, p))) / distance(p, q);
+
+/**
+ * Adds a wall from `from` to `to`. Ends reuse a node within GEOM_TOL or split the wall
+ * they lie on (T-junction); existing nodes on the way and crossed walls split the new
+ * wall, crossed walls are split too. `ids.wall` names the piece touching `from`,
+ * `ids.endNode` a new node at `to`. Ends already joined by a wall: no change, that wall
+ * is returned. Throws `wall-too-short`, `walls-overlap` (collinear overlap), `not-found`.
+ */
+export function addWallIn(
+  draft: Floor,
+  spec: NewWall,
+  ids: { wall: Id; endNode: Id },
+  presets?: PresetResolver,
+): { wallId: Id; endNodeId: Id } {
+  const p = endPoint(draft, spec.from);
+  const q = endPoint(draft, spec.to);
+  const len = distance(p, q);
+  const tooShort = (): Error =>
+    fail('wall-too-short', [ids.wall], `A wall must be at least ${MIN_WALL_LENGTH} m long`);
+  if (len < MIN_WALL_LENGTH - GEOM_TOL) throw tooShort();
+  const na = nodeOf(draft, spec.from);
+  const nb = nodeOf(draft, spec.to);
+  if (na && nb) {
+    const dup = wallsAt(draft, na).find((w) => w.a === nb || w.b === nb);
+    if (dup) return { wallId: dup.id, endNodeId: nb };
+  }
+  assertFreeId({ floor: draft }, ids.wall);
+  assertFreeId({ floor: draft }, ids.endNode);
+
+  const d = sub(q, p);
+  const stops: Stop[] = [];
+  for (const n of Object.values(draft.nodes)) {
+    if (n.id === na) stops.push({ t: 0, p: n, node: n.id });
+    else if (n.id === nb) stops.push({ t: 1, p: n, node: n.id });
+    else {
+      const c = closestPointOnSegment(n, p, q);
+      if (distance(c.point, n) < GEOM_TOL) stops.push({ t: c.t, p: n, node: n.id });
+    }
+  }
+  for (const w of Object.values(draft.walls)) {
+    const [a, b] = endsOf(draft, w);
+    const wl = distance(a, b);
+    const collinear =
+      (offLine(a, p, q) < GEOM_TOL && offLine(b, p, q) < GEOM_TOL) ||
+      (wl > 0 && offLine(p, a, b) < GEOM_TOL && offLine(q, a, b) < GEOM_TOL);
+    if (collinear) {
+      const ta = dot(sub(a, p), d) / len;
+      const tb = dot(sub(b, p), d) / len;
+      const overlap = Math.min(len, Math.max(ta, tb)) - Math.max(0, Math.min(ta, tb));
+      if (overlap > GEOM_TOL) {
+        throw fail('walls-overlap', [ids.wall, w.id], `The new wall overlaps wall ${w.id}`);
+      }
+      continue;
+    }
+    const e = sub(b, a);
+    const den = cross(d, e);
+    if (Math.abs(den) < EPS) continue;
+    const ap = sub(a, p);
+    const t = cross(ap, e) / den;
+    const u = cross(ap, d) / den;
+    if (t < -GEOM_TOL / len || t > 1 + GEOM_TOL / len) continue;
+    if (u < -GEOM_TOL / wl || u > 1 + GEOM_TOL / wl) continue;
+    const x = add(p, scale(d, t));
+    // Passing within GEOM_TOL of a wall end is passing through that node (a node stop).
+    if (distance(x, a) < GEOM_TOL || distance(x, b) < GEOM_TOL) continue;
+    stops.push({ t: Math.min(1, Math.max(0, t)), p: x, wall: w.id });
+  }
+  if (!stops.some((s) => distance(s.p, p) < GEOM_TOL)) stops.push({ t: 0, p });
+  if (!stops.some((s) => distance(s.p, q) < GEOM_TOL)) stops.push({ t: 1, p: q });
+  stops.sort((s1, s2) => s1.t - s2.t);
+
+  const last = stops.length - 1;
+  const nodeIds = stops.map((s, i) => {
+    if (s.node) return s.node;
+    const id = i === last ? ids.endNode : createId();
+    if (s.wall) return splitAt(draft, s.wall, s.p, createId(), id, presets);
+    draft.nodes[id] = { id, x: tidy(s.p.x), y: tidy(s.p.y) };
+    return id;
+  });
+  for (let i = 0; i < last; i++) {
+    const a = nodeIds[i]!;
+    const b = nodeIds[i + 1]!;
+    if (distance(draft.nodes[a]!, draft.nodes[b]!) < MIN_WALL_LENGTH - GEOM_TOL) throw tooShort();
+    const id = i === 0 ? ids.wall : createId();
+    draft.walls[id] = {
+      id,
+      a,
+      b,
+      thickness: spec.thickness,
+      height: spec.height ?? draft.wallHeight,
+    };
+  }
+  return { wallId: ids.wall, endNodeId: nodeIds[last]! };
 }
