@@ -19,12 +19,12 @@ function docOf(floor: Floor): H3xDocument {
 }
 
 let plans: H3xPlan[] = [];
-function makePlan(tool?: Tool | null): H3xPlan {
+function makePlan(tool?: Tool | null, floor: Floor = oneRoomFloor()): H3xPlan {
   const el = document.createElement('div');
   Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
   Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
   document.body.appendChild(el);
-  const plan = new H3xPlan(el, docOf(oneRoomFloor()), { tool });
+  const plan = new H3xPlan(el, docOf(floor), { tool });
   plans.push(plan);
   return plan;
 }
@@ -39,16 +39,18 @@ function pointer(
   type: string,
   x: number,
   y: number,
-  init: { pointerId?: number; button?: number } = {},
+  init: { pointerId?: number; button?: number; buttons?: number; pointerType?: string } = {},
 ): void {
   const e = new MouseEvent(type, {
     clientX: x,
     clientY: y,
     button: init.button ?? 0,
+    buttons: init.buttons ?? 0,
     bubbles: true,
     cancelable: true,
   });
   Object.defineProperty(e, 'pointerId', { value: init.pointerId ?? 1 });
+  if (init.pointerType) Object.defineProperty(e, 'pointerType', { value: init.pointerType });
   svg.dispatchEvent(e);
 }
 
@@ -258,5 +260,75 @@ describe('tool dispatch', () => {
 
   it('the default stylesheet disables browser touch gestures', () => {
     expect(DEFAULT_CSS('h3x-plan')).toContain('touch-action: none');
+  });
+  it('a press and release over an open room reach the tool', () => {
+    const { tool } = fakeTool(false);
+    const floor = oneRoomFloor();
+    floor.rooms['r1']!.walls = ['w1', 'w2'];
+    const plan = makePlan(tool, floor);
+    const s = plan.planToScreen({ x: 2, y: 2 });
+    pointer(plan.svg, 'pointermove', s.x, s.y);
+    pointer(plan.svg, 'pointerdown', s.x, s.y);
+    pointer(plan.svg, 'pointerup', s.x, s.y);
+    expect(tool.onPointerUp).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(tool.onPointerUp!).mock.calls[0]![0].hit).toBeNull();
+  });
+
+  it('a tool that throws in onPointerUp does not wedge input', () => {
+    const { tool } = fakeTool(false);
+    vi.mocked(tool.onPointerUp!).mockImplementationOnce(() => {
+      throw new Error('tool bug');
+    });
+    const plan = makePlan(tool);
+    // jsdom reports listener exceptions on window; swallow this expected one.
+    const errors: unknown[] = [];
+    const onError = (ev: ErrorEvent): void => {
+      errors.push(ev.error);
+      ev.preventDefault();
+    };
+    window.addEventListener('error', onError);
+    try {
+      pointer(plan.svg, 'pointerdown', 400, 300);
+      pointer(plan.svg, 'pointerup', 400, 300);
+    } finally {
+      window.removeEventListener('error', onError);
+    }
+    expect(errors).toHaveLength(1);
+    // Hovering after the release must not pan.
+    const before = plan.view;
+    pointer(plan.svg, 'pointermove', 500, 300);
+    expect(plan.view.cx).toBe(before.cx);
+    // The next empty-space drag pans.
+    pointer(plan.svg, 'pointerdown', 400, 300);
+    pointer(plan.svg, 'pointermove', 500, 300);
+    pointer(plan.svg, 'pointerup', 500, 300);
+    expect(plan.view.cx).toBeCloseTo(before.cx - 100 / before.scale);
+  });
+
+  it('a right-button drag neither pans nor reaches the tool', () => {
+    const { tool } = fakeTool(false);
+    const plan = makePlan(tool);
+    const before = plan.view;
+    pointer(plan.svg, 'pointerdown', 400, 300, { button: 2 });
+    pointer(plan.svg, 'pointermove', 500, 300, { buttons: 2 });
+    pointer(plan.svg, 'pointerup', 500, 300, { button: 2 });
+    expect(plan.view.cx).toBe(before.cx);
+    expect(tool.onPointerDown).not.toHaveBeenCalled();
+  });
+
+  it('a mouse pan ends when a move shows no buttons held (lost pointerup)', () => {
+    const plan = makePlan();
+    const before = plan.view;
+    pointer(plan.svg, 'pointerdown', 400, 300, { pointerType: 'mouse', buttons: 1 });
+    pointer(plan.svg, 'pointermove', 450, 300, { pointerType: 'mouse', buttons: 1 });
+    const panned = plan.view.cx;
+    expect(panned).toBeCloseTo(before.cx - 50 / before.scale);
+    pointer(plan.svg, 'pointermove', 500, 300, { pointerType: 'mouse', buttons: 0 });
+    pointer(plan.svg, 'pointermove', 550, 300, { pointerType: 'mouse', buttons: 0 });
+    expect(plan.view.cx).toBe(panned);
+    // A fresh press pans again.
+    pointer(plan.svg, 'pointerdown', 400, 300, { pointerType: 'mouse', buttons: 1 });
+    pointer(plan.svg, 'pointermove', 420, 300, { pointerType: 'mouse', buttons: 1 });
+    expect(plan.view.cx).toBeCloseTo(panned - 20 / before.scale);
   });
 });

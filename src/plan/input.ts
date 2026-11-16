@@ -85,6 +85,8 @@ export class PlanInput {
   }
 
   private down(e: PointerEvent): void {
+    // Only the primary (touch, pen tip, left) and middle buttons drive the plan.
+    if (e.button !== 0 && e.button !== 1) return;
     const svg = this.host.svg;
     const screen = this.screenOf(e);
     this.pointers.set(e.pointerId, screen);
@@ -133,6 +135,11 @@ export class PlanInput {
       return;
     }
     if (this.pointers.size > 0 && e.pointerId !== this.primary) return;
+    if (this.mode === 'pan' && e.pointerType === 'mouse' && e.buttons === 0) {
+      // The button was released where we never saw the pointerup.
+      this.up(e);
+      return;
+    }
     this.host.tool?.onPointerMove?.(this.planEvent(e, screen));
     if (this.mode === 'pan') {
       this.host.setView(panBy(this.host.view, screen.x - this.last.x, screen.y - this.last.y));
@@ -147,9 +154,15 @@ export class PlanInput {
       return;
     }
     if (e.pointerId !== this.primary) return;
-    if (this.toolSawDown) this.host.tool?.onPointerUp?.(this.planEvent(e, this.screenOf(e)));
-    this.mode = 'none';
-    this.toolSawDown = false;
+    const toolSawDown = this.toolSawDown;
+    // Reset even if the tool throws, so input is never left mid-gesture.
+    try {
+      if (toolSawDown) this.host.tool?.onPointerUp?.(this.planEvent(e, this.screenOf(e)));
+    } finally {
+      this.mode = 'none';
+      this.toolSawDown = false;
+      this.primary = -1;
+    }
   }
 
   private dblclick(e: MouseEvent): void {
