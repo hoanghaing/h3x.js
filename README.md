@@ -122,6 +122,10 @@ passed as `presets`.
   `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
   `removeItem(id)`. `addOpening` / `addItem` expose `createdId`.
+- Columns and site: `addColumn({ x, y, shape, width, depth?, rotation?, height? })` (exposes
+  `createdId`), `moveColumn(id, patch)`, `removeColumn(id)`; columns do not touch rooms and sizes
+  above the limit are `column-size`. `setSite(points | null)` sets the ground outline (stored
+  counter-clockwise; fewer than 3 points or a non-finite coordinate is `site-invalid`; `null` clears).
 - Finishes and names: `setWallFinish(wallId, side, finish)`, `setRoomFinish(roomId, finish)`,
   `renameRoom(roomId, name)`.
 

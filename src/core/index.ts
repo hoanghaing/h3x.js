@@ -32,6 +32,7 @@ export {
   removeItem,
 } from './commands/objects';
 export type { NewItem } from './commands/objects';
+export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
 export { setWallFinish, setRoomFinish, renameRoom } from './commands/finishes';
 
 export { validateLayout } from './validate/layout';
