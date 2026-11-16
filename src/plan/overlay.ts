@@ -1,5 +1,6 @@
-import type { Floor, Id } from '../core';
-import { dimensionLabel, wallsShowingDimensions } from './dimensions';
+import type { Floor } from '../core';
+import { dimensionLabel, wallsShowingDimensions, type DimensionState } from './dimensions';
+import type { PlanDom } from './kinds';
 import {
   NON_SCALING,
   createDimensionElement,
@@ -9,7 +10,6 @@ import {
 } from './render';
 import type { SnapGuide } from './snap';
 import { DIMENSION_FONT_PX } from './style';
-import type { Rect, Selection } from './types';
 import { screenToPlan, type View } from './view';
 
 /** Replaces the overlay layer's content with one full-view line per alignment guide. */
@@ -36,21 +36,14 @@ export function renderGuides(
   }
 }
 
-export interface DimensionState {
-  selection: Selection | null;
-  draggingNode: Id | null;
-}
-
 /** Re-derives which walls show a length label, their geometry and screen rects. */
 export function syncDimensions(
   floor: Readonly<Floor>,
   view: View,
   state: DimensionState,
-  els: Map<Id, SVGGElement>,
-  rects: Map<Id, Rect>,
-  layer: SVGGElement,
-  prefix: string,
+  dom: PlanDom,
 ): void {
+  const { dimensions: els, dimensionRects: rects, prefix } = dom;
   const ids = new Set(wallsShowingDimensions(floor, state));
   for (const [id, g] of els) {
     if (ids.has(id)) continue;
@@ -63,7 +56,7 @@ export function syncDimensions(
     if (!g) {
       g = createDimensionElement(id, prefix);
       els.set(id, g);
-      layer.appendChild(g);
+      dom.layers.dimensions.appendChild(g);
     }
     const label = dimensionLabel(floor, id, view);
     updateDimensionElement(g, label, view);

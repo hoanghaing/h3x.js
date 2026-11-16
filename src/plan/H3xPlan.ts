@@ -16,16 +16,10 @@ import {
   svgEl,
   type RenderContext,
 } from './render';
+import type { DimensionState } from './dimensions';
 import { renderGuides, syncDimensions } from './overlay';
-import {
-  COLLECTION,
-  KINDS,
-  LAYERS,
-  dirtyEntities,
-  syncEntity,
-  syncJoins,
-  type LayerName,
-} from './reconcile';
+import { KINDS, LAYERS, entitiesOf, type LayerName, type PlanDom } from './kinds';
+import { dirtyEntities, syncEntity, syncJoins } from './reconcile';
 import { wallOutline } from './shapes';
 import { DEFAULT_CSS } from './style';
 import type { PlanIssues, PlanKind, Rect, ScreenPoint, Selection } from './types';
@@ -85,23 +79,10 @@ export class H3xPlan {
   private readonly prefix: string;
   private readonly presets: PresetResolver | undefined;
   private readonly root: SVGGElement;
-  private readonly layers = {} as Record<LayerName, SVGGElement>;
-  private readonly elements: Record<PlanKind, Map<Id, SVGGElement>> = {
-    node: new Map(),
-    wall: new Map(),
-    room: new Map(),
-    opening: new Map(),
-    item: new Map(),
-  };
-  private readonly joinEls = new Map<Id, SVGGElement>();
-  private readonly dimensionEls = new Map<Id, SVGGElement>();
-  private readonly dimensionRectsById = new Map<Id, Rect>();
+  private readonly dom: PlanDom;
   private readonly grid: { major: SVGPathElement; minor: SVGPathElement } | undefined;
   /** Which dimensions show; editing state is supplied here by later tools. */
-  private readonly dimensionState: { selection: Selection | null; draggingNode: Id | null } = {
-    selection: null,
-    draggingNode: null,
-  };
+  private readonly dimensionState: DimensionState = { selection: null, draggingNode: null };
   private joins: Joins = { corners: {}, junctions: {} };
   private _view: View;
   private readonly unsubscribe: () => void;
@@ -126,6 +107,14 @@ export class H3xPlan {
   ) {
     this.doc = doc;
     this.prefix = opts.classPrefix ?? 'h3x-plan';
+    this.dom = {
+      layers: {} as Record<LayerName, SVGGElement>,
+      prefix: this.prefix,
+      elements: Object.fromEntries(KINDS.map((k) => [k, new Map()])) as PlanDom['elements'],
+      joins: new Map(),
+      dimensions: new Map(),
+      dimensionRects: new Map(),
+    };
     this.presets = opts.presets ?? doc.presets;
     this.snapOptions = { grid: opts.snap?.grid ?? 0.05, align: opts.snap?.align ?? true };
     this._view = {
@@ -144,7 +133,7 @@ export class H3xPlan {
     this.svg.append(style, this.root);
     for (const name of LAYERS) {
       const layer = svgEl('g', { class: `${this.prefix}-layer-${name}` });
-      this.layers[name] = layer;
+      this.dom.layers[name] = layer;
       this.root.appendChild(layer);
     }
     if (opts.grid ?? true) {
@@ -152,7 +141,7 @@ export class H3xPlan {
         minor: svgEl('path', { class: `${this.prefix}-grid-minor`, ...NON_SCALING }),
         major: svgEl('path', { class: `${this.prefix}-grid-major`, ...NON_SCALING }),
       };
-      this.layers.grid.append(this.grid.minor, this.grid.major);
+      this.dom.layers.grid.append(this.grid.minor, this.grid.major);
     }
 
     this.standing = this.computeStanding();
@@ -214,14 +203,15 @@ export class H3xPlan {
       floor: this.doc.floor,
       view: this._view,
       corners: this.joins.corners,
-      dimensions: [...this.dimensionRectsById].map(([wallId, rect]) => ({ wallId, rect })),
+      dimensions: [...this.dom.dimensionRects].map(([wallId, rect]) => ({ wallId, rect })),
       presets: this.presets,
+      site: this.doc.project.site,
     };
     return hitTest(scene, s);
   }
 
   private showGuides(guides: SnapResult['guides']): void {
-    renderGuides(this.layers.overlay, this._view, this.prefix, guides);
+    renderGuides(this.dom.layers.overlay, this._view, this.prefix, guides);
   }
 
   /** The current view (a copy). */
@@ -262,12 +252,12 @@ export class H3xPlan {
   }
 
   getElement(kind: PlanKind, id: Id): SVGGElement | undefined {
-    return this.elements[kind].get(id);
+    return this.dom.elements[kind].get(id);
   }
 
   /** @internal Screen rects (px) of the visible dimension labels, keyed by wall id. */
   dimensionRects(): ReadonlyMap<Id, Rect> {
-    return this.dimensionRectsById;
+    return this.dom.dimensionRects;
   }
 
   get selection(): Selection | null {
@@ -276,7 +266,8 @@ export class H3xPlan {
 
   /** Selects an entity; an unknown id selects nothing. Fires only when the selection changes. */
   select(sel: Selection | null): void {
-    const next = sel && this.elements[sel.kind].has(sel.id) ? { kind: sel.kind, id: sel.id } : null;
+    const next =
+      sel && this.dom.elements[sel.kind].has(sel.id) ? { kind: sel.kind, id: sel.id } : null;
     const prev = this._selection;
     if (prev?.kind === next?.kind && prev?.id === next?.id) return;
     this._selection = next;
@@ -341,7 +332,7 @@ export class H3xPlan {
       wallId,
       length: Math.hypot(b.x - a.x, b.y - a.y),
       anchor: pickAnchor(this.doc.floor, wallId, near),
-      anchorRect: this.dimensionRectsById.get(wallId) ?? { x: at.x, y: at.y, width: 0, height: 0 },
+      anchorRect: this.dom.dimensionRects.get(wallId) ?? { x: at.x, y: at.y, width: 0, height: 0 },
     });
   }
 
@@ -383,7 +374,7 @@ export class H3xPlan {
     if (scaleChanged) {
       // Screen-space children (labels, handles) are counter-scaled.
       for (const kind of ['node', 'room'] as const) {
-        for (const id of this.elements[kind].keys()) this.syncEntity(kind, id);
+        for (const id of this.dom.elements[kind].keys()) this.syncEntity(kind, id);
       }
     }
     this.refreshDimensions();
@@ -410,8 +401,9 @@ export class H3xPlan {
     this.joins = computeJoins(this.doc.floor);
     const floor = this.doc.floor;
     for (const kind of KINDS) {
-      const coll = floor[COLLECTION[kind]] as Record<Id, unknown>;
-      for (const id of [...this.elements[kind].keys()]) if (!coll[id]) this.syncEntity(kind, id);
+      const coll = entitiesOf(kind, floor, this.doc.project.site);
+      for (const id of [...this.dom.elements[kind].keys()])
+        if (!coll[id]) this.syncEntity(kind, id);
       for (const id of Object.keys(coll)) this.syncEntity(kind, id);
     }
     this.syncJoins();
@@ -435,12 +427,12 @@ export class H3xPlan {
     const invalid = new Set(this.standing.flatMap((i) => i.ids));
     const rejected = new Set(this.rejected.flatMap((i) => i.ids));
     const sel = this._selection;
-    if (sel && !this.elements[sel.kind].has(sel.id)) {
+    if (sel && !this.dom.elements[sel.kind].has(sel.id)) {
       this.select(null); // the selected entity was removed
       return;
     }
     for (const kind of KINDS) {
-      for (const [id, g] of this.elements[kind]) {
+      for (const [id, g] of this.dom.elements[kind]) {
         g.classList.toggle(`${this.prefix}-selected`, sel?.kind === kind && sel.id === id);
         g.classList.toggle(`${this.prefix}-invalid`, invalid.has(id));
         g.classList.toggle(`${this.prefix}-rejected`, rejected.has(id));
@@ -449,11 +441,11 @@ export class H3xPlan {
   }
 
   private syncEntity(kind: PlanKind, id: Id): void {
-    syncEntity(kind, id, this.elements[kind], this.layers, this.prefix, this.renderContext());
+    syncEntity(kind, id, this.dom, this.renderContext());
   }
 
   private syncJoins(): void {
-    syncJoins(this.joins, this.joinEls, this.layers.joins, this.prefix);
+    syncJoins(this.joins, this.dom);
   }
 
   private renderContext(): RenderContext {
@@ -462,18 +454,11 @@ export class H3xPlan {
       view: this._view,
       corners: this.joins.corners,
       presets: this.presets,
+      site: this.doc.project.site,
     };
   }
 
   private refreshDimensions(): void {
-    syncDimensions(
-      this.doc.floor,
-      this._view,
-      this.dimensionState,
-      this.dimensionEls,
-      this.dimensionRectsById,
-      this.layers.dimensions,
-      this.prefix,
-    );
+    syncDimensions(this.doc.floor, this._view, this.dimensionState, this.dom);
   }
 }

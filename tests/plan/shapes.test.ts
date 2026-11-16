@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { computeJoins } from '../../src/shared/walls/joins';
 import {
+  columnShape,
   itemFootprint,
   junctionPolygons,
   openingShape,
   roomLabel,
+  roomPath,
   wallOutline,
 } from '../../src/plan/shapes';
-import { oneRoomFloor, testPresets, twoRoomFloor } from '../fixtures/floors';
-import type { FloorItem, WallItem } from '../../src/core';
+import { holedRoomFloor, oneRoomFloor, testPresets, twoRoomFloor } from '../fixtures/floors';
+import { roomShape, type Column, type FloorItem, type WallItem } from '../../src/core';
 
 const xs = (pts: { x: number }[]) => pts.map((p) => p.x);
 const ys = (pts: { y: number }[]) => pts.map((p) => p.y);
@@ -201,5 +203,52 @@ describe('itemFootprint', () => {
     expect(Math.min(...xs(fp))).toBeCloseTo(1.96);
     const right = itemFootprint({ ...item, side: 'right' }, floor, testPresets)!;
     expect(Math.max(...ys(right))).toBeCloseTo(-0.1);
+  });
+});
+
+describe('columnShape', () => {
+  const col: Column = { id: 'c1', x: 1, y: 2, shape: 'square', width: 2, rotation: 0 };
+
+  it('gives a rotated square its four corners', () => {
+    const shape = columnShape({ ...col, rotation: Math.PI / 4 });
+    if (shape.kind !== 'polygon') throw new Error('expected polygon');
+    expect(shape.points).toHaveLength(4);
+    const r = Math.SQRT2;
+    expect(Math.min(...xs(shape.points))).toBeCloseTo(1 - r);
+    expect(Math.max(...xs(shape.points))).toBeCloseTo(1 + r);
+    expect(Math.max(...ys(shape.points))).toBeCloseTo(2 + r);
+    // A 45-degree square has a corner on each axis through its centre.
+    expect(shape.points.some((p) => Math.abs(p.y - 2) < 1e-9 && p.x > 1)).toBe(true);
+  });
+
+  it('uses depth for the second side of a square', () => {
+    const shape = columnShape({ ...col, depth: 1 });
+    if (shape.kind !== 'polygon') throw new Error('expected polygon');
+    expect(Math.max(...ys(shape.points)) - Math.min(...ys(shape.points))).toBeCloseTo(1);
+  });
+
+  it('gives a round column a circle of radius width / 2', () => {
+    expect(columnShape({ ...col, shape: 'round', width: 0.6 })).toEqual({
+      kind: 'circle',
+      cx: 1,
+      cy: 2,
+      r: 0.3,
+    });
+  });
+});
+
+describe('room holes', () => {
+  it('draws a room with a hole as one path of two subpaths', () => {
+    const f = holedRoomFloor();
+    const d = roomPath(roomShape(f, f.rooms.r1!, 'inner'));
+    expect(d.match(/M/g)).toHaveLength(2);
+    expect(d.match(/Z/g)).toHaveLength(2);
+  });
+
+  it('keeps the label out of the hole', () => {
+    const f = holedRoomFloor();
+    const { at } = roomLabel(f, f.rooms.r1!);
+    const inHole = at.x > 3.9 && at.x < 6.1 && at.y > 3.9 && at.y < 6.1;
+    expect(inHole).toBe(false);
   });
 });
