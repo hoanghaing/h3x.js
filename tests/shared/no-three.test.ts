@@ -14,7 +14,34 @@ function tsFiles(dir: string): string[] {
   });
 }
 
-const THREE_IMPORT = /from\s+['"]three(\/[^'"]*)?['"]|['"]three\/|\/three\//;
+/**
+ * An import/export-from/dynamic import/require whose specifier is `three`,
+ * `three/...`, or a relative path that goes through a `three` directory.
+ */
+const THREE_IMPORT =
+  /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](?:three(?:\/[^'"]*)?|(?:\.{1,2}\/)+(?:[^'"]*\/)?three(?:\/[^'"]*)?)['"]/;
+
+describe('THREE_IMPORT pattern', () => {
+  it.each([
+    "import * as T from 'three';",
+    'import { Vector3 } from "three/examples/jsm/x";',
+    "import 'three';",
+    "const m = await import('three');",
+    "const t = require('three');",
+    "import { x } from '../three';",
+    "export * from '../../three/scene';",
+  ])('matches %s', (line) => {
+    expect(line).toMatch(THREE_IMPORT);
+  });
+
+  it.each([
+    '// see src/three/ for the renderer',
+    "import { a } from '../core';",
+    "import x from 'threejs-thing';",
+  ])('does not match %s', (line) => {
+    expect(line).not.toMatch(THREE_IMPORT);
+  });
+});
 
 describe('shared and plan modules do not depend on three', () => {
   const files = [...tsFiles(join(root, 'src/shared')), ...tsFiles(join(root, 'src/plan'))];

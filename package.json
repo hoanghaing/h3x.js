@@ -22,6 +22,10 @@
     "./three": {
       "types": "./dist/three/index.d.ts",
       "import": "./dist/three/index.js"
+    },
+    "./plan": {
+      "types": "./dist/plan/index.d.ts",
+      "import": "./dist/plan/index.js"
     }
   },
   "scripts": {
