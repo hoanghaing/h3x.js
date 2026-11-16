@@ -1,9 +1,36 @@
 import type { Command } from '../document/changes';
 import { createId } from '../ids';
 import { structural } from '../topology/draft';
-import { removeNodeIn, removeWallIn, splitAt } from '../topology/ops';
+import { addWallIn, removeNodeIn, removeWallIn, splitAt } from '../topology/ops';
+import type { NewWall } from '../topology/ops';
 import type { Id, Vec2 } from '../types';
 import { assertFreeId } from './shared';
+
+/**
+ * Draws a wall (see the topology rules): ends snap to nodes or split walls, crossings
+ * split both walls, rooms re-sync. After a run `createdId` is the wall touching `from`
+ * (the existing wall when the ends are already joined, a no-op) and `endNodeId` the
+ * node at `to`; before any run they are the pre-generated ids.
+ */
+export function addWall(input: NewWall): Command & { createdId: Id; endNodeId: Id } {
+  let createdId = createId();
+  let endNodeId = createId();
+  const ids = { wall: createdId, endNode: endNodeId };
+  const cmd = structural('addWall', (draft, ctx) => {
+    const r = addWallIn(draft, input, ids, ctx.presets);
+    createdId = r.wallId;
+    endNodeId = r.endNodeId;
+  });
+  return {
+    ...cmd,
+    get createdId() {
+      return createdId;
+    },
+    get endNodeId() {
+      return endNodeId;
+    },
+  };
+}
 
 /** Splits a wall at the projection of `at`; `createdId` is the new node. */
 export function splitWall(wallId: Id, at: Vec2): Command & { createdId: Id } {

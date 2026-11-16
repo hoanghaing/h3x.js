@@ -95,7 +95,14 @@ passed as `presets`.
   moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items stay
   where they are relative to the fixed end (their distance from node `a`, or from node `b` with
   `anchor: 'b'`), and are re-fitted into range on the resized wall. These do not re-sync rooms.
-- Structure: `splitWall(wallId, at)` (`at` projected onto the wall; the original id keeps the
+- Structure: `addWall({ from, to, thickness, height? })` draws a wall; each end is
+  `{ node: id }` or `{ at: { x, y } }`. An `at` end within `GEOM_TOL` of a node reuses it, one on
+  a wall splits that wall (T-junction); the new wall is cut at every node it passes through and
+  every wall it crosses (that wall is split too); ends already joined by a wall are a no-op. After execute, `createdId` is the
+  wall touching `from` (the existing one on a no-op) and `endNodeId` the node at `to`.
+  Rejections: `wall-too-short`, `walls-overlap` (collinear overlap with a wall),
+  `split-too-short` (a crossing too close to a wall end).
+  `splitWall(wallId, at)` (`at` projected onto the wall; the original id keeps the
   half from node `a`; `createdId` is the new node), `removeWall(wallId)` (also deletes its
   openings, wall items and nodes left without walls), `removeNode(nodeId)` (degree 2 merges the
   two walls into one straight wall, keeping the first wall id; otherwise deletes the node and
