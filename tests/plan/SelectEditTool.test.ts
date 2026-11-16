@@ -1,6 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { H3xDocument, moveNode, type Floor, type Project, type Vec2 } from '../../src/core';
+import {
+  H3xDocument,
+  addColumn,
+  addWall,
+  moveNode,
+  setSite,
+  splitWall,
+  type Floor,
+  type Id,
+  type Project,
+  type Vec2,
+} from '../../src/core';
 import { H3xPlan, type H3xPlanOptions, type LengthEditRequest } from '../../src/plan/H3xPlan';
 import { SelectEditTool } from '../../src/plan/tools/SelectEditTool';
 import { SelectEditTool as Exported } from '../../src/plan';
@@ -293,5 +304,241 @@ describe('SelectEditTool', () => {
     plan.doc.undo();
     expect(at(plan, 'n2')).toEqual({ x: 4, y: 0 });
     expect(plan.doc.canUndo).toBe(false);
+  });
+});
+
+function dblclick(plan: H3xPlan, p: Vec2): void {
+  const s = plan.planToScreen(p);
+  plan.svg.dispatchEvent(new MouseEvent('dblclick', { clientX: s.x, clientY: s.y, bubbles: true }));
+}
+
+function keyEvent(plan: H3xPlan, k: string): KeyboardEvent {
+  const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+  plan.svg.dispatchEvent(e);
+  return e;
+}
+
+const hitKind = (plan: H3xPlan, p: Vec2) => plan.hitAt(plan.planToScreen(p))?.kind;
+const near = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
+const nodeAt = (plan: H3xPlan, p: Vec2): Id | undefined =>
+  Object.values(plan.doc.floor.nodes).find((n) => near(n, p))?.id;
+const wallBetween = (plan: H3xPlan, a: Id, b: Id): Id | undefined =>
+  Object.values(plan.doc.floor.walls).find(
+    (w) => (w.a === a && w.b === b) || (w.a === b && w.b === a),
+  )?.id;
+const dropMarks = (plan: H3xPlan) => plan.svg.querySelectorAll('.h3x-plan-drop-target').length;
+
+describe('SelectEditTool structural gestures', () => {
+  it('double-click on a wall body inserts a point there and selects it, one undo step', () => {
+    const plan = makePlan();
+    expect(hitKind(plan, { x: 4, y: 1 })).toBe('wall');
+    dblclick(plan, { x: 4.03, y: 1 });
+    const id = nodeAt(plan, { x: 4, y: 1 });
+    expect(id).toBeDefined();
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(5);
+    expect(plan.selection).toEqual({ kind: 'node', id });
+    plan.doc.undo();
+    expect(Object.keys(plan.doc.floor.nodes)).toHaveLength(4);
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('a rejected insert point is reported', () => {
+    const plan = makePlan();
+    expect(hitKind(plan, { x: 4, y: 0.2 })).toBe('wall');
+    dblclick(plan, { x: 4, y: 0.2 });
+    expect(Object.keys(plan.doc.floor.nodes)).toHaveLength(4);
+    expect(plan.issues.rejected[0]?.code).toBe('split-too-short');
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('Delete removes a selected node, Backspace a selected wall; one undo step each', () => {
+    const plan = makePlan();
+    plan.select({ kind: 'node', id: 'n2' });
+    expect(keyEvent(plan, 'Delete').defaultPrevented).toBe(true);
+    expect(plan.doc.floor.nodes.n2).toBeUndefined();
+    expect(plan.selection).toBeNull();
+    plan.doc.undo();
+    expect(at(plan, 'n2')).toEqual({ x: 4, y: 0 });
+    expect(plan.doc.canUndo).toBe(false);
+
+    plan.select({ kind: 'wall', id: 'w3' });
+    keyEvent(plan, 'Backspace');
+    expect(plan.doc.floor.walls.w3).toBeUndefined();
+    expect(plan.selection).toBeNull();
+    plan.doc.undo();
+    expect(plan.doc.floor.walls.w3).toBeDefined();
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('Delete removes a selected column and the selected site', () => {
+    const plan = makePlan();
+    const add = addColumn({ x: 2, y: 2, shape: 'square', width: 0.3 });
+    plan.doc.execute(add);
+    plan.doc.execute(
+      setSite([
+        { x: -2, y: -2 },
+        { x: 6, y: -2 },
+        { x: 6, y: 6 },
+      ]),
+    );
+    fire(plan, 'pointerdown', { x: 2, y: 2 });
+    fire(plan, 'pointerup', { x: 2, y: 2 });
+    expect(plan.selection).toEqual({ kind: 'column', id: add.createdId });
+    keyEvent(plan, 'Delete');
+    expect(plan.doc.floor.columns[add.createdId]).toBeUndefined();
+    expect(plan.selection).toBeNull();
+
+    fire(plan, 'pointerdown', { x: 2, y: -2 });
+    fire(plan, 'pointerup', { x: 2, y: -2 });
+    expect(plan.selection).toEqual({ kind: 'site', id: 'site' });
+    keyEvent(plan, 'Backspace');
+    expect(plan.doc.project.site).toBeUndefined();
+    expect(plan.selection).toBeNull();
+    plan.doc.undo();
+    expect(plan.doc.project.site?.points).toHaveLength(3);
+    plan.doc.undo();
+    expect(plan.doc.floor.columns[add.createdId]).toBeDefined();
+  });
+
+  it('Delete with nothing relevant selected is not handled', () => {
+    const plan = makePlan();
+    expect(keyEvent(plan, 'Delete').defaultPrevented).toBe(false);
+    plan.select({ kind: 'room', id: 'r1' });
+    expect(keyEvent(plan, 'Backspace').defaultPrevented).toBe(false);
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('dragging a column moves it snapped as one undo step; Alt is free', () => {
+    const plan = makePlan();
+    const add = addColumn({ x: 2, y: 2, shape: 'square', width: 0.3 });
+    plan.doc.execute(add);
+    const col = () => plan.doc.floor.columns[add.createdId]!;
+    drag(plan, { x: 2, y: 2 }, { x: 2.513, y: 1.004 });
+    expect({ x: col().x, y: col().y }).toEqual({ x: 2.5, y: 1 });
+    expect(plan.selection).toEqual({ kind: 'column', id: add.createdId });
+    plan.doc.undo();
+    expect({ x: col().x, y: col().y }).toEqual({ x: 2, y: 2 });
+    drag(plan, { x: 2, y: 2 }, { x: 2.513, y: 1.004 }, 5, { altKey: true });
+    expect(col().x).not.toBeCloseTo(2.5, 3);
+  });
+
+  it('Esc cancels a column drag with no history; arrows nudge a column', () => {
+    const plan = makePlan();
+    const add = addColumn({ x: 2, y: 2, shape: 'square', width: 0.3 });
+    plan.doc.execute(add);
+    const col = () => plan.doc.floor.columns[add.createdId]!;
+    drag(plan, { x: 2, y: 2 }, { x: 3, y: 2 }, 5, {}, true);
+    expect(col().x).toBe(3);
+    key(plan, 'Escape');
+    fire(plan, 'pointerup', { x: 3, y: 2 });
+    expect(col().x).toBe(2);
+    plan.doc.undo();
+    expect(plan.doc.floor.columns[add.createdId]).toBeUndefined();
+    plan.doc.redo();
+
+    plan.select({ kind: 'column', id: add.createdId });
+    key(plan, 'ArrowRight');
+    expect(col().x).toBeCloseTo(2.01, 9);
+    key(plan, 'ArrowUp', { shiftKey: true });
+    expect(col().y).toBeCloseTo(2.1, 9);
+    plan.doc.undo();
+    plan.doc.undo();
+    expect({ x: col().x, y: col().y }).toEqual({ x: 2, y: 2 });
+  });
+
+  /** Splits w2 at y = 1 and y = 3; returns the middle segment (needs connectors when pushed). */
+  function middleSegment(plan: H3xPlan): Id {
+    const s1 = splitWall('w2', { x: 4, y: 1 });
+    plan.doc.execute(s1);
+    const upper = Object.values(plan.doc.floor.walls).find(
+      (w) => (w.a === s1.createdId || w.b === s1.createdId) && w.a !== 'n2' && w.b !== 'n2',
+    )!;
+    const s2 = splitWall(upper.id, { x: 4, y: 3 });
+    plan.doc.execute(s2);
+    return wallBetween(plan, s1.createdId, s2.createdId)!;
+  }
+
+  it('Shift + wall drag pushes / pulls the wall as one undo step', () => {
+    const plan = makePlan();
+    const mid = middleSegment(plan);
+    const before = structuredClone(plan.doc.floor);
+    const walls = Object.keys(before.walls).length;
+    expect(hitKind(plan, { x: 4, y: 1.5 })).toBe('wall');
+    drag(plan, { x: 4, y: 1.5 }, { x: 5.02, y: 1.6 }, 5, { shiftKey: true });
+    const w = plan.doc.floor.walls[mid]!;
+    expect(node(plan, w.a).x).toBe(5);
+    expect(node(plan, w.b).x).toBe(5);
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(walls + 2);
+    expect(plan.issues.rejected).toEqual([]);
+    plan.doc.undo();
+    expect(plan.doc.floor).toEqual(before);
+  });
+
+  it('push / pull below the connector minimum leaves the document unchanged; Esc cancels', () => {
+    const plan = makePlan();
+    const mid = middleSegment(plan);
+    const before = structuredClone(plan.doc.floor);
+    drag(plan, { x: 4, y: 1.5 }, { x: 4.2, y: 1.5 }, 5, { shiftKey: true }, true);
+    expect(plan.doc.floor).toEqual(before);
+    expect(plan.issues.rejected).toEqual([]);
+    fire(plan, 'pointermove', { x: 5, y: 1.5 }, { shiftKey: true });
+    expect(node(plan, plan.doc.floor.walls[mid]!.a).x).toBe(5);
+    // Back below the minimum: stays at the last good state.
+    fire(plan, 'pointermove', { x: 4.1, y: 1.5 }, { shiftKey: true });
+    expect(node(plan, plan.doc.floor.walls[mid]!.a).x).toBe(5);
+    key(plan, 'Escape');
+    expect(plan.doc.floor).toEqual(before);
+    fire(plan, 'pointerup', { x: 4.1, y: 1.5 }, { shiftKey: true });
+    expect(plan.doc.floor).toEqual(before);
+    plan.doc.undo();
+    expect(Object.keys(plan.doc.floor.nodes)).toHaveLength(5); // the second split was undone
+  });
+
+  it('a node dragged onto another node is not moved while snapped; release merges in the same undo step', () => {
+    const plan = makePlan();
+    drag(plan, at(plan, 'n3'), { x: 0, y: 0 }, 2, {}, true);
+    expect(at(plan, 'n3')).toEqual({ x: 2, y: 2 });
+    expect(dropMarks(plan)).toBe(1);
+    fire(plan, 'pointerup', { x: 0, y: 0 });
+    expect(dropMarks(plan)).toBe(0);
+    expect(plan.doc.floor.nodes.n3).toBeUndefined();
+    expect(plan.selection).toEqual({ kind: 'node', id: 'n1' });
+    plan.doc.undo();
+    expect(at(plan, 'n3')).toEqual({ x: 4, y: 4 });
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('a node dragged onto a wall makes a T-junction on release', () => {
+    const plan = makePlan();
+    const add = addWall({
+      from: { at: { x: 2, y: 1 } },
+      to: { at: { x: 2, y: 3 } },
+      thickness: 0.2,
+    });
+    plan.doc.execute(add);
+    const before = structuredClone(plan.doc.floor);
+    const free = add.endNodeId;
+    drag(plan, { x: 2, y: 3 }, { x: 2.01, y: 4.02 }, 5, {}, true);
+    expect(at(plan, free).y).toBeLessThan(4);
+    expect(dropMarks(plan)).toBe(1);
+    fire(plan, 'pointerup', { x: 2.01, y: 4.02 });
+    expect(plan.doc.floor.nodes[free]).toBeUndefined();
+    const t = nodeAt(plan, { x: 2.01, y: 4 });
+    expect(t).toBeDefined();
+    expect(wallBetween(plan, t!, 'n3')).toBeDefined();
+    expect(wallBetween(plan, t!, 'n4')).toBeDefined();
+    expect(wallBetween(plan, t!, nodeAt(plan, { x: 2, y: 1 })!)).toBeDefined();
+    plan.doc.undo();
+    expect(plan.doc.floor).toEqual(before);
+  });
+
+  it('dragging off the target again moves the node and clears the mark', () => {
+    const plan = makePlan();
+    drag(plan, at(plan, 'n3'), { x: 0, y: 0 }, 2, {}, true);
+    fire(plan, 'pointermove', { x: 1, y: 1 });
+    expect(at(plan, 'n3')).toEqual({ x: 1, y: 1 });
+    expect(dropMarks(plan)).toBe(0);
+    fire(plan, 'pointerup', { x: 1, y: 1 });
+    expect(plan.doc.floor.nodes.n3).toBeDefined();
   });
 });

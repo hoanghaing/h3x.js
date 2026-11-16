@@ -75,6 +75,28 @@ export function renderPreview(
   }
 }
 
+/** Radius (px) of the drop-target marker. */
+const DROP_TARGET_RADIUS_PX = 7;
+
+/** Replaces the overlay layer's drop-target marker (a screen-sized ring at `at`); `null` clears. */
+export function renderDropTarget(
+  layer: SVGGElement,
+  view: View,
+  prefix: string,
+  at: Vec2 | null,
+): void {
+  for (const el of Array.from(layer.querySelectorAll(`.${prefix}-drop-target`))) el.remove();
+  if (!at) return;
+  layer.appendChild(
+    svgEl('circle', {
+      class: `${prefix}-drop-target`,
+      r: String(DROP_TARGET_RADIUS_PX),
+      transform: screenSpaceTransform(view, at),
+      ...NON_SCALING,
+    }),
+  );
+}
+
 /** Re-derives which walls show a length label, their geometry and screen rects. */
 export function syncDimensions(
   floor: Readonly<Floor>,

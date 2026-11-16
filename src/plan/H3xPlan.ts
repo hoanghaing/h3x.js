@@ -17,7 +17,13 @@ import {
   type RenderContext,
 } from './render';
 import type { DimensionState } from './dimensions';
-import { renderGuides, renderPreview, syncDimensions, type PreviewState } from './overlay';
+import {
+  renderDropTarget,
+  renderGuides,
+  renderPreview,
+  syncDimensions,
+  type PreviewState,
+} from './overlay';
 import { KINDS, LAYERS, entitiesOf, type LayerName, type PlanDom } from './kinds';
 import { dirtyEntities, syncEntity, syncJoins } from './reconcile';
 import { wallOutline } from './shapes';
@@ -111,6 +117,7 @@ export class H3xPlan {
   private readonly issuesEmitter = new Emitter<PlanIssues>();
   private readonly segmentEmitter = new Emitter<SegmentLengthRequest>();
   private preview: PreviewState | null = null;
+  private dropTarget: Vec2 | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -194,6 +201,7 @@ export class H3xPlan {
           ...(from ? { from } : {}),
           ...(extra ? { extra } : {}),
           ...(o?.structure === false ? { structure: false } : {}),
+          ...(o?.exclude ? { exclude: o.exclude } : {}),
         });
       },
       showGuides: (g) => this.showGuides(g),
@@ -244,6 +252,13 @@ export class H3xPlan {
     if (this.disposed) return;
     this.preview = segments ? { segments, ...(label ? { label } : {}) } : null;
     renderPreview(this.dom.layers.overlay, this._view, this.prefix, this.preview);
+  }
+
+  /** @internal Marks where a dragged node would be dropped (join on drop); `null` clears. */
+  showDropTarget(at: Vec2 | null): void {
+    if (this.disposed) return;
+    this.dropTarget = at ? { x: at.x, y: at.y } : null;
+    renderDropTarget(this.dom.layers.overlay, this._view, this.prefix, this.dropTarget);
   }
 
   /** The current view (a copy). */
@@ -429,6 +444,8 @@ export class H3xPlan {
     }
     this.refreshDimensions();
     if (this.preview) renderPreview(this.dom.layers.overlay, next, this.prefix, this.preview);
+    if (this.dropTarget)
+      renderDropTarget(this.dom.layers.overlay, next, this.prefix, this.dropTarget);
   }
 
   // ---- document sync ----------------------------------------------------
