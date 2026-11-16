@@ -194,7 +194,7 @@ describe('removeNode', () => {
     expect(f.rooms.r1!.walls).toHaveLength(4);
   });
 
-  it('re-bases offsets when the kept wall starts at the removed node', () => {
+  it('re-bases offsets and mirrors side / flip on the reversed wall', () => {
     const base = oneRoomFloor().openings.o1!;
     const floor: Floor = {
       ...oneRoomFloor(),
@@ -211,6 +211,7 @@ describe('removeNode', () => {
         oa: { ...base, id: 'oa', wall: 'wa', width: 0.6, offset: 1 }, // at x = 1
         ob: { ...base, id: 'ob', wall: 'wb', width: 0.6, offset: 1 }, // at x = 3
       },
+      items: { ia: outlet('ia', 'wa', 0.5), ib: outlet('ib', 'wb', 2) }, // at x = 1.5, x = 4
       rooms: {},
     };
     const doc = mk(floor);
@@ -218,8 +219,49 @@ describe('removeNode', () => {
     const f = doc.floor;
     expect(f.walls.wb).toBeUndefined();
     expect(f.walls.wa).toMatchObject({ a: 'q', b: 'p' });
-    expect(f.openings.oa).toMatchObject({ wall: 'wa', offset: 4 });
-    expect(f.openings.ob).toMatchObject({ wall: 'wa', offset: 2 });
+    // wa (n -> p) keeps its direction; wb (n -> q) runs against the merged q -> p wall.
+    expect(f.openings.oa).toMatchObject({ wall: 'wa', offset: 4, flip: false });
+    expect(f.openings.ob).toMatchObject({ wall: 'wa', offset: 2, flip: true });
+    expect(f.items.ia).toMatchObject({ wall: 'wa', offset: 3.5, side: 'left' });
+    expect(f.items.ib).toMatchObject({ wall: 'wa', offset: 1, side: 'right' });
+  });
+
+  it('keeps side / flip when the other wall runs with the merged wall', () => {
+    const floor = oneRoomFloor();
+    floor.openings.o1!.offset = 3;
+    floor.openings.o1!.flip = true;
+    floor.items.i1 = outlet('i1', 'w1', 3.5);
+    const doc = mk(floor);
+    const split = splitWall('w1', { x: 1.5, y: 0 });
+    doc.execute(split);
+    doc.execute(removeNode(split.createdId));
+    expect(doc.floor.openings.o1!.flip).toBe(true);
+    expect((doc.floor.items.i1 as WallItem).side).toBe('left');
+  });
+
+  it('deletes a triangle corner whose merge would duplicate a wall, and the room', () => {
+    const floor: Floor = {
+      ...oneRoomFloor(),
+      nodes: {
+        n1: { id: 'n1', x: 0, y: 0 },
+        n2: { id: 'n2', x: 4, y: 0 },
+        n3: { id: 'n3', x: 0, y: 4 },
+      },
+      walls: {
+        w1: { id: 'w1', a: 'n1', b: 'n2', thickness: 0.2, height: 3.2 },
+        w2: { id: 'w2', a: 'n2', b: 'n3', thickness: 0.2, height: 3.2 },
+        w3: { id: 'w3', a: 'n3', b: 'n1', thickness: 0.2, height: 3.2 },
+      },
+      openings: {},
+      rooms: { r1: { id: 'r1', walls: ['w1', 'w2', 'w3'], name: 'T' } },
+    };
+    const doc = mk(floor);
+    doc.execute(removeNode('n2'));
+    const f = doc.floor;
+    expect(f.nodes.n2).toBeUndefined();
+    expect(Object.keys(f.walls)).toEqual(['w3']);
+    expect(Object.keys(f.nodes).sort()).toEqual(['n1', 'n3']);
+    expect(f.rooms).toEqual({});
   });
 
   it('merges a corner into a straight wall; the triangle room keeps its id', () => {

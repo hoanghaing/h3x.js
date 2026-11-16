@@ -12,7 +12,7 @@ import { polygonOverlapArea } from '../geometry/clip';
 import { obbCorners } from '../geometry/obb';
 import { isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygon';
 import { segmentsIntersect } from '../geometry/segment';
-import { distance } from '../geometry/vec';
+import { distance, tidy } from '../geometry/vec';
 import { isBelowMinRoomArea, roomArea, roomPolygon } from '../rooms/detect';
 import type { Column, Floor, Id, Issue, Site, Vec2 } from '../types';
 
@@ -64,6 +64,16 @@ export function openingRange(
 /** True when `offset` lies in [lo, hi] within GEOM_TOL (and the range is not empty). */
 export function inRange(offset: number, r: { lo: number; hi: number }): boolean {
   return r.hi >= r.lo - GEOM_TOL && offset >= r.lo - GEOM_TOL && offset <= r.hi + GEOM_TOL;
+}
+
+/**
+ * `offset` when in range, else the nearest end of the range (tidied); null when the
+ * range is empty (nothing that wide fits).
+ */
+export function clampIntoRange(offset: number, r: { lo: number; hi: number }): number | null {
+  if (inRange(offset, r)) return offset;
+  if (r.hi < r.lo - GEOM_TOL) return null;
+  return tidy(Math.min(Math.max(offset, r.lo), r.hi));
 }
 
 function wallIssues(floor: Floor, ids: Iterable<Id>): Issue[] {
