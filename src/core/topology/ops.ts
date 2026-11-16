@@ -1,7 +1,7 @@
 import { assertFreeId, fail, notFound } from '../commands/shared';
 import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
 import { closestPointOnSegment } from '../geometry/segment';
-import { EPS, add, cross, distance, dot, scale, sub, tidy } from '../geometry/vec';
+import { EPS, add, cross, distance, dot, leftNormal, scale, sub, tidy } from '../geometry/vec';
 import { createId } from '../ids';
 import { clampIntoRange, openingRange, wallUsableRange } from '../validate/layout';
 import type { Floor, Id, PresetResolver, Vec2, Wall } from '../types';
@@ -401,4 +401,80 @@ export function addWallIn(
     };
   }
   return { wallId: ids.wall, endNodeId: nodeIds[last]! };
+}
+
+/**
+ * Moves a wall along its left normal by `dist` (signed). Per end: a free end just moves;
+ * a single other wall along the normal (within COLLINEAR_TOL) is slid (longer / shorter,
+ * openings re-fitted, `push-pull-cuts-opening` when one cannot fit); otherwise a new node
+ * and a connector wall (same thickness / height) from the old position replace the end.
+ * A slid neighbour or connector below MIN_WALL_LENGTH: `wall-too-short`.
+ * `ids` supplies up to 2 new node and 2 new wall ids (end `a`, then end `b`).
+ */
+export function pushPullIn(
+  draft: Floor,
+  wallId: Id,
+  dist: number,
+  ids: { nodes: [Id, Id]; walls: [Id, Id] },
+  presets?: PresetResolver,
+): void {
+  const w = draft.walls[wallId];
+  if (!w) throw notFound('Wall', wallId);
+  if (Math.abs(dist) < GEOM_TOL) return;
+  const [a, b] = endsOf(draft, w);
+  const n = leftNormal(sub(b, a));
+  const v = scale(n, dist);
+  const tooShort = (): Error =>
+    fail('wall-too-short', [wallId], `A wall must be at least ${MIN_WALL_LENGTH} m long`);
+  const resized: Id[] = [];
+  const ends: ['a' | 'b', number][] = [
+    ['a', 0],
+    ['b', 1],
+  ];
+  for (const [end, i] of ends) {
+    const nodeId = w[end];
+    const p = draft.nodes[nodeId]!;
+    const moved = { x: tidy(p.x + v.x), y: tidy(p.y + v.y) };
+    const others = wallsAt(draft, nodeId).filter((o) => o.id !== wallId);
+    const other = others.length === 1 ? others[0]! : undefined;
+    if (others.length === 0) {
+      draft.nodes[nodeId] = { ...p, ...moved };
+      continue;
+    }
+    if (other) {
+      const far = draft.nodes[other.a === nodeId ? other.b : other.a]!;
+      const dir = sub(far, p);
+      const len = distance(far, p);
+      if (len > 0 && Math.abs(cross(dir, n)) / len <= Math.sin(COLLINEAR_TOL)) {
+        if (
+          dot(sub(moved, far), sub(p, far)) <= 0 ||
+          distance(moved, far) < MIN_WALL_LENGTH - GEOM_TOL
+        ) {
+          throw fail(
+            'wall-too-short',
+            [other.id],
+            `A wall must be at least ${MIN_WALL_LENGTH} m long`,
+          );
+        }
+        draft.nodes[nodeId] = { ...p, ...moved };
+        resized.push(other.id);
+        continue;
+      }
+    }
+    if (Math.abs(dist) < MIN_WALL_LENGTH - GEOM_TOL) throw tooShort();
+    const newNode = ids.nodes[i]!;
+    const connector = ids.walls[i]!;
+    assertFreeId({ floor: draft }, newNode);
+    assertFreeId({ floor: draft }, connector);
+    draft.nodes[newNode] = { id: newNode, ...moved };
+    draft.walls[connector] = {
+      id: connector,
+      a: nodeId,
+      b: newNode,
+      thickness: w.thickness,
+      height: w.height,
+    };
+    w[end] = newNode;
+  }
+  fitOn(draft, resized, presets, 'push-pull-cuts-opening', 'does not fit after the push / pull');
 }
