@@ -20,12 +20,31 @@ export function junctionPolygons(joins: Joins): Record<Id, Vec2[]> {
   return out;
 }
 
-/** Midpoint of the widest horizontal chord through the polygon, sampled at several heights. */
+/** Chords within this fraction of the widest count as equally wide when placing a label. */
+const LABEL_WIDTH_SLACK = 0.05;
+
+/** Area centroid's y, or the vertex mean for a degenerate polygon. */
+function centroidY(poly: Vec2[]): number {
+  let a2 = 0;
+  let cy = 0;
+  poly.forEach((p, i) => {
+    const q = poly[(i + 1) % poly.length]!;
+    const c = p.x * q.y - q.x * p.y;
+    a2 += c;
+    cy += (p.y + q.y) * c;
+  });
+  if (Math.abs(a2) < GEOM_TOL) return poly.reduce((s, p) => s + p.y, 0) / (poly.length || 1);
+  return cy / (3 * a2);
+}
+
+/**
+ * Midpoint of a widest horizontal chord through the polygon, sampled at several heights; among
+ * chords about as wide as the widest, the one nearest the polygon's vertical middle.
+ */
 function labelPoint(poly: Vec2[]): Vec2 {
   const minY = Math.min(...poly.map((p) => p.y));
   const maxY = Math.max(...poly.map((p) => p.y));
-  let best: Vec2 | undefined;
-  let bestWidth = -1;
+  const chords: Array<{ mid: Vec2; width: number }> = [];
   const STEPS = 16;
   for (let s = 1; s < STEPS; s++) {
     const y = minY + ((maxY - minY) * s) / STEPS;
@@ -36,15 +55,16 @@ function labelPoint(poly: Vec2[]): Vec2 {
     });
     xs.sort((a, b) => a - b);
     for (let k = 0; k + 1 < xs.length; k += 2) {
-      const width = xs[k + 1]! - xs[k]!;
       const mid = { x: (xs[k]! + xs[k + 1]!) / 2, y };
-      if (width > bestWidth && pointInPolygon(mid, poly)) {
-        bestWidth = width;
-        best = mid;
-      }
+      if (pointInPolygon(mid, poly)) chords.push({ mid, width: xs[k + 1]! - xs[k]! });
     }
   }
-  if (best) return best;
+  if (chords.length > 0) {
+    const widest = Math.max(...chords.map((c) => c.width));
+    const cy = centroidY(poly);
+    const wide = chords.filter((c) => c.width >= widest * (1 - LABEL_WIDTH_SLACK) - GEOM_TOL);
+    return wide.reduce((b, c) => (Math.abs(c.mid.y - cy) < Math.abs(b.mid.y - cy) ? c : b)).mid;
+  }
   const n = poly.length || 1;
   return {
     x: poly.reduce((s, p) => s + p.x, 0) / n,
