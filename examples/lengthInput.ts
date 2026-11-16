@@ -1,4 +1,4 @@
-import type { H3xPlan } from 'h3x/plan';
+import type { H3xPlan, LengthEditRequest } from 'h3x/plan';
 
 /**
  * Demo code: shows a number input over a wall's dimension label while a length
@@ -13,12 +13,7 @@ export function attachLengthInput(plan: H3xPlan, host: HTMLElement): () => void 
     el?.remove();
   };
 
-  const open = (e: {
-    wallId: string;
-    length: number;
-    anchor: 'a' | 'b';
-    anchorRect: { x: number; y: number; width: number; height: number };
-  }): void => {
+  const open = (e: LengthEditRequest): void => {
     close();
     const el = document.createElement('input');
     input = el;
