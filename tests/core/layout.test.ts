@@ -258,6 +258,19 @@ describe('holes, columns and site validation', () => {
     expect(codes(f)).toContain('room-degenerate');
   });
 
+  it('blocks moving a hole node through the outer ring', () => {
+    const f = big();
+    room(f, [addBox(f, 'a', 2, 2, 2)]);
+    const doc = mk(f);
+    const r = doc.tryExecute(moveNode('an2', { x: 9, y: 4 }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.issues.some((i) => i.code === 'room-degenerate' && i.ids.includes('r1'))).toBe(
+        true,
+      );
+    }
+  });
+
   it('flags overlapping holes', () => {
     const f = big();
     room(f, [addBox(f, 'a', 2, 2, 2), addBox(f, 'b', 3, 3, 2)]);

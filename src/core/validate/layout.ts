@@ -266,7 +266,7 @@ export const layoutValidator: Validator = (doc: H3xDocument, changes: EntityChan
     if (nodes.has(w.a) || nodes.has(w.b)) walls.add(w.id);
   }
   for (const r of Object.values(floor.rooms)) {
-    if (r.walls.some((id) => walls.has(id))) rooms.add(r.id);
+    if ([...r.walls, ...(r.holes ?? []).flat()].some((id) => walls.has(id))) rooms.add(r.id);
   }
   return [
     ...wallIssues(floor, walls),
