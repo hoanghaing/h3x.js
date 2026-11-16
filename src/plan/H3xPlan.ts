@@ -183,7 +183,7 @@ export class H3xPlan {
           alignRadius: ALIGN_RADIUS_PX / this._view.scale,
         });
       },
-      snapDraw: (p, from, disabled, extra) => {
+      snapDraw: (p, from, disabled, extra, o) => {
         if (disabled) return { point: p, guides: [], target: { kind: 'free' } };
         const radius = ALIGN_RADIUS_PX / this._view.scale;
         return snapDraw(p, doc.floor, {
@@ -193,6 +193,7 @@ export class H3xPlan {
           reach: radius,
           ...(from ? { from } : {}),
           ...(extra ? { extra } : {}),
+          ...(o?.structure === false ? { structure: false } : {}),
         });
       },
       showGuides: (g) => this.showGuides(g),
