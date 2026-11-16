@@ -13,6 +13,7 @@ export type {
 } from './document/H3xDocument';
 
 export { moveNode, moveWall, setWallLength } from './commands/layout';
+export { splitWall, removeWall, removeNode } from './commands/structure';
 export {
   addOpening,
   moveOpening,

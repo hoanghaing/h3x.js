@@ -94,8 +94,14 @@ passed as `presets`.
   `setWallLength(wallId, length, { anchor? })` (`anchor: 'a'` default keeps node `a` fixed and
   moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items stay
   where they are relative to the fixed end (their distance from node `a`, or from node `b` with
-  `anchor: 'b'`), and are re-fitted into range on the resized wall. Topology (adding / removing
-  nodes and walls) is fixed in this release.
+  `anchor: 'b'`), and are re-fitted into range on the resized wall. These do not re-sync rooms.
+- Structure: `splitWall(wallId, at)` (`at` projected onto the wall; the original id keeps the
+  half from node `a`; `createdId` is the new node), `removeWall(wallId)` (also deletes its
+  openings, wall items and nodes left without walls), `removeNode(nodeId)` (degree 2 merges the
+  two walls into one straight wall, keeping the first wall id; otherwise deletes the node and
+  its walls). Openings / wall items are re-based and clamped into range. Each is one undo step
+  and re-syncs rooms (rooms keep their id and name where they overlap most). Rejections:
+  `split-too-short`, `split-cuts-opening`, `merge-drops-opening`.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
   `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
@@ -129,6 +135,9 @@ instead. Only entities touched by a change can block it.
 | `unknown-preset`, `mount-mismatch` | preset missing or wrong mount for the command                                                                             |
 | `not-found`                        | referenced id does not exist                                                                                              |
 | `duplicate-id`                     | a create command was run twice                                                                                            |
+| `split-too-short`                  | a split would leave a wall part below `MIN_WALL_LENGTH`                                                                   |
+| `split-cuts-opening`               | a split cuts an opening / wall item that cannot fit in the half holding its center                                        |
+| `merge-drops-opening`              | removing a node would merge walls into one too short for its openings / wall items                                        |
 | `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                                                   |
 | `room-open`                        | room walls do not form a closed loop (from room geometry helpers)                                                         |
 | `non-finite-number`                | `projectToXML` was given a non-finite number                                                                              |
