@@ -92,10 +92,10 @@ passed as `presets`.
 
 - Layout: `moveNode(nodeId, to)`, `moveWall(wallId, delta)` (projected on the wall normal),
   `setWallLength(wallId, length, { anchor? })` (`anchor: 'a'` default keeps node `a` fixed and
-  moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items keep
-  their offset measured from node `a`, as when moving node `a` with `moveNode`, and are
-  re-fitted into range on the resized wall. Topology (adding / removing nodes and walls) is fixed in this
-  release.
+  moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items stay
+  where they are relative to the fixed end (their distance from node `a`, or from node `b` with
+  `anchor: 'b'`), and are re-fitted into range on the resized wall. Topology (adding / removing
+  nodes and walls) is fixed in this release.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
   `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
@@ -234,9 +234,10 @@ both views.
   `plan.planToScreen(p)` and `plan.screenToPlan(p)`. Dragging empty space pans, the wheel zooms
   around the cursor, and two fingers pinch and pan. The view follows its container's size. The
   svg sets `touch-action: none` so touch gestures reach the plan instead of scrolling the page.
-- **Selection.** `plan.selection` is `{ kind, id } | null` (`kind`: `'node' | 'wall' | 'room' |
-'opening' | 'item'`); `plan.select(sel)` sets it (an unknown id selects nothing). Clicking
-  selects nodes and walls. `plan.getElement(kind, id)` returns the entity's `<g>`.
+- **Selection.** `plan.selection` is `{ kind, id } | null` (`kind`: `'node'`, `'wall'`,
+  `'room'`, `'opening'` or `'item'`); `plan.select(sel)` sets it (an unknown id selects
+  nothing). Clicking selects nodes and walls. `plan.getElement(kind, id)` returns the entity's
+  `<g>`.
 - **Events.** `plan.on(type, fn)` returns an unsubscribe function.
   - `selectionchange` receives the new `Selection | null`, only when it changes.
   - `lengthEditRequest` receives `{ wallId, length, anchor, anchorRect }` when the user
@@ -250,9 +251,11 @@ both views.
   field. On `lengthEditRequest` your editor shows its own input, then calls
   `plan.setWallLength(wallId, length, { anchor? })`. That runs `setWallLength` through
   `doc.tryExecute`, returns `{ ok: true } | { ok: false, issues }` and flashes a rejection.
-  Without `anchor` the plan picks one: the end with more walls attached stays; on a tie the end
-  farther from the double-click stays; otherwise node `a` stays (`pickAnchor(floor, wallId,
-near?)` is exported). `plan.reportRejected(issues)` flashes issues from your own edits.
+  Without `anchor` the plan picks one with `pickAnchor(floor, wallId)`: the end with more walls
+  attached stays, and on a tie node `a` stays. The `anchor` suggested in `lengthEditRequest`
+  uses `pickAnchor(floor, wallId, near)` with the double-click point, so there a tie keeps the
+  end farther from the double-click. `pickAnchor` is exported. `plan.reportRejected(issues)`
+  flashes issues from your own edits.
 - **Tools.** `plan.setTool(tool | null)` swaps the active tool (the old one is deactivated
   first); `plan.tool` is the current one. The default is `new SelectEditTool()`; `tool: null`
   leaves a plan that only pans and zooms. A `Tool` implements `activate(ctx)`, `deactivate()`

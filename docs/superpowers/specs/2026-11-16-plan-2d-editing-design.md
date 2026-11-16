@@ -125,12 +125,12 @@ plan.dispose()                    // idempotent; removes listeners, the SVG, the
 - `lengthEditRequest` payload: `{ wallId, length, anchor: 'a' | 'b', anchorRect }`
   (`anchorRect` = screen rect of the dimension label, `{ x, y, width, height }`) so the editor
   can place its own input there.
-- Anchor choice *(designer's call after review)*: `a` / `b` is just file order, so the plan
+- Anchor choice _(designer's call after review)_: `a` / `b` is just file order, so the plan
   picks the end that should stay put and puts it in the payload as a suggestion. Rule: keep
   the end that more walls meet at; on a tie keep the end farther from the double-click point;
   if still tied, `'a'`. `plan.setWallLength` uses the same rule when `anchor` is omitted. The
   editor can pass the suggestion back unchanged or override it.
-- Two kinds of issues *(user's decision: persistent marking)*:
+- Two kinds of issues _(user's decision: persistent marking)_:
   - **Rejected step** — a drag step, arrow nudge or `plan.setWallLength` call that the
     document refused. The offending entities flash briefly (`…-rejected` class).
   - **Standing placement problems** — after every document change (and on construction) the
@@ -154,8 +154,8 @@ window: gap + three lines), items (footprint rectangle outline, read-only), dime
 - Grid: 1 m major and 0.1 m minor lines, minor lines hidden when they would be closer than a
   few pixels.
 - Dimensions: the selected wall shows its length; while dragging a node, every wall touching
-  it shows its live length; with nothing selected, exterior walls show their lengths (*builder
-  may tune which walls show at rest*). Length is the centre-line length, shown with 2 decimals
+  it shows its live length; with nothing selected, exterior walls show their lengths (_builder
+  may tune which walls show at rest_). Length is the centre-line length, shown with 2 decimals
   in meters.
 - Line widths, handle sizes and label sizes are constant in screen pixels (use
   `vector-effect: non-scaling-stroke` or recompute on zoom).
@@ -173,7 +173,7 @@ window: gap + three lines), items (footprint rectangle outline, read-only), dime
 ```ts
 interface Tool {
   activate(ctx: ToolContext): void;
-  deactivate(): void;            // must cancel any gesture in progress
+  deactivate(): void; // must cancel any gesture in progress
   onPointerDown?(e: PlanPointerEvent): void;
   onPointerMove?(e: PlanPointerEvent): void;
   onPointerUp?(e: PlanPointerEvent): void;
@@ -196,7 +196,7 @@ Pan / zoom is handled by `H3xPlan` itself when the tool does not consume the poi
   `doc.tryExecute(moveNode(id, target), { coalesceKey })`. On rejection the node stays at its
   last valid position and `issues` fires. Pointer-up: `doc.endCoalesce()`.
 - **Drag a wall**: same flow with `moveWall`; the delta is computed against the wall's
-  *current* position each move (the command is relative). Snap the wall's offset along its
+  _current_ position each move (the command is relative). Snap the wall's offset along its
   normal to the grid.
 - **Esc during a drag**: revert to the state before the gesture with no redo entry (needs the
   core addition below). Esc with no gesture clears selection.
@@ -215,9 +215,9 @@ Pan / zoom is handled by `H3xPlan` itself when the tool does not consume the poi
    leaves the redo stack as it was before the gesture. Otherwise it does nothing and returns
    `false`. Each gesture uses a unique key (for example `plan-drag-<counter>`), so a gesture
    can never cancel someone else's group. History must keep the redo stack that existed when
-   the group opened so it can be restored. *(Designer's call after review.)*
+   the group opened so it can be restored. _(Designer's call after review.)_
 
-### Interrupted gestures *(designer's call after review)*
+### Interrupted gestures _(designer's call after review)_
 
 The coalesce group belongs to the document, not to the drag: any command run without the
 same key, `undo`, `redo` or an external `endCoalesce()` closes it (`History.push`). So the

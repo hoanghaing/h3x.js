@@ -61,11 +61,13 @@ examples/*                      split view demo
 ### Task 1: Move wall joins to a shared three-free module
 
 **Files:**
+
 - Create: `src/shared/walls/joins.ts` (content of current `src/three/walls/joins.ts`, imports adjusted to `../../core/...`)
 - Modify: `src/three/walls/joins.ts` (replace body with `export * from '../../shared/walls/joins';`)
 - Test: `tests/shared/no-three.test.ts`
 
 **Interfaces:**
+
 - Produces: `computeWallCorners(floor): Record<Id, WallCorners>`, `computeJoins(floor): Joins`, types `WallCorners`, `Junction`, `Joins`, `MITER_LIMIT` importable from `src/shared/walls/joins`. Public `h3x/three` exports unchanged.
 
 - [ ] **Step 1: Write the failing test** `tests/shared/no-three.test.ts`: read every `.ts` file under `src/shared` and (later) `src/plan` with `node:fs` (recursive), assert none contains `from 'three'`, `from "three"`, `'three/` or `/three/` import paths (a missing `src/plan` directory counts as zero files); also assert `src/shared/walls/joins.ts` exists.
@@ -77,11 +79,13 @@ examples/*                      split view demo
 ### Task 2: `setWallLength` anchor option
 
 **Files:**
+
 - Modify: `src/core/commands/layout.ts` (`setWallLength`)
 - Modify: `README.md` Commands section
 - Test: `tests/core/layout.test.ts`
 
 **Interfaces:**
+
 - Produces: `setWallLength(wallId: Id, length: number, opts?: { anchor?: 'a' | 'b' }): Command`. Default `'a'` (today's behaviour). `'b'`: node b fixed, a moves along b→a to distance `length`.
 
 - [ ] **Step 1: Write failing tests** in `layout.test.ts` using `oneRoomFloor` wall `w1` (n1 (0,0) → n2 (4,0)), with neighbouring nodes free to stretch walls:
@@ -96,11 +100,13 @@ examples/*                      split view demo
 ### Task 3: `doc.cancelCoalesce(key)`
 
 **Files:**
+
 - Modify: `src/core/document/history.ts`, `src/core/document/H3xDocument.ts`
 - Modify: `README.md` Document section
 - Test: `tests/core/document.test.ts`
 
 **Interfaces:**
+
 - Produces: `History.cancel(key: string): EntityChange[] | undefined`; `H3xDocument.cancelCoalesce(key: string): boolean`; `ChangeEvent.reason` gains `'cancel'`.
 
 Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), the redo stack as it was just before that push (`groupRedo`). `cancel(key)` succeeds only if the group is open (`!sealed`) and the top entry's key is `key`: pop it, restore `redoStack = groupRedo`, seal, return its changes. `cancelCoalesce` applies them backward and emits `{ reason: 'cancel', changes: invert(changes) }`; returns `true`. Otherwise returns `false`, emits nothing.
@@ -120,11 +126,13 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 4: `h3x/plan` entry, types and view transform
 
 **Files:**
+
 - Create: `src/plan/index.ts`, `src/plan/types.ts`, `src/plan/view.ts`
 - Modify: `vite.config.ts` (entry `'plan/index': 'src/plan/index.ts'`), `package.json` `exports["./plan"]` (types `./dist/plan/index.d.ts`, import `./dist/plan/index.js`), `tsconfig.json` paths `h3x/plan`, `examples/vite.config.ts` alias `h3x/plan`
 - Test: `tests/plan/view.test.ts`, `tests/package.test.ts`
 
 **Interfaces:**
+
 - Produces (`types.ts`): `type PlanKind = 'node' | 'wall' | 'room' | 'opening' | 'item'`; `interface Selection { kind: PlanKind; id: Id }`; `interface ScreenPoint { x: number; y: number }`; `interface Rect { x: number; y: number; width: number; height: number }`; `interface PlanIssues { rejected: Issue[]; standing: Issue[] }`.
 - Produces (`view.ts`): `interface View { cx: number; cy: number; scale: number; width: number; height: number }` (scale = px per meter; width/height = viewport px). `MIN_SCALE = 5`, `MAX_SCALE = 2000`, `DEFAULT_SCALE = 50`. Functions: `planToScreen(v, p: Vec2): ScreenPoint` (`sx = (x-cx)*scale + width/2`, `sy = height/2 - (y-cy)*scale`), `screenToPlan(v, s): Vec2`, `zoomAt(v, s: ScreenPoint, factor): View` (keeps the plan point under `s` fixed, scale clamped), `panBy(v, dx, dy): View` (screen px), `fitBounds(v, min: Vec2, max: Vec2, paddingPx = 40): View`.
 
@@ -143,10 +151,12 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 5: Snapping
 
 **Files:**
+
 - Create: `src/plan/snap.ts`
 - Test: `tests/plan/snap.test.ts`
 
 **Interfaces:**
+
 - Produces: `interface SnapOptions { grid: number; align: boolean; alignRadius: number /* meters */ }`; `interface SnapResult { point: Vec2; guides: Array<{ axis: 'x' | 'y'; value: number; from: Vec2 }> }`; `snapPoint(p: Vec2, others: Vec2[], opts: SnapOptions): SnapResult`; `snapScalar(v: number, grid: number): number`. Rule: per axis, alignment to the nearest other node within `alignRadius` wins over grid; otherwise round to `grid`. `grid <= 0` disables grid. Callers pass `alignRadius = 8 / view.scale`.
 
 - [ ] **Step 1: Write failing tests**: `(1.23, 2.07)` grid 0.05 no others → `(1.25, 2.05)`, no guides; with other `(1.21, 9)` and radius 0.05 → x = `1.21` with guide `{ axis: 'x', value: 1.21 }`, y grid-snapped; `align: false` ignores others; `grid: 0` + no others → point unchanged; `snapScalar(0.376, 0.05)` ≈ `0.4`; `snapScalar(-0.024, 0.05)` ≈ `0`.
@@ -158,10 +168,12 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 6: Render shapes and dimensions
 
 **Files:**
+
 - Create: `src/plan/shapes.ts`, `src/plan/dimensions.ts`
 - Test: `tests/plan/shapes.test.ts`, `tests/plan/dimensions.test.ts`
 
 **Interfaces:**
+
 - Consumes: `computeJoins` (Task 1), `roomPolygon`, `roomArea` (core), `View` (Task 4).
 - Produces (`shapes.ts`, all plan-space meters):
   - `wallOutline(c: WallCorners): Vec2[]` → `[startLeft, endLeft, endRight, startRight]`.
@@ -188,10 +200,12 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 7: Hit testing and length-edit anchor
 
 **Files:**
+
 - Create: `src/plan/hit.ts`, `src/plan/anchor.ts`
 - Test: `tests/plan/hit.test.ts`, `tests/plan/anchor.test.ts`
 
 **Interfaces:**
+
 - Consumes: shapes (Task 6), `View` (Task 4).
 - Produces:
   - `type HitTarget = { kind: PlanKind; id: Id } | { kind: 'dimension'; id: Id /* wall id */ } | null`.
@@ -208,19 +222,22 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 8: `H3xPlan` rendering, document sync and view
 
 **Files:**
+
 - Create: `src/plan/H3xPlan.ts`, `src/plan/style.ts`
 - Modify: `src/plan/index.ts`
 - Test: `tests/plan/H3xPlan.test.ts` (`// @vitest-environment jsdom`)
 
 **Interfaces:**
+
 - Consumes: Tasks 4–7.
 - Produces:
+
   ```ts
   interface H3xPlanOptions {
-    grid?: boolean;                                     // default true
-    snap?: { grid?: number; align?: boolean };          // default { grid: 0.05, align: true }
-    classPrefix?: string;                               // default 'h3x-plan'
-    presets?: PresetResolver;                           // default doc.presets
+    grid?: boolean; // default true
+    snap?: { grid?: number; align?: boolean }; // default { grid: 0.05, align: true }
+    classPrefix?: string; // default 'h3x-plan'
+    presets?: PresetResolver; // default doc.presets
   }
   class H3xPlan {
     constructor(container: HTMLElement, doc: H3xDocument, opts?: H3xPlanOptions);
@@ -235,6 +252,7 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
     dispose(): void;
   }
   ```
+
   Layers (`<g>` with class `${prefix}-layer-<name>`), in order: `grid, rooms, walls, joins, openings, items, dimensions, nodes, overlay`. Each entity `<g>` has `data-h3x-kind`, `data-h3x-id`, class `${prefix}-${kind}`. Container size from `clientWidth/clientHeight` (0 allowed); `ResizeObserver` when defined, else `window` resize.
   Rendering: one `<g>` per entity, containing `<polygon>`/`<path>`/`<text>` children; the root `<g>` carries the plan→screen transform as `matrix(scale,0,0,-scale,…)` **except text**, which is positioned in screen space (so labels are upright and pixel-sized). Strokes use `vector-effect: non-scaling-stroke`. Grid: 1 m major, 0.1 m minor hidden when `0.1 * scale < 6`.
   Sync: `doc.on('change')` → collect changed ids; recompute corners/joins (cheap) and re-apply attributes for changed walls **and walls sharing a node with any changed node or wall**, their openings, rooms containing them, and all dimensions; add/remove elements for entities that appeared/disappeared (reason `'load'` or any → full reconcile is acceptable when the change touches > 50 ids).
@@ -256,11 +274,14 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 9: Selection, issues and `setWallLength`
 
 **Files:**
+
 - Modify: `src/plan/H3xPlan.ts`
 - Test: `tests/plan/H3xPlan.selection.test.ts` (jsdom)
 
 **Interfaces:**
+
 - Produces on `H3xPlan`:
+
   ```ts
   get selection(): Selection | null;
   select(sel: Selection | null): void;     // unknown id → null; fires only when it changes
@@ -274,6 +295,7 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
   emitLengthEditRequest(wallId: Id, near?: Vec2): void;   // used by tools
   // LengthEditRequest = { wallId: Id; length: number; anchor: 'a' | 'b'; anchorRect: Rect }
   ```
+
   Classes: selected element `${prefix}-selected`; standing problems `${prefix}-invalid` on every entity in any standing issue's `ids`; rejected flash `${prefix}-rejected` added on `reportRejected` and removed after 600 ms (via `setTimeout`, cleared on dispose). Standing = `[...doc.validateLayout(), ...doc.validatePlacements()]`, recomputed on construction and after every change; `issues` fires when either list's content changes (compare by `code` + `ids`).
   `setWallLength` runs `doc.tryExecute(setWallLength(...))`; on failure calls `reportRejected`.
 
@@ -292,25 +314,34 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 10: Tool interface, pointer dispatch, pan and zoom
 
 **Files:**
+
 - Create: `src/plan/tools/Tool.ts`
 - Modify: `src/plan/H3xPlan.ts`, `src/plan/index.ts`
 - Test: `tests/plan/tools.test.ts` (jsdom)
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
-  interface PlanPointerEvent { native: PointerEvent | MouseEvent; screen: ScreenPoint; plan: Vec2; hit: HitTarget }
+  interface PlanPointerEvent {
+    native: PointerEvent | MouseEvent;
+    screen: ScreenPoint;
+    plan: Vec2;
+    hit: HitTarget;
+  }
   interface ToolContext {
-    plan: H3xPlan; doc: H3xDocument;
+    plan: H3xPlan;
+    doc: H3xDocument;
     hit(s: ScreenPoint): HitTarget;
     snap(p: Vec2, exclude: Id[], disabled: boolean): SnapResult; // uses opts.snap, alignRadius = 8 / scale, others = nodes not in exclude
-    showGuides(g: SnapResult['guides']): void;                   // overlay; [] clears
-    setDragging(nodeId: Id | null): void;                        // drives wallsShowingDimensions
+    showGuides(g: SnapResult['guides']): void; // overlay; [] clears
+    setDragging(nodeId: Id | null): void; // drives wallsShowingDimensions
   }
   interface Tool {
     activate(ctx: ToolContext): void;
     deactivate(): void;
-    onPointerDown?(e: PlanPointerEvent): boolean;  // true = consumed (plan will not pan)
+    onPointerDown?(e: PlanPointerEvent): boolean; // true = consumed (plan will not pan)
     onPointerMove?(e: PlanPointerEvent): void;
     onPointerUp?(e: PlanPointerEvent): void;
     onDoubleClick?(e: PlanPointerEvent): void;
@@ -320,6 +351,7 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
   // H3xPlanOptions gains `tool?: Tool | null` (Task 11 makes `new SelectEditTool()` the default when omitted; `null` = no tool)
   // The tool receives pointermove/up even when its onPointerDown returned false (it just has no gesture); the plan pans in that case.
   ```
+
   `H3xPlan` listens on `svg`: `pointerdown/move/up/cancel`, `dblclick`, `wheel` (`passive: false`), `keydown` (svg has `tabindex="0"`; focus on pointerdown). Pointer capture on pointerdown. Wheel: `zoomAt(view, cursor, Math.exp(-deltaY * 0.0015))`, `preventDefault`. Pan: pointerdown not consumed by the tool (or middle button) → drag pans the view. Pinch: two active pointers → zoom about their midpoint by distance ratio, pan by midpoint motion; the tool gets no events while two pointers are down. `pointercancel` is delivered to the tool as `onPointerUp`. `setTool` calls `deactivate` on the old tool before `activate` on the new; `dispose` deactivates.
 
 - [ ] **Step 1: Write failing tests** with a recording fake tool and synthetic events (jsdom has `PointerEvent` only in recent versions; if missing, dispatch `MouseEvent` with type `pointerdown` and a `pointerId` property — add a tiny helper in the test):
@@ -336,15 +368,18 @@ Behaviour: history stores, when it pushes a **new** keyed entry (not a merge), t
 ### Task 11: `SelectEditTool`
 
 **Files:**
+
 - Create: `src/plan/tools/SelectEditTool.ts`
 - Modify: `src/plan/H3xPlan.ts` (default tool), `src/plan/index.ts`
 - Test: `tests/plan/SelectEditTool.test.ts` (jsdom)
 
 **Interfaces:**
+
 - Consumes: `Tool`, `ToolContext` (Task 10); `moveNode`, `moveWall`, `doc.tryExecute`, `doc.endCoalesce`, `doc.cancelCoalesce` (Task 3); `plan.select`, `plan.reportRejected`, `plan.emitLengthEditRequest` (Task 9).
 - Produces: `class SelectEditTool implements Tool` with `constructor(opts?: { dragThresholdPx?: number /* 4 */; nudge?: number /* 0.01 */; nudgeLarge?: number /* 0.1 */ })`.
 
 Behaviour (from the spec):
+
 - pointerdown on node / wall: consume, remember start; on room / opening / item / empty: return `false` (plan pans) and on pointerup without movement clear the selection (`plan.select(null)`). Dimension hit: consume, no drag.
 - movement > threshold starts a gesture with key `plan-drag-<n>` (`n` increments per tool instance) and selects the target.
 - node drag: target = `ctx.snap(e.plan, [nodeId], altKey)` → `tryExecute(moveNode(id, point), { coalesceKey })`; `ctx.showGuides`; `ctx.setDragging(id)`. Failure → `plan.reportRejected(issues)`, node stays; success after a failure → `reportRejected([])`.
@@ -376,11 +411,13 @@ Behaviour (from the spec):
 ### Task 12: Example page — plan and 3D side by side
 
 **Files:**
+
 - Modify: `examples/index.html`, `examples/main.ts`
 - Create: `examples/lengthInput.ts`
 - Test: `tests/plan/example-length-input.test.ts` (jsdom)
 
 **Interfaces:**
+
 - Consumes: `H3xPlan`, `lengthEditRequest`, `plan.setWallLength`, `plan.on('issues')`.
 - Produces: `attachLengthInput(plan: H3xPlan, host: HTMLElement): () => void` — on `lengthEditRequest` shows an absolutely positioned `<input type="number" step="0.01">` over `anchorRect` (relative to the plan container) with the current length; Enter → `plan.setWallLength(wallId, value, { anchor })`, closes on success, keeps open with the first issue message in its `title` and a red border on failure; Esc or blur closes. Demo code only.
 
@@ -395,6 +432,7 @@ Layout: `#plan` left half, `#app` (3D) right half (stack vertically under 700 px
 ### Task 13: Docs and roadmap
 
 **Files:**
+
 - Modify: `README.md` (new `## h3x/plan` section after `## h3x/three`; intro list mentions the subpath), `docs/roadmap.md` (milestone 3 → Done), `CHANGELOG.md` (Unreleased: `h3x/plan`, `setWallLength` anchor, `cancelCoalesce`)
 - Test: `tests/core/public-api.test.ts` (only if the README example block changes)
 
