@@ -37,8 +37,17 @@ height changes, the steps recompute.
    - Winders radiate from the inner corner of the turn (pointed inner ends are allowed — common in
      narrow townhouses). Their tread depth on the walking line (middle of the flight) must be
      ≥ `0.60 − 2h`.
-   - Risers are split between the two flights of L / U so both fit; the first flight takes the
-     larger share. Builder may choose the exact split rule.
+   - **Where the slack goes (my call).** The stair always arrives at a bay edge: the last riser
+     lies on the bay boundary, where the upper slab edge is. Leftover length is absorbed so no odd
+     strip appears at the top:
+     - `straight`: the slack goes to the bottom; the first riser is set back from the −y edge
+       (floor space in front of the stair, inside the bay).
+     - `L` / `U` with a landing: risers are split as evenly as possible between the two flights
+       (the first flight takes the extra riser when odd) and the landing grows to absorb the
+       slack. The first flight starts at the −y edge; the second ends at the far edge (the side
+       edge for L, the −y edge for U).
+     - `L` / `U` with winders: the slack goes to the bottom of the first flight, as for straight.
+     - `spiral`: the open corners of the square opening are accepted.
 4. **Slab opening.** The floor directly above gets an opening equal to the stair bay (my call: the
    whole bay — simple, always gives headroom). The slab and the room floors of that floor are cut
    by it in 3D; in 2D the upper floor shows the opening.
@@ -47,11 +56,14 @@ height changes, the steps recompute.
    default parameters. `SelectEditTool` selects, drags (moves) and deletes stairs. Changing type,
    hand, turn, flight width or rotation is done by the host calling `updateStair`.
 6. **Copy on add floor.** `addFloor` copies stairs like columns (fresh ids, same bay and
-   parameters), because townhouse stairs stack in the same bay.
+   parameters), because townhouse stairs stack in the same bay. The new top floor therefore
+   carries a stair with `stair-no-floor-above` until another floor is added; the user deletes it
+   or keeps it for roof access (M7). This is a normal, non-blocking state.
 7. **Validation (non-blocking warnings, so a storey-height change is never blocked):**
    - `stair-does-not-fit` — flights / winders / spiral headroom cannot fit the bay.
    - `stair-no-floor-above` — the stair is on the top floor.
-   - `stair-overlaps-wall` — the bay overlaps a wall of its floor (using the wall outlines).
+   - `stair-overlaps-wall` — a wall outline overlaps the bay interior by more than 1 cm² (touching
+     a wall face, the normal case for a bay inside a stairwell, does not count).
      A stair with one of the first two warnings is drawn as its bay outline only.
 8. **2D drawing** (on the stair's floor): steps as lines, the walking line with an arrow from the
    first riser, the label "UP" (overridable, see below), and a diagonal break line across the first
@@ -71,6 +83,8 @@ height changes, the steps recompute.
 - Free voids / double-height openings (ô thông tầng, giếng trời) not tied to a stair — a separate
   element later; this design must not block it.
 - A manual riser-count override (follow-up if contractors ask).
+- The opening in core data: room areas, quantities and item / column checks ignore it in M6 (a 2D /
+  3D matter). The quantities milestone will subtract it.
 - Host UI for stair parameters (h3xEditor, M9).
 
 ## Anti-goals
@@ -186,8 +200,11 @@ there is no floor above. Pure, deterministic, unit-tested per type and turn styl
   the warnings as for other kinds.
 - The floor above shows a non-interactive layer with the openings and the stairs seen from above,
   labelled "DN" (reuse / extend the M5 underlay layer).
-- `StairTool` (drag a bay; Esc cancels; emits nothing else), selection / move / delete in
-  `SelectEditTool`; hit-testing on the bay rectangle.
+- `StairTool` (drag a bay; Esc cancels), selection / move / delete in `SelectEditTool`;
+  hit-testing on the bay rectangle. Bay corners snap to the corners of room inner outlines (wall
+  faces) first, then to the grid, so a bay dragged inside a stairwell room sits on the wall faces
+  and does not trigger `stair-overlaps-wall` (my call: nodes are wall centrelines and would overlap
+  half of each wall).
 - Plan option `stairLabels`.
 
 ## Left to the builder
