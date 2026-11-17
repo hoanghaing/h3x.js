@@ -5,7 +5,7 @@ import { addWall, removeWall } from '../../src/core/commands/structure';
 import { H3xValidationError } from '../../src/core/errors';
 import { validateLayout } from '../../src/core/validate/layout';
 import type { Floor, Project, Vec2, Wall } from '../../src/core/types';
-import { oneRoomFloor, testPresets } from '../fixtures/floors';
+import { ctxFor, oneRoomFloor, testPresets } from '../fixtures/floors';
 
 const mk = (floor: Floor): H3xDocument =>
   H3xDocument.fromProject(
@@ -303,7 +303,7 @@ describe('addWall', () => {
     const created = cmd.createdId;
     const end = cmd.endNodeId;
     expect(created).not.toBe(end);
-    const ctx = { floor: oneRoomFloor(), presets: testPresets };
+    const ctx = ctxFor(oneRoomFloor(), testPresets);
     const first = cmd.run(ctx);
     expect(cmd.run(ctx)).toEqual(first);
     expect(first.map((c) => c.id)).toEqual(expect.arrayContaining([created, end]));
