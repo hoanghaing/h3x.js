@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+Milestone 4: structure drawing.
+
+- Core commands: `addWall`, `removeWall`, `splitWall`, `removeNode`, `mergeNodes`, `dropNode`,
+  `pushPullWall`, `addColumn`, `moveColumn`, `removeColumn` and `setSite`, each one undo step
+  with rooms re-synced; new issue codes for splits, merges, push / pull, columns and the site.
+- XML: `<column>` elements and an optional `<site>` outline (see `docs/xml-format.md`).
+- Plan tools: `DrawWallTool`, `DrawSiteTool` and `ColumnTool`; `SelectEditTool` gains insert
+  point (double-click a wall), delete, push / pull (Shift + drag a wall), join on drop and column
+  drag.
+- `segmentLengthRequest` event and `plan.setPendingSegmentLength(length)` for typed wall lengths
+  while drawing.
+- 3D: columns, site outline and floors with holes.
+- Example page: toolbar to draw from an empty document, plus a segment length input.
+
 Milestone 3: `h3x/plan`.
 
 - `H3xPlan`: SVG plan of an `H3xDocument` with pan, zoom, pinch, selection, live dimensions,
