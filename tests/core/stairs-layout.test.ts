@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { layoutStair } from '../../src/core/stairs/layout';
 import type { StairLayout } from '../../src/core/stairs/layout';
-import { signedArea } from '../../src/core/geometry/polygon';
+import { pointInPolygon, signedArea } from '../../src/core/geometry/polygon';
 import type { Stair, Vec2 } from '../../src/core/types';
 
 const H = 3.35; // n = 19
@@ -168,6 +168,184 @@ describe('layoutStair — L with landing', () => {
     for (let i = 1; i < 8; i++) expect(cx(f2[i]!.outline)).toBeLessThan(cx(f2[i - 1]!.outline));
     expect(minX(f2[7]!.outline)).toBeCloseTo(-1.75, 9);
     insideBay(l, 3.5, 3.5);
+  });
+});
+
+const bMin = 0.6 - 2 * h;
+const isAxisRect = (o: Vec2[]): boolean =>
+  o.length === 4 &&
+  o.every((p, i) => {
+    const q = o[(i + 1) % 4]!;
+    return Math.abs(p.x - q.x) < 1e-9 || Math.abs(p.y - q.y) < 1e-9;
+  });
+const hasVertex = (o: Vec2[], v: Vec2): boolean =>
+  o.some((p) => Math.abs(p.x - v.x) < 1e-9 && Math.abs(p.y - v.y) < 1e-9);
+/** Length of the walking line inside each polygon, sampled every 0.5 mm. */
+function walkDepths(walk: Vec2[], polys: Vec2[][]): number[] {
+  const out = polys.map(() => 0);
+  const ds = 0.0005;
+  for (let i = 1; i < walk.length; i++) {
+    const a = walk[i - 1]!;
+    const b = walk[i]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const k = Math.ceil(len / ds);
+    for (let j = 0; j < k; j++) {
+      const t = (j + 0.5) / k;
+      const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      polys.forEach((poly, m) => {
+        if (pointInPolygon(p, poly)) out[m]! += len / k;
+      });
+    }
+  }
+  return out;
+}
+
+describe('layoutStair — L with winders', () => {
+  const L = (over: Partial<Stair> = {}): Stair =>
+    stair({ type: 'L', turn: 'winder', width: 2.6, depth: 3.2, flightWidth: 0.9, ...over });
+
+  it('turns the corner with 3 winders radiating from the inner corner', () => {
+    const l = ok(layoutStair(L(), H));
+    expect(l.steps).toHaveLength(18);
+    expect(l.landings).toHaveLength(0);
+    const winders = l.steps.filter((s) => !isAxisRect(s.outline));
+    expect(winders).toHaveLength(3);
+    const inner = { x: -1.3 + 0.9, y: 1.6 - 0.9 };
+    for (const w of winders) expect(hasVertex(w.outline, inner)).toBe(true);
+    const first = l.steps.indexOf(winders[0]!);
+    expect(l.steps.slice(first, first + 3)).toEqual(winders);
+    const depths = walkDepths(
+      l.walkLine,
+      winders.map((w) => w.outline),
+    );
+    for (const d of depths) expect(d).toBeGreaterThanOrEqual(bMin - 1e-3);
+    // last riser on the side edge, slack at the bottom of the first flight
+    expect(maxX(l.steps[17]!.outline)).toBeCloseTo(1.3, 9);
+    expect(l.walkLine.at(-1)!.x).toBeCloseTo(1.3, 9);
+    expect(minY(l.steps[0]!.outline)).toBeGreaterThan(-1.6 - 1e-9);
+    expect(l.walkLine[0]!.y).toBeCloseTo(minY(l.steps[0]!.outline), 9);
+    l.steps.forEach((s, i) => expect(s.top).toBeCloseTo((i + 1) * h, 9));
+    insideBay(l, 2.6, 3.2);
+  });
+
+  it('mirrors for hand left', () => {
+    const l = ok(layoutStair(L({ hand: 'left' }), H));
+    const winders = l.steps.filter((s) => !isAxisRect(s.outline));
+    expect(winders).toHaveLength(3);
+    for (const w of winders) expect(hasVertex(w.outline, { x: 0.4, y: 0.7 })).toBe(true);
+    expect(minX(l.steps[17]!.outline)).toBeCloseTo(-1.3, 9);
+    insideBay(l, 2.6, 3.2);
+  });
+
+  it('reports does-not-fit when 15 flight treads cannot fit the two legs (2.6 × 3.0)', () => {
+    // legs of 2.1 m and 1.7 m hold at most 8 + 6 treads of 0.60 − 2h
+    expect(layoutStair(L({ depth: 3.0 }), H)).toEqual({ ok: false, reason: 'does-not-fit' });
+  });
+
+  it('reports does-not-fit when the winders are too shallow on the walking line', () => {
+    // the flights fit, but a 0.45 m turn (+ a remainder < b) splits into 3 winders < 0.60 − 2h
+    expect(layoutStair(L({ width: 3.0, depth: 3.5, flightWidth: 0.45 }), H)).toEqual({
+      ok: false,
+      reason: 'does-not-fit',
+    });
+  });
+});
+
+describe('layoutStair — U with winders', () => {
+  const U = (over: Partial<Stair> = {}): Stair =>
+    stair({ type: 'U', turn: 'winder', width: 2.0, depth: 3.2, flightWidth: 0.9, ...over });
+
+  it('turns 180° with 6 winders, slack at the bottom, last riser on the −y edge', () => {
+    const l = ok(layoutStair(U(), H));
+    expect(l.steps).toHaveLength(18);
+    expect(l.landings).toHaveLength(0);
+    const winders = l.steps.filter((s) => !isAxisRect(s.outline));
+    expect(winders).toHaveLength(6);
+    const first = l.steps.indexOf(winders[0]!);
+    expect(l.steps.slice(first, first + 6)).toEqual(winders);
+    for (const w of winders.slice(0, 2)) {
+      expect(hasVertex(w.outline, { x: -0.1, y: 0.7 })).toBe(true);
+    }
+    for (const w of winders.slice(4)) expect(hasVertex(w.outline, { x: 0.1, y: 0.7 })).toBe(true);
+    const depths = walkDepths(
+      l.walkLine,
+      winders.map((w) => w.outline),
+    );
+    for (const d of depths) expect(d).toBeGreaterThanOrEqual(bMin - 1e-3);
+    expect(minY(l.steps[0]!.outline)).toBeGreaterThan(-1.6 + 0.01);
+    for (const s of l.steps.slice(0, first)) expect(cx(s.outline)).toBeLessThan(0);
+    for (const s of l.steps.slice(first + 6)) expect(cx(s.outline)).toBeGreaterThan(0);
+    expect(minY(l.steps[17]!.outline)).toBeCloseTo(-1.6, 9);
+    expect(l.walkLine.at(-1)!.y).toBeCloseTo(-1.6, 9);
+    expect(l.walkLine.at(-1)!.x).toBeGreaterThan(0);
+    l.steps.forEach((s, i) => expect(s.top).toBeCloseTo((i + 1) * h, 9));
+    insideBay(l, 2.0, 3.2);
+  });
+
+  it('handles a zero well (both inner corners coincide)', () => {
+    const l = ok(layoutStair(U({ width: 1.8 }), H));
+    const winders = l.steps.filter((s) => !isAxisRect(s.outline));
+    expect(winders).toHaveLength(6);
+    for (const w of winders.slice(0, 5)) expect(hasVertex(w.outline, { x: 0, y: 0.7 })).toBe(true);
+    insideBay(l, 1.8, 3.2);
+  });
+
+  it('reports does-not-fit in a 1.8 × 2.0 bay', () => {
+    expect(layoutStair(U({ width: 1.8, depth: 2.0 }), H)).toEqual({
+      ok: false,
+      reason: 'does-not-fit',
+    });
+  });
+});
+
+describe('layoutStair — spiral', () => {
+  const S = (over: Partial<Stair> = {}): Stair =>
+    stair({ type: 'spiral', width: 1.8, depth: 1.8, ...over });
+  const angle = (o: Vec2[]): number => {
+    const c = o.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y }), { x: 0, y: 0 });
+    return Math.atan2(c.y, c.x);
+  };
+  const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+  const onCircle = (r: number) => (p: Vec2) => Math.abs(Math.hypot(p.x, p.y) - r) < 1e-9;
+
+  for (const hand of ['left', 'right'] as const) {
+    it(`lays out 18 wedges around the centre, hand ${hand}`, () => {
+      const l = ok(layoutStair(S({ hand }), H));
+      expect(l.steps).toHaveLength(18);
+      expect(l.landings).toHaveLength(0);
+      expect(l.treadDepth).toBeCloseTo(bIdeal, 9);
+      for (const s of l.steps) {
+        expect(signedArea(s.outline)).toBeGreaterThan(0);
+        expect(s.outline.filter(onCircle(0.075))).toHaveLength(2);
+        expect(s.outline.filter(onCircle(0.9)).length).toBe(s.outline.length - 2);
+      }
+      // the first wedge starts on the −y side
+      expect(hasVertex(l.steps[0]!.outline, { x: 0, y: -0.9 })).toBe(true);
+      const sign = hand === 'left' ? 1 : -1;
+      for (let i = 1; i < 18; i++) {
+        const da = wrap(angle(l.steps[i]!.outline) - angle(l.steps[i - 1]!.outline));
+        expect(sign * da).toBeCloseTo(bIdeal / 0.6, 6);
+      }
+      l.steps.forEach((s, i) => expect(s.top).toBeCloseTo((i + 1) * h, 9));
+      // walking line at r = 0.6, from the first riser
+      expect(l.walkLine.every(onCircle(0.6))).toBe(true);
+      expect(l.walkLine[0]!.x).toBeCloseTo(0, 9);
+      expect(l.walkLine[0]!.y).toBeCloseTo(-0.6, 9);
+      expect(l.opening).toHaveLength(4);
+    });
+  }
+
+  it('reports does-not-fit when one turn rises less than 2.1 m (1.2 × 1.2)', () => {
+    expect(layoutStair(S({ width: 1.2, depth: 1.2 }), H)).toEqual({
+      ok: false,
+      reason: 'does-not-fit',
+    });
+  });
+
+  it('uses the smaller bay side as the diameter (1.8 × 2.4)', () => {
+    const l = ok(layoutStair(S({ depth: 2.4 }), H));
+    const r = Math.max(...l.steps.flatMap((s) => s.outline.map((p) => Math.hypot(p.x, p.y))));
+    expect(r).toBeCloseTo(0.9, 9);
   });
 });
 
