@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   H3xDocument,
@@ -734,5 +735,70 @@ describe('SelectEditTool stairs', () => {
     expect(validateStairs(plan.doc.floor, undefined).map((w) => w.code)).not.toContain(
       'stair-overlaps-wall',
     );
+  });
+
+  describe('on the townhouse sample', () => {
+    function townhouse(): H3xPlan {
+      const doc = H3xDocument.fromXML(readFileSync('examples/layouts/townhouse-3f.xml', 'utf8'), {
+        presets: testPresets,
+      });
+      doc.setActiveFloor('f1');
+      const el = document.createElement('div');
+      Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+      document.body.appendChild(el);
+      const plan = new H3xPlan(el, doc);
+      plan.setView({ cx: 1.8, cy: 12.475, scale: 120 });
+      plans.push(plan);
+      return plan;
+    }
+    const bay = (plan: H3xPlan) => {
+      const s = Object.values(plan.doc.floor.stairs)[0]!;
+      return { x: s.x, y: s.y };
+    };
+
+    it('a click without movement selects the stair and does not move it', () => {
+      const plan = townhouse();
+      const before = bay(plan);
+      fire(plan, 'pointermove', { x: 1.8, y: 12.475 });
+      fire(plan, 'pointerdown', { x: 1.8, y: 12.475 });
+      fire(plan, 'pointerup', { x: 1.8, y: 12.475 });
+      expect(plan.selection?.kind).toBe('stair');
+      expect(bay(plan)).toEqual(before);
+      expect(plan.doc.canUndo).toBe(false);
+    });
+
+    it('a lost pointerup does not leave a press that drags the stair on later hover', () => {
+      const plan = townhouse();
+      const before = bay(plan);
+      const hover = (p: Vec2) => {
+        const sp = plan.planToScreen(p);
+        const e = new MouseEvent('pointermove', {
+          clientX: sp.x,
+          clientY: sp.y,
+          button: 0,
+          buttons: 0,
+          bubbles: true,
+        });
+        Object.defineProperty(e, 'pointerId', { value: 1 });
+        Object.defineProperty(e, 'pointerType', { value: 'mouse' });
+        plan.svg.dispatchEvent(e);
+      };
+      fire(plan, 'pointerdown', { x: 1.8, y: 12.475 });
+      // The pointerup never arrives; the mouse then moves over the plan with no button held.
+      hover({ x: 6, y: 10 });
+      hover({ x: 20.65, y: 10 });
+      expect(bay(plan)).toEqual(before);
+      expect(plan.doc.canUndo).toBe(false);
+    });
+
+    it('a small drag moves the stair by exactly the pointer delta', () => {
+      const plan = townhouse();
+      drag(plan, { x: 1.8, y: 12.475 }, { x: 2.1, y: 12.475 });
+      expect(bay(plan).x).toBeCloseTo(2.1, 9);
+      expect(bay(plan).y).toBeCloseTo(12.475, 9);
+      drag(plan, { x: 2.1, y: 12.475 }, { x: 2.1, y: 12.775 });
+      expect(bay(plan).y).toBeCloseTo(12.775, 9);
+    });
   });
 });
