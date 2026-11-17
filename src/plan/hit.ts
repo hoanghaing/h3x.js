@@ -1,9 +1,9 @@
-import type { Floor, Id, PresetResolver, Room, Vec2 } from '../core';
-import { H3xValidationError, roomPolygon } from '../core';
+import type { Floor, Id, PresetResolver, Room, Site } from '../core';
+import { H3xValidationError, roomShape } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { WallCorners } from '../shared/walls/joins';
-import { itemFootprint, openingShape, wallOutline } from './shapes';
+import { columnShape, inRoomShape, itemFootprint, openingShape, wallOutline } from './shapes';
 import type { PlanKind, Rect, ScreenPoint } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
 
@@ -16,6 +16,7 @@ export interface HitScene {
   /** Dimension label rectangles in screen px, keyed by wall id. */
   dimensions: Array<{ wallId: Id; rect: Rect }>;
   presets?: PresetResolver;
+  site?: Readonly<Site>;
 }
 
 const NODE_TOLERANCE_PX = 8;
@@ -36,6 +37,15 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     }
   }
   if (nearestNode !== undefined) return { kind: 'node', id: nearestNode };
+
+  for (const c of Object.values(floor.columns)) {
+    const shape = columnShape(c);
+    const inside =
+      shape.kind === 'circle'
+        ? Math.hypot(p.x - shape.cx, p.y - shape.cy) <= shape.r
+        : pointInPolygon(p, shape.points);
+    if (inside) return { kind: 'column', id: c.id };
+  }
 
   for (const d of scene.dimensions) {
     const r = d.rect;
@@ -73,17 +83,24 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   }
 
   for (const room of Object.values(floor.rooms)) {
-    const poly = closedRoomPolygon(floor, room);
-    if (poly && pointInPolygon(p, poly)) return { kind: 'room', id: room.id };
+    const shape = closedRoomShape(floor, room);
+    if (shape && inRoomShape(p, shape)) return { kind: 'room', id: room.id };
+  }
+
+  const pts = scene.site?.points ?? [];
+  const reach = WALL_TOLERANCE_PX / view.scale;
+  for (let i = 0; i < pts.length; i++) {
+    const cp = closestPointOnSegment(p, pts[i]!, pts[(i + 1) % pts.length]!).point;
+    if (Math.hypot(cp.x - p.x, cp.y - p.y) <= reach) return { kind: 'site', id: 'site' };
   }
 
   return null;
 }
 
-/** The room's centre-line polygon, or undefined for a room that does not close (tolerated on load). */
-function closedRoomPolygon(floor: Floor, room: Room): Vec2[] | undefined {
+/** The room's centre-line outline and holes, or undefined for a room that does not close (tolerated on load). */
+function closedRoomShape(floor: Floor, room: Room): ReturnType<typeof roomShape> | undefined {
   try {
-    return roomPolygon(floor, room, 'center');
+    return roomShape(floor, room, 'center');
   } catch (e) {
     if (e instanceof H3xValidationError) return undefined;
     throw e;

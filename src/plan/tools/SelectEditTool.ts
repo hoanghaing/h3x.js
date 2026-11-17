@@ -1,7 +1,23 @@
-import { moveNode, moveWall, type Command, type Id, type Vec2 } from '../../core';
-import { dot, leftNormal, scale, sub } from '../../core/geometry/vec';
+import {
+  GEOM_TOL,
+  dropNode,
+  moveColumn,
+  moveNode,
+  moveWall,
+  pushPullWall,
+  removeColumn,
+  removeNode,
+  removeWall,
+  setSite,
+  splitWall,
+  type Command,
+  type Id,
+  type Issue,
+  type Vec2,
+} from '../../core';
+import { add, dot, leftNormal, scale, sub } from '../../core/geometry/vec';
 import type { HitTarget } from '../hit';
-import { snapScalar } from '../snap';
+import { snapScalar, type SnapGuide } from '../snap';
 import type { ScreenPoint } from '../types';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
 
@@ -18,18 +34,28 @@ interface Press {
   target: HitTarget;
   screen: ScreenPoint;
   plan: Vec2;
+  shift: boolean;
   moved: boolean;
   /** The gesture was ended (Esc, interruption): ignore the rest of this press. */
   dead: boolean;
 }
 
+/** Where a dragged node would be dropped on release (join on drop). */
+type Drop = { node: Id; at: Vec2 } | { wall: Id; at: Vec2 };
+
 interface Gesture {
   key: string;
-  kind: 'node' | 'wall';
+  /** 'push' is a Shift + wall drag (push / pull). */
+  kind: 'node' | 'wall' | 'push' | 'column';
   id: Id;
-  /** Wall drags: unit normal and node a's position at gesture start. */
+  /** Wall drags: unit left normal at gesture start. */
   normal: Vec2;
-  startA: Vec2;
+  /** Wall drags: node a's position; column drags: the column's center; both at gesture start. */
+  start: Vec2;
+  /** Push / pull: the distance currently applied in the open coalesce group. */
+  applied: number;
+  /** Node drags: the join target the pointer is snapped onto, if any. */
+  drop: Drop | null;
 }
 
 const ARROWS: Record<string, Vec2> = {
@@ -39,7 +65,19 @@ const ARROWS: Record<string, Vec2> = {
   ArrowDown: { x: 0, y: -1 },
 };
 
-/** Selects nodes and walls, drags them (one undo step per drag), nudges with arrow keys. */
+type Selectable = 'node' | 'wall' | 'column' | 'site';
+/** |normal component| above which a wall counts as moving along that axis (push / pull guides). */
+const AXIS_PARALLEL = 1 - 1e-9;
+
+const SELECTABLE: ReadonlySet<string> = new Set<Selectable>(['node', 'wall', 'column', 'site']);
+const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
+
+/**
+ * Selects nodes, walls, columns and the site; drags nodes, walls and columns (one undo step per
+ * drag), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
+ * another node or a wall joins it, double-click on a wall inserts a point, Delete / Backspace
+ * removes the selection.
+ */
 export class SelectEditTool implements Tool {
   private readonly threshold: number;
   private readonly nudge: number;
@@ -80,9 +118,16 @@ export class SelectEditTool implements Tool {
   onPointerDown(e: PlanPointerEvent): boolean {
     this.press = null;
     if (!this.ctx || e.native.button !== 0) return false;
-    this.press = { target: e.hit, screen: e.screen, plan: e.plan, moved: false, dead: false };
+    this.press = {
+      target: e.hit,
+      screen: e.screen,
+      plan: e.plan,
+      shift: (e.native as MouseEvent).shiftKey,
+      moved: false,
+      dead: false,
+    };
     const kind = e.hit?.kind;
-    return kind === 'node' || kind === 'wall' || kind === 'dimension';
+    return kind === 'node' || kind === 'wall' || kind === 'column' || kind === 'dimension';
   }
 
   onPointerMove(e: PlanPointerEvent): void {
@@ -103,18 +148,24 @@ export class SelectEditTool implements Tool {
     this.press = null;
     if (!this.ctx || !press || press.dead) return;
     if (this.gesture) {
-      this.endGesture(true);
+      this.finishGesture();
       return;
     }
     if (press.moved) return;
     const t = press.target;
-    if (t?.kind === 'node' || t?.kind === 'wall') this.ctx.plan.select({ kind: t.kind, id: t.id });
+    if (t && selectable(t.kind)) this.ctx.plan.select({ kind: t.kind, id: t.id });
     else if (t?.kind !== 'dimension') this.ctx.plan.select(null);
   }
 
   onDoubleClick(e: PlanPointerEvent): void {
-    if (this.ctx && e.hit?.kind === 'dimension') {
-      this.ctx.plan.emitLengthEditRequest(e.hit.id, e.plan);
+    const ctx = this.ctx;
+    if (!ctx || this.gesture) return;
+    if (e.hit?.kind === 'dimension') {
+      ctx.plan.emitLengthEditRequest(e.hit.id, e.plan);
+    } else if (e.hit?.kind === 'wall') {
+      // Insert point; the wall projects the point onto its center line.
+      const cmd = splitWall(e.hit.id, e.plan);
+      if (this.run(cmd)) ctx.plan.select({ kind: 'node', id: cmd.createdId });
     }
   }
 
@@ -134,18 +185,39 @@ export class SelectEditTool implements Tool {
       ctx.plan.select(null);
       return true;
     }
-    const dir = ARROWS[e.key];
     const sel = ctx.plan.selection;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (this.gesture || !sel || e.altKey || e.ctrlKey || e.metaKey) return false;
+      const cmd =
+        sel.kind === 'node'
+          ? removeNode(sel.id)
+          : sel.kind === 'wall'
+            ? removeWall(sel.id)
+            : sel.kind === 'column'
+              ? removeColumn(sel.id)
+              : sel.kind === 'site'
+                ? setSite(null)
+                : null;
+      if (!cmd) return false;
+      if (this.run(cmd)) ctx.plan.select(null);
+      return true;
+    }
+    const dir = ARROWS[e.key];
     if (!dir || this.gesture || e.altKey || e.ctrlKey || e.metaKey) return false;
-    if (sel?.kind !== 'node' && sel?.kind !== 'wall') return false;
     const d = scale(dir, e.shiftKey ? this.nudgeLarge : this.nudge);
     let cmd: Command;
-    if (sel.kind === 'wall') {
+    if (sel?.kind === 'wall') {
       cmd = moveWall(sel.id, d);
-    } else {
+    } else if (sel?.kind === 'node') {
       const n = ctx.doc.floor.nodes[sel.id];
       if (!n) return false;
-      cmd = moveNode(sel.id, { x: n.x + d.x, y: n.y + d.y });
+      cmd = moveNode(sel.id, add(n, d));
+    } else if (sel?.kind === 'column') {
+      const c = ctx.doc.floor.columns[sel.id];
+      if (!c) return false;
+      cmd = moveColumn(sel.id, add(c, d));
+    } else {
+      return false;
     }
     this.run(cmd);
     return true;
@@ -154,47 +226,175 @@ export class SelectEditTool implements Tool {
   private startGesture(press: Press): void {
     const ctx = this.ctx!;
     const t = press.target;
-    if (t?.kind !== 'node' && t?.kind !== 'wall') return;
+    const floor = ctx.doc.floor;
+    let kind: Gesture['kind'];
     let normal: Vec2 = { x: 0, y: 0 };
-    let startA: Vec2 = { x: 0, y: 0 };
-    if (t.kind === 'wall') {
-      const w = ctx.doc.floor.walls[t.id];
-      const a = w && ctx.doc.floor.nodes[w.a];
-      const b = w && ctx.doc.floor.nodes[w.b];
+    let start: Vec2 = { x: 0, y: 0 };
+    if (t?.kind === 'wall') {
+      const w = floor.walls[t.id];
+      const a = w && floor.nodes[w.a];
+      const b = w && floor.nodes[w.b];
       if (!a || !b) return;
+      kind = press.shift ? 'push' : 'wall';
       normal = leftNormal(sub(b, a));
-      startA = { x: a.x, y: a.y };
-    } else if (!ctx.doc.floor.nodes[t.id]) {
+      start = { x: a.x, y: a.y };
+    } else if (t?.kind === 'column') {
+      const c = floor.columns[t.id];
+      if (!c) return;
+      kind = 'column';
+      start = { x: c.x, y: c.y };
+    } else if (t?.kind === 'node') {
+      if (!floor.nodes[t.id]) return;
+      kind = 'node';
+    } else {
       return;
     }
     this.gesture = {
       key: `plan-drag-${++this.gestureCount}`,
-      kind: t.kind,
+      kind,
       id: t.id,
       normal,
-      startA,
+      start,
+      applied: 0,
+      drop: null,
     };
     ctx.plan.select({ kind: t.kind, id: t.id });
-    if (t.kind === 'node') ctx.setDragging(t.id);
+    if (kind === 'node') ctx.setDragging(t.id);
   }
 
   private step(e: PlanPointerEvent): void {
-    const ctx = this.ctx!;
     const g = this.gesture!;
     const free = (e.native as MouseEvent).altKey;
-    if (g.kind === 'node') {
-      const r = ctx.snap(e.plan, [g.id], free);
-      ctx.showGuides(this.run(moveNode(g.id, r.point), g.key) ? r.guides : []);
+    if (g.kind === 'node') this.stepNode(g, e.plan, free);
+    else if (g.kind === 'column') this.stepColumn(g, e.plan, free);
+    else if (g.kind === 'push') this.stepPush(g, e.plan, free);
+    else this.stepWall(g, e.plan, free);
+  }
+
+  /**
+   * Snaps onto other nodes and walls (not the node itself or its walls). On a join target the
+   * node stays put and the target is marked. A neighbour (sharing a wall) is a target too:
+   * dropping onto it merges the two nodes and collapses their wall.
+   */
+  private stepNode(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const r = ctx.snapDraw(p, undefined, free, undefined, { exclude: [g.id] });
+    const t = r.target;
+    let drop: Drop | null = null;
+    if (t.kind === 'wall') drop = { wall: t.id, at: r.point };
+    else if (t.kind === 'node') drop = { node: t.id, at: r.point };
+    g.drop = drop;
+    ctx.plan.showDropTarget(drop ? drop.at : null);
+    if (drop) {
+      ctx.showGuides(r.guides);
+      this.clearRejection();
       return;
     }
+    ctx.showGuides(this.run(moveNode(g.id, r.point), g.key) ? r.guides : []);
+  }
+
+  private stepColumn(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const c = ctx.doc.floor.columns[g.id];
+    if (!c) return;
+    const r = ctx.snapDraw(add(g.start, sub(p, this.press!.plan)), undefined, free);
+    const same = r.point.x === c.x && r.point.y === c.y;
+    const ok = same || this.run(moveColumn(g.id, { x: r.point.x, y: r.point.y }), g.key);
+    ctx.showGuides(ok ? r.guides : []);
+  }
+
+  private stepWall(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
     const floor = ctx.doc.floor;
     const a = floor.nodes[floor.walls[g.id]?.a ?? ''];
     if (!a) return;
-    let wanted = dot(sub(e.plan, this.press!.plan), g.normal);
-    if (!free) wanted = snapScalar(wanted, ctx.plan.snapOptions.grid);
+    const wanted = this.gridOffset(g, p, free);
     // Against the wall's current offset (moveWall is relative), so errors do not accumulate.
-    const delta = wanted - dot(sub(a, g.startA), g.normal);
+    const delta = wanted - dot(sub(a, g.start), g.normal);
     if (delta !== 0) this.run(moveWall(g.id, scale(g.normal, delta)), g.key);
+  }
+
+  /**
+   * Push / pull is relative and may add connector walls, so each step reverts the open group
+   * and re-runs `pushPullWall` with the total distance against the original geometry: one undo
+   * step, and Esc (`cancelCoalesce`) restores the start. A step that fails only with
+   * `wall-too-short` (a connector below the minimum) goes back to the start (distance 0), is not
+   * flashed and keeps the snap guides; any other failure is undone back to the last good distance.
+   */
+  private stepPush(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const { d: wanted, guides } = this.pushOffset(g, p, free);
+    if (wanted === g.applied) {
+      ctx.showGuides(guides);
+      return;
+    }
+    const exec = (d: number) =>
+      this.issue(() => {
+        ctx.doc.cancelCoalesce(g.key);
+        return d === 0
+          ? ({ ok: true } as const)
+          : ctx.doc.tryExecute(pushPullWall(g.id, d), { coalesceKey: g.key });
+      });
+    const res = exec(wanted);
+    if (res.ok) {
+      g.applied = wanted;
+      this.clearRejection();
+      ctx.showGuides(guides);
+      return;
+    }
+    const issues = res.issues.filter((i) => i.code !== 'wall-too-short');
+    if (issues.length === 0) {
+      // Only a connector below the minimum: back to the start, so releasing here is a no-op.
+      exec(0);
+      g.applied = 0;
+    } else if (g.applied !== 0) exec(g.applied);
+    this.reject(issues);
+    ctx.showGuides(issues.length === 0 ? guides : []);
+  }
+
+  /** Signed pointer travel along the wall's original left normal; grid-snapped unless `free`. */
+  private gridOffset(g: Gesture, p: Vec2, free: boolean): number {
+    const d = dot(sub(p, this.press!.plan), g.normal);
+    return free ? d : snapScalar(d, this.ctx!.plan.snapOptions.grid);
+  }
+
+  /**
+   * Push / pull distance: the grabbed point, moved along the normal, aligns to other nodes on
+   * the axis the wall moves along (axis-parallel walls only) with a guide; else grid offset.
+   */
+  private pushOffset(g: Gesture, p: Vec2, free: boolean): { d: number; guides: SnapGuide[] } {
+    const ctx = this.ctx!;
+    const d = this.gridOffset(g, p, free);
+    const w = ctx.doc.floor.walls[g.id];
+    if (free || !w) return { d, guides: [] };
+    const origin = this.press!.plan;
+    const raw = add(origin, scale(g.normal, dot(sub(p, origin), g.normal)));
+    const r = ctx.snap(raw, [w.a, w.b], false);
+    const guides = r.guides.filter((gd) => Math.abs(g.normal[gd.axis]) > AXIS_PARALLEL);
+    if (guides.length === 0) return { d, guides: [] };
+    return { d: dot(sub(r.point, origin), g.normal), guides };
+  }
+
+  /** Ends a released drag: a node over a join target is dropped there in the same undo step. */
+  private finishGesture(): void {
+    const ctx = this.ctx!;
+    const g = this.gesture!;
+    if (g.kind === 'node' && g.drop) {
+      const target =
+        'node' in g.drop ? { node: g.drop.node } : { wall: g.drop.wall, at: g.drop.at };
+      if (this.run(dropNode(g.id, target), g.key)) {
+        const drop = g.drop;
+        // A wall drop keeps the new junction node, found at the drop point.
+        const kept =
+          'node' in drop
+            ? drop.node
+            : Object.values(ctx.doc.floor.nodes).find(
+                (n) => Math.hypot(n.x - drop.at.x, n.y - drop.at.y) < GEOM_TOL,
+              )?.id;
+        ctx.plan.select(kept ? { kind: 'node', id: kept } : null);
+      }
+    }
+    this.endGesture(true);
   }
 
   /** Runs one of the tool's own commands; flashes a rejection, clears it after a success. */
@@ -202,15 +402,27 @@ export class SelectEditTool implements Tool {
     const ctx = this.ctx!;
     const res = this.issue(() => ctx.doc.tryExecute(cmd, { coalesceKey }));
     if (!res.ok) {
-      this.rejecting = true;
-      ctx.plan.reportRejected(res.issues);
+      this.reject(res.issues);
       return false;
     }
-    if (this.rejecting) {
-      this.rejecting = false;
-      ctx.plan.reportRejected([]);
-    }
+    this.clearRejection();
     return true;
+  }
+
+  /** Flashes `issues`; an empty list only clears an earlier flash. */
+  private reject(issues: Issue[]): void {
+    if (issues.length === 0) {
+      this.clearRejection();
+      return;
+    }
+    this.rejecting = true;
+    this.ctx!.plan.reportRejected(issues);
+  }
+
+  private clearRejection(): void {
+    if (!this.rejecting) return;
+    this.rejecting = false;
+    this.ctx!.plan.reportRejected([]);
   }
 
   /** Ends the gesture in progress; `seal` closes its coalesce group (it is still open). */
@@ -221,6 +433,7 @@ export class SelectEditTool implements Tool {
     if (this.press) this.press.dead = true;
     if (seal) ctx.doc.endCoalesce();
     ctx.showGuides([]);
+    ctx.plan.showDropTarget(null);
     ctx.setDragging(null);
   }
 

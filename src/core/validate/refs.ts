@@ -41,6 +41,9 @@ export function checkRefs(floor: Floor): BadRef[] {
   for (const o of Object.values(floor.openings)) check(o.id, 'opening', 'wall', 'walls', o.wall);
   for (const r of Object.values(floor.rooms)) {
     for (const wid of r.walls) check(r.id, 'room', 'walls', 'walls', wid);
+    for (const hole of r.holes ?? []) {
+      for (const wid of hole) check(r.id, 'room', 'holes', 'walls', wid);
+    }
   }
   for (const i of Object.values(floor.items)) {
     if (i.mount === 'wall') check(i.id, 'item', 'wall', 'walls', i.wall);

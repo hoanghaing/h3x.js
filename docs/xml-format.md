@@ -9,11 +9,11 @@ attributes match the fields of the matching type in `src/core/types.ts`. Read it
 - Units are **meters**. Plan coordinates are `(x, y)`.
 - Angles (`rotation`) are **radians, counter-clockwise**. `0` means the item's front faces `+y`.
 - Ids are strings, unique within a floor across all element types (nodes, walls, openings, rooms,
-  items). Generated ids are 10-character nanoids.
+  items, columns). Generated ids are 10-character nanoids.
 - Numbers are written with at most 4 decimals (`XML_DECIMALS`), trailing zeros dropped, `-0`
   written as `0`. On read, any finite number is accepted.
 - Writers sort child elements by id within each type, in the order node, wall, opening, room,
-  item. Characters XML 1.0 forbids are written as U+FFFD; `& < > "` and line breaks are escaped.
+  item, column. A `<site>` is written directly after `<meta>`. Characters XML 1.0 forbids are written as U+FFFD; `& < > "` and line breaks are escaped.
 - `flip` is written as `1` when true and omitted when false. On read, `1` and `true` mean true;
   anything else is false.
 - Unknown elements inside `<floor>` are ignored on read (and lost on save). Unknown attributes are
@@ -28,7 +28,7 @@ attributes match the fields of the matching type in `src/core/types.ts`. Read it
 | `version` | integer | yes      | -       | `>= 1`. Writers emit `1` (`FORMAT_VERSION`).          |
 | `unit`    | string  | no       | `m`     | Only `m` is accepted; anything else is a parse error. |
 
-Children: one optional `<meta>` and one or more `<floor>`.
+Children: one optional `<meta>`, at most one `<site>` and one or more `<floor>`.
 
 ### `<meta>`
 
@@ -36,6 +36,19 @@ Children: one optional `<meta>` and one or more `<floor>`.
 | --------- | --------------- | -------- | ------- | -------------- |
 | `name`    | string          | no       | `""`    | Project name.  |
 | `created` | ISO 8601 string | no       | `""`    | Not validated. |
+
+### `<site>`
+
+The ground outline, shared by all floors. Optional; at most one (a second is a parse error,
+`element: site`).
+
+| Attribute | Type       | Required | Notes                                                             |
+| --------- | ---------- | -------- | ----------------------------------------------------------------- |
+| `points`  | point list | yes      | Whitespace-separated `x,y` pairs, at least 3, all finite numbers. |
+
+The stored order is counter-clockwise; on load a clockwise list is reversed (the first point stays
+first). Fewer than 3 points or a malformed pair is a parse error (`element: site`,
+`attribute: points`). In memory the site has the fixed id `site`; the id is not written.
 
 ### `<floor>`
 
@@ -46,7 +59,7 @@ Children: one optional `<meta>` and one or more `<floor>`.
 | `elevation`  | number | no       | `0`     | Floor height above ground, meters. |
 | `wallHeight` | number | yes      | -       | Default wall height, meters.       |
 
-Children: `node`, `wall`, `opening`, `room`, `item`, in any order. A file may hold several
+Children: `node`, `wall`, `opening`, `room`, `item`, `column`, in any order. A file may hold several
 floors; the editing APIs work on the first and keep the others as loaded.
 
 ### `<node>`
@@ -86,17 +99,25 @@ A door or window cut into a wall.
 
 ### `<room>`
 
-| Attribute     | Type    | Required | Default | Notes                                            |
-| ------------- | ------- | -------- | ------- | ------------------------------------------------ |
-| `id`          | string  | yes      | -       |                                                  |
-| `walls`       | id list | yes      | -       | Wall ids separated by whitespace, in loop order. |
-| `name`        | string  | no       | `""`    |                                                  |
-| `floorFinish` | string  | no       | omitted | Finish id.                                       |
+| Attribute     | Type      | Required | Default | Notes                                            |
+| ------------- | --------- | -------- | ------- | ------------------------------------------------ |
+| `id`          | string    | yes      | -       |                                                  |
+| `walls`       | id list   | yes      | -       | Wall ids separated by whitespace, in loop order. |
+| `name`        | string    | no       | `""`    |                                                  |
+| `floorFinish` | string    | no       | omitted | Finish id.                                       |
+| `holes`       | loop list | no       | omitted | Closed wall loops inside the room, see below.    |
 
 **Wall order.** `walls` lists the room's walls as a closed loop. The stored order is
 counter-clockwise (CCW), so the interior is on the left of the traversal. On load, a clockwise
 list is reversed to CCW. A list that does not form a closed loop is a parse error
 (`element: room`, `attribute: walls`).
+
+**Holes.** `holes` lists closed wall loops inside the room (an atrium, a free-standing block). Wall
+ids are separated by whitespace and loops by `;`, for example `holes="w5 w6 w7 w8; w9 w10 w11"`.
+Each loop is stored clockwise; on load a counter-clockwise loop is reversed. A loop that does not
+close is a parse error (`element: room`, `attribute: holes`), and so is a reference to a missing
+wall. The attribute is omitted when there are no holes. Whether a hole is geometrically valid is
+checked by validation, not by the parser.
 
 If a floor has **no** `<room>` elements, rooms are detected from closed wall loops
 (`detectRooms`) and given fresh ids and empty names.
@@ -123,6 +144,20 @@ Wall items (`mount="wall"`):
 | `offset`    | number            | yes      | -       | Center distance from node `a` along the wall. |
 | `elevation` | number            | no       | `0`     | Height of the item's bottom above the floor.  |
 
+### `<column>`
+
+A free-standing column.
+
+| Attribute  | Type                | Required | Default           | Notes                                         |
+| ---------- | ------------------- | -------- | ----------------- | --------------------------------------------- |
+| `id`       | string              | yes      | -                 |                                               |
+| `x`, `y`   | number              | yes      | -                 | Center, meters.                               |
+| `shape`    | `round` \| `square` | yes      | -                 | Any other value is a parse error.             |
+| `width`    | number              | yes      | -                 | Diameter (round) or side along local x.       |
+| `depth`    | number              | no       | omitted (= width) | Square only, side along local y.              |
+| `rotation` | number              | no       | `0`               | Radians CCW; square only.                     |
+| `height`   | number              | no       | omitted           | Meters; omitted means the floor `wallHeight`. |
+
 The `Mount` type also lists `opening`; that is a preset mount used by `addOpening`, not a valid
 `<item mount>`.
 
@@ -132,9 +167,11 @@ The `Mount` type also lists `opening`; that is a preset mount used by `addOpenin
 
 - `H3xParseError` (`element` and `attribute` say where, when known) for: malformed XML; root not
   `<h3x>`; missing, non-integer or `< 1` `version`; `unit` other than `m`; no `<floor>`; a
-  missing required attribute; a non-numeric number (empty, `NaN`, `Infinity`); a bad `side` or
-  `mount`; a duplicate id within a floor; a reference to a missing node or wall (wall `a` / `b`,
-  opening `wall`, room `walls`, wall-item `wall`); a room whose walls do not form a loop.
+  missing required attribute; a non-numeric number (empty, `NaN`, `Infinity`); a bad `side`,
+  `mount` or column `shape`; a bad or missing `<site>` (fewer than 3 points, malformed point, more
+  than one); a duplicate id within a floor; a reference to a missing node or wall (wall `a` / `b`,
+  opening `wall`, room `walls` / `holes`, wall-item `wall`); a room whose walls or hole loops do
+  not form a loop.
 - `H3xVersionError` (`found`) when `version` is greater than the supported `FORMAT_VERSION`.
 
 Parsing does not run geometric validation (wall length, collisions, ...). Use `validateLayout` /

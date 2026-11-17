@@ -1,6 +1,6 @@
 import { FORMAT_VERSION, XML_DECIMALS } from '../constants';
 import { H3xValidationError } from '../errors';
-import type { Floor, Item, Project } from '../types';
+import type { Column, Floor, Item, Project, Site } from '../types';
 
 export function fmt(n: number): string {
   const v = Number(n.toFixed(XML_DECIMALS));
@@ -68,6 +68,34 @@ function itemEl(i: Item): string {
   return el('item', [...head, ['x', i.x], ['y', i.y], ['rotation', i.rotation]]);
 }
 
+function columnEl(c: Column): string {
+  return el('column', [
+    ['id', c.id],
+    ['x', c.x],
+    ['y', c.y],
+    ['shape', c.shape],
+    ['width', c.width],
+    ['depth', c.depth],
+    ['rotation', c.rotation],
+    ['height', c.height],
+  ]);
+}
+
+function siteEl(s: Site): string {
+  for (const p of s.points) {
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+      throw new H3xValidationError([
+        {
+          code: 'non-finite-number',
+          ids: ['site'],
+          message: '<site> attribute "points" is not a finite number',
+        },
+      ]);
+    }
+  }
+  return el('site', [['points', s.points.map((p) => `${fmt(p.x)},${fmt(p.y)}`).join(' ')]]);
+}
+
 function floorEl(f: Floor): string {
   const kids = [
     ...byId(f.nodes).map((n) =>
@@ -104,11 +132,13 @@ function floorEl(f: Floor): string {
       el('room', [
         ['id', r.id],
         ['walls', r.walls.join(' ')],
+        ['holes', r.holes?.length ? r.holes.map((h) => h.join(' ')).join('; ') : undefined],
         ['name', r.name],
         ['floorFinish', r.floorFinish],
       ]),
     ),
     ...byId(f.items).map(itemEl),
+    ...byId(f.columns).map(columnEl),
   ];
   return el(
     'floor',
@@ -141,6 +171,7 @@ export function projectToXML(p: Project, opts: { pretty?: boolean } = {}): strin
       ['name', p.meta.name],
       ['created', p.meta.created],
     ]),
+    ...(p.site ? [siteEl(p.site)] : []),
     ...p.floors.map(floorEl),
   ];
   const root = `<h3x version="${p.version ?? FORMAT_VERSION}" unit="${esc(p.unit)}">\n${body.join('\n')}\n</h3x>`;

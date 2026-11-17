@@ -32,6 +32,8 @@ export interface Room {
   walls: Id[];
   name: string;
   floorFinish?: string;
+  /** Closed wall loops inside the room (atriums, free-standing blocks); each stored clockwise. */
+  holes?: Id[][];
 }
 export interface Footprint {
   w: number;
@@ -64,6 +66,25 @@ export interface CeilingItem extends ItemBase {
   rotation: number;
 }
 export type Item = FloorItem | WallItem | CeilingItem;
+export interface Column {
+  id: Id;
+  x: number;
+  y: number;
+  shape: 'round' | 'square';
+  /** Diameter for round; side along local x for square. */
+  width: number;
+  /** Square only; defaults to width. */
+  depth?: number;
+  /** Radians CCW; square only. */
+  rotation: number;
+  /** Defaults to the floor wallHeight. */
+  height?: number;
+}
+export interface Site {
+  id: 'site';
+  /** Counter-clockwise ground outline. */
+  points: Vec2[];
+}
 export interface Floor {
   id: Id;
   level: number;
@@ -74,6 +95,7 @@ export interface Floor {
   openings: Record<Id, Opening>;
   rooms: Record<Id, Room>;
   items: Record<Id, Item>;
+  columns: Record<Id, Column>;
 }
 export interface ProjectMeta {
   name: string;
@@ -84,6 +106,7 @@ export interface Project {
   unit: 'm';
   meta: ProjectMeta;
   floors: Floor[];
+  site?: Site;
 }
 export interface PresetInfo {
   mount: Mount;
@@ -92,7 +115,7 @@ export interface PresetInfo {
   sill?: number;
 }
 export type PresetResolver = (presetId: string) => PresetInfo | undefined;
-export type EntityKind = 'node' | 'wall' | 'opening' | 'room' | 'item';
+export type EntityKind = 'node' | 'wall' | 'opening' | 'room' | 'item' | 'column' | 'site';
 export interface Issue {
   code: string;
   ids: Id[];

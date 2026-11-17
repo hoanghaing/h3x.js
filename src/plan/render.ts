@@ -1,7 +1,27 @@
-import type { Floor, Id, Item, Opening, PlanNode, PresetResolver, Room, Vec2, Wall } from '../core';
-import { roomPolygon } from '../core';
+import type {
+  Column,
+  Floor,
+  Id,
+  Item,
+  Opening,
+  PlanNode,
+  PresetResolver,
+  Room,
+  Site,
+  Vec2,
+  Wall,
+} from '../core';
+import { roomShape } from '../core';
 import type { WallCorners } from '../shared/walls/joins';
-import { itemFootprint, openingShape, roomLabel, wallOutline, type OpeningShape } from './shapes';
+import {
+  columnShape,
+  itemFootprint,
+  openingShape,
+  roomLabel,
+  roomPath,
+  wallOutline,
+  type OpeningShape,
+} from './shapes';
 import { NODE_RADIUS_PX } from './style';
 import type { PlanKind, Rect } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
@@ -115,6 +135,7 @@ export interface RenderContext {
   view: View;
   corners: Record<Id, WallCorners>;
   presets: PresetResolver | undefined;
+  site?: Readonly<Site>;
 }
 
 export type KindEntity =
@@ -122,7 +143,9 @@ export type KindEntity =
   | { kind: 'wall'; entity: Wall }
   | { kind: 'room'; entity: Room }
   | { kind: 'opening'; entity: Opening }
-  | { kind: 'item'; entity: Item };
+  | { kind: 'item'; entity: Item }
+  | { kind: 'column'; entity: Column }
+  | { kind: 'site'; entity: Site };
 
 /** The `<g>` of one entity with the (empty) children its updater fills in. */
 export function createEntityElement(kind: PlanKind, id: Id, prefix: string): SVGGElement {
@@ -133,11 +156,15 @@ export function createEntityElement(kind: PlanKind, id: Id, prefix: string): SVG
       break;
     case 'wall':
     case 'item':
+    case 'site':
       g.append(svgEl('polygon', NON_SCALING));
+      break;
+    case 'column':
+      g.append(svgEl('circle', NON_SCALING), svgEl('polygon', NON_SCALING));
       break;
     case 'room':
       g.append(
-        svgEl('polygon', NON_SCALING),
+        svgEl('path', { 'fill-rule': 'evenodd', ...NON_SCALING }),
         svgEl('text', { class: `${prefix}-room-name`, y: '-3' }),
         svgEl('text', { class: `${prefix}-room-area`, y: '11' }),
       );
@@ -157,7 +184,7 @@ export function createEntityElement(kind: PlanKind, id: Id, prefix: string): SVG
 function updateRoom(g: SVGGElement, room: Room, ctx: RenderContext): void {
   const [poly, name, area] = Array.from(g.children);
   try {
-    setAttr(poly!, 'points', pointsAttr(roomPolygon(ctx.floor, room, 'inner')));
+    setAttr(poly!, 'd', roomPath(roomShape(ctx.floor, room, 'inner')));
     const label = roomLabel(ctx.floor, room);
     const t = screenSpaceTransform(ctx.view, label.at);
     setAttr(name!, 'transform', t);
@@ -166,7 +193,7 @@ function updateRoom(g: SVGGElement, room: Room, ctx: RenderContext): void {
     setText(area!, label.area);
   } catch {
     // A room whose walls no longer close a loop draws nothing until it is fixed.
-    setAttr(poly!, 'points', '');
+    setAttr(poly!, 'd', '');
     setText(name!, '');
     setText(area!, '');
   }
@@ -196,6 +223,21 @@ export function updateEntityElement(g: SVGGElement, e: KindEntity, ctx: RenderCo
       const fp = itemFootprint(e.entity, ctx.floor, ctx.presets);
       return setAttr(first, 'points', fp ? pointsAttr(fp) : '');
     }
+    case 'column': {
+      const shape = columnShape(e.entity);
+      const [circle, poly] = Array.from(g.children);
+      const round = shape.kind === 'circle';
+      setAttr(circle!, 'display', round ? 'inline' : 'none');
+      setAttr(poly!, 'display', round ? 'none' : 'inline');
+      if (shape.kind === 'circle') {
+        setAttr(circle!, 'cx', String(shape.cx));
+        setAttr(circle!, 'cy', String(shape.cy));
+        return setAttr(circle!, 'r', String(shape.r));
+      }
+      return setAttr(poly!, 'points', pointsAttr(shape.points));
+    }
+    case 'site':
+      return setAttr(first, 'points', pointsAttr(e.entity.points));
   }
 }
 

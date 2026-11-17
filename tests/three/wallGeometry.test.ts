@@ -18,6 +18,7 @@ function isolatedFloor(): Floor {
     openings: {},
     rooms: {},
     items: {},
+    columns: {},
   };
 }
 
