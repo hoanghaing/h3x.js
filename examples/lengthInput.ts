@@ -55,3 +55,63 @@ export function attachLengthInput(plan: H3xPlan, host: HTMLElement): () => void 
     close();
   };
 }
+
+/**
+ * Demo code: while a wall is being drawn, shows a number input at the bottom of the plan.
+ * Enter commits a segment of that length (the plan then asks for the next one, which reopens
+ * the input); Esc or blur closes it. Returns a detach function.
+ */
+export function attachSegmentLengthInput(plan: H3xPlan, host: HTMLElement): () => void {
+  let input: HTMLInputElement | undefined;
+
+  const close = (): void => {
+    const el = input;
+    input = undefined;
+    el?.remove();
+  };
+
+  const open = (): void => {
+    close();
+    const el = document.createElement('input');
+    input = el;
+    el.type = 'number';
+    el.step = '0.01';
+    el.placeholder = 'Độ dài (m)';
+    Object.assign(el.style, {
+      position: 'absolute',
+      left: '12px',
+      bottom: '12px',
+      width: '110px',
+      zIndex: '5',
+      border: '1px solid #888',
+    });
+    el.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Escape') {
+        close();
+      } else if (ev.key === 'Enter') {
+        const length = Number(el.value);
+        if (el.value === '' || !Number.isFinite(length) || length <= 0) {
+          el.style.borderColor = '#b3261e';
+          return;
+        }
+        // On success the plan asks for the next segment, which replaces this input.
+        if (!plan.setPendingSegmentLength(length)) {
+          el.style.borderColor = '#b3261e';
+          el.title = 'Giá trị không hợp lệ';
+        }
+      }
+    });
+    el.addEventListener('blur', () => {
+      if (input === el) close();
+    });
+    host.appendChild(el);
+    el.focus();
+  };
+
+  const off = plan.on('segmentLengthRequest', open);
+  return () => {
+    off();
+    close();
+  };
+}

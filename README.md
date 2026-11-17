@@ -242,7 +242,8 @@ pnpm dev   # http://localhost:5173
 ## h3x/plan
 
 `h3x/plan` draws an `H3xDocument` as an SVG plan you can pan, zoom, select in and edit: drag
-nodes and walls, nudge with the keyboard, and ask for a typed wall length. It does not need
+nodes and walls, nudge with the keyboard, draw walls, site outlines and columns, and ask for a
+typed wall length. It does not need
 `three`, only a DOM (`h3x/core` and the package root stay DOM-free).
 
 ```ts
@@ -277,6 +278,8 @@ both views.
     double-clicks a wall's dimension label. `length` is in meters, `anchor` is the end the
     plan suggests keeping fixed, and `anchorRect` is the label's rect in px, so you can place
     an input over it.
+  - `segmentLengthRequest` receives `{ from, direction, length }` when a drawing tool starts a
+    wall segment (see the tools below).
   - `issues` receives `{ rejected, standing }`. `rejected` holds the issues of the last
     rejected edit (flashed for 600 ms, then cleared with another event). `standing` holds the
     layout and placement issues of the document as it is now.
@@ -301,7 +304,30 @@ both views.
   - **Esc** during a drag cancels it with no undo or redo trace (`doc.cancelCoalesce`); with no
     drag it clears the selection;
   - arrow keys nudge the selected node or wall by 1 cm, **Shift** + arrow by 10 cm (up is +y);
-  - double-click a dimension label to request a length edit.
+  - double-click a dimension label to request a length edit;
+  - double-click a wall to insert a point (`splitWall`); a node dropped onto a node or wall joins
+    it (`mergeNodes` / `dropNode`);
+  - **Delete** / **Backspace** removes the selected node (`removeNode`), wall (`removeWall`) or
+    column (`removeColumn`);
+  - **Shift** + drag a wall pushes / pulls it (`pushPullWall`), growing a bump-out or recess;
+  - drag a column to move it (`moveColumn`).
+
+  Drawing tools, activated with `plan.setTool(...)`:
+
+  - `new DrawWallTool({ thickness?, height? })` (defaults 0.2 m and the floor's wall height):
+    click to set the start, every further click commits a wall (`addWall`, one undo step) and
+    continues from its end. A click on the chain's start, a node or a wall ends the chain, as do
+    double-click and **Enter**; **Esc** drops the preview (committed walls stay); **Backspace**
+    undoes the last click; **Alt** disables snapping.
+  - `new DrawSiteTool()`: click the vertices of the site outline; a click on the first vertex,
+    **Enter** or double-click closes it (`setSite`); **Esc** cancels.
+  - `new ColumnTool({ shape?, width?, depth? })` (`'square'` 0.3 m by default): one click places a
+    column (`addColumn`) and selects it.
+
+  `DrawWallTool` fires `segmentLengthRequest` (`{ from, direction, length }`) whenever a new
+  segment starts. The editor shows its own input, then calls
+  `plan.setPendingSegmentLength(length)`, which commits a wall of exactly that length along the
+  preview direction and returns `false` when nothing is pending.
 
   Length labels show on the selected wall, on the walls of a selected or dragged node, and,
   with nothing selected, on walls that border fewer than two rooms.
@@ -325,8 +351,13 @@ presets?, tool? })`. Defaults: grid shown, `snap` 0.05 m with alignment on, pref
   on `dispose()`, which also drops the document subscription and listeners and can be called
   more than once. It does not dispose the document.
 
-The example page shows the plan and the 3D view side by side on one document, with a demo input
-wired to `lengthEditRequest` (`pnpm dev`).
+In 3D, columns, the site outline (a ground slab around the house) and floors with holes (inner
+light wells) are rendered too. Columns and `<site>` are stored as their own XML elements; see
+[docs/xml-format.md](docs/xml-format.md).
+
+The example page shows the plan and the 3D view side by side on one document, with a throwaway
+toolbar (select, draw wall, draw site, columns, clear, sample house) and demo inputs wired to
+`lengthEditRequest` and `segmentLengthRequest` (`pnpm dev`).
 
 ## Tolerance
 
