@@ -64,6 +64,8 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     const c = scene.corners[w.id];
     if (c && pointInPolygon(p, wallOutline(c))) return { kind: 'wall', id: w.id };
   }
+  // Pick aid for walls drawn thinner than 2 × WALL_TOLERANCE_PX: within that distance of the
+  // centre line. For a wall drawn wider this band lies inside its outline, so it adds nothing.
   let nearestWall: Id | undefined;
   let nearestWallDist = WALL_TOLERANCE_PX / view.scale;
   for (const w of Object.values(floor.walls)) {
@@ -104,10 +106,10 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   return null;
 }
 
-/** The room's centre-line outline and holes, or undefined for a room that does not close (tolerated on load). */
+/** The room's drawn (inner) outline and holes, or undefined for a room that does not close (tolerated on load). */
 function closedRoomShape(floor: Floor, room: Room): ReturnType<typeof roomShape> | undefined {
   try {
-    return roomShape(floor, room, 'center');
+    return roomShape(floor, room, 'inner');
   } catch (e) {
     if (e instanceof H3xValidationError) return undefined;
     throw e;

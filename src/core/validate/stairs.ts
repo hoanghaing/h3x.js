@@ -1,5 +1,5 @@
 import { polygonOverlapArea } from '../geometry/clip';
-import { obbCorners, wallOBB } from '../geometry/obb';
+import { wallOutlines } from '../shapes';
 import { layoutStair, stairOutline } from '../stairs/layout';
 import type { Floor, Issue } from '../types';
 
@@ -19,6 +19,7 @@ export function stairRise(floor: Floor, above: Floor | undefined): number {
 export function validateStairs(floor: Floor, above: Floor | undefined): Issue[] {
   const out: Issue[] = [];
   const rise = stairRise(floor, above);
+  const walls = Object.keys(floor.stairs).length > 0 ? wallOutlines(floor) : {};
   for (const s of Object.values(floor.stairs)) {
     if (!above) {
       out.push({
@@ -38,10 +39,8 @@ export function validateStairs(floor: Floor, above: Floor | undefined): Issue[] 
     }
     const outline = stairOutline(s, rise);
     for (const w of Object.values(floor.walls)) {
-      const a = floor.nodes[w.a];
-      const b = floor.nodes[w.b];
-      if (!a || !b) continue;
-      if (polygonOverlapArea(outline, obbCorners(wallOBB(a, b, w.thickness))) > WALL_OVERLAP_AREA) {
+      const wall = walls[w.id];
+      if (wall && polygonOverlapArea(outline, wall) > WALL_OVERLAP_AREA) {
         out.push({
           code: 'stair-overlaps-wall',
           ids: [s.id, w.id],

@@ -9,11 +9,11 @@ import {
 } from '../constants';
 import { H3xValidationError } from '../errors';
 import { polygonOverlapArea } from '../geometry/clip';
-import { obbCorners } from '../geometry/obb';
 import { isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygon';
 import { segmentsIntersect } from '../geometry/segment';
 import { distance, tidy } from '../geometry/vec';
 import { isBelowMinRoomArea, roomArea, roomPolygon } from '../rooms/detect';
+import { circleOverlapArea, columnPolygon, columnShape } from '../shapes';
 import type { Column, Floor, Id, Issue, Site, Vec2 } from '../types';
 
 export function wallLength(floor: Floor, id: Id): number {
@@ -167,23 +167,6 @@ function roomIssue(floor: Floor, roomId: Id): Issue | null {
 /** Overlap areas (m2) at or below this count as touching. */
 const HOLE_OVERLAP_AREA = 1e-6;
 const COLUMN_OVERLAP_AREA = 1e-5;
-const ROUND_SEGMENTS = 32;
-
-function columnPolygon(c: Column): Vec2[] {
-  if (c.shape === 'round') {
-    const r = c.width / 2;
-    return Array.from({ length: ROUND_SEGMENTS }, (_, i) => {
-      const t = (i / ROUND_SEGMENTS) * Math.PI * 2;
-      return { x: c.x + Math.cos(t) * r, y: c.y + Math.sin(t) * r };
-    });
-  }
-  return obbCorners({
-    center: { x: c.x, y: c.y },
-    halfW: c.width / 2,
-    halfD: (c.depth ?? c.width) / 2,
-    rotation: c.rotation,
-  });
-}
 
 function columnSizeIssues(floor: Floor, ids: Iterable<Id>): Issue[] {
   const out: Issue[] = [];
@@ -209,9 +192,16 @@ function columnOverlapIssues(floor: Floor): Issue[] {
     (c) => columnSizeIssues(floor, [c.id]).length === 0,
   );
   const polys = cols.map(columnPolygon);
+  // Two round columns: exact circle overlap; otherwise the drawn polygon (columnPolygon).
+  const area = (i: number, j: number): number => {
+    const a = columnShape(cols[i]!);
+    const b = columnShape(cols[j]!);
+    if (a.kind === 'circle' && b.kind === 'circle') return circleOverlapArea(a, b);
+    return polygonOverlapArea(polys[i]!, polys[j]!);
+  };
   for (let i = 0; i < cols.length; i++) {
     for (let j = i + 1; j < cols.length; j++) {
-      if (polygonOverlapArea(polys[i] as Vec2[], polys[j] as Vec2[]) > COLUMN_OVERLAP_AREA) {
+      if (area(i, j) > COLUMN_OVERLAP_AREA) {
         const a = cols[i] as Column;
         const b = cols[j] as Column;
         out.push({

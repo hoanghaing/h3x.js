@@ -2,10 +2,10 @@ import type { EntityChange } from '../document/changes';
 import type { H3xDocument, Validator } from '../document/H3xDocument';
 import { GEOM_TOL } from '../constants';
 import { H3xValidationError } from '../errors';
-import { obbCorners, obbOverlap, wallOBB } from '../geometry/obb';
-import type { OBB } from '../geometry/obb';
+import { polygonOverlapArea } from '../geometry/clip';
 import { polygonContainsPolygon, signedArea } from '../geometry/polygon';
-import { roomPolygon } from '../rooms/detect';
+import { roomShape } from '../rooms/detect';
+import { convexOverlap, itemFootprint, openingSpan, spanOverlap, wallOutlines } from '../shapes';
 import { inRange, openingRange, wallUsableRange } from './layout';
 import type { Floor, Issue, Item, Opening, PresetResolver, Vec2 } from '../types';
 
@@ -22,10 +22,7 @@ export function checkOpening(floor: Floor, o: Opening): Issue[] {
   }
   for (const other of Object.values(floor.openings)) {
     if (other.id === o.id || other.wall !== o.wall) continue;
-    const overlap =
-      Math.min(o.offset + o.width / 2, other.offset + other.width / 2) -
-      Math.max(o.offset - o.width / 2, other.offset - other.width / 2);
-    if (overlap > GEOM_TOL) {
+    if (spanOverlap(openingSpan(o), openingSpan(other)) > GEOM_TOL) {
       out.push({
         code: 'opening-overlap',
         ids: [o.id, other.id],
@@ -43,29 +40,22 @@ export function checkOpening(floor: Floor, o: Opening): Issue[] {
   return out;
 }
 
-const footprintOBB = (
-  at: { x: number; y: number; rotation: number },
-  w: number,
-  d: number,
-): OBB => ({
-  center: { x: at.x, y: at.y },
-  halfW: w / 2,
-  halfD: d / 2,
-  rotation: at.rotation,
-});
+/** Overlap area (m²) of an item footprint and a room hole at or below which they only touch. */
+const HOLE_OVERLAP_AREA = 1e-6;
 
-function insideSomeRoom(floor: Floor, obb: OBB): boolean {
-  const corners = obbCorners(obb);
+/** Inside some room's drawn (inner) outline and clear of its holes. */
+function insideSomeRoom(floor: Floor, fp: Vec2[]): boolean {
   for (const room of Object.values(floor.rooms)) {
-    let poly: Vec2[];
+    let shape: { outer: Vec2[]; holes: Vec2[][] };
     try {
-      poly = roomPolygon(floor, room, 'inner');
+      shape = roomShape(floor, room, 'inner');
     } catch (err) {
       if (err instanceof H3xValidationError) continue;
       throw err;
     }
-    if (poly.length < 3 || signedArea(poly) <= 0) continue;
-    if (polygonContainsPolygon(poly, corners)) return true;
+    if (shape.outer.length < 3 || signedArea(shape.outer) <= 0) continue;
+    if (!polygonContainsPolygon(shape.outer, fp)) continue;
+    if (shape.holes.every((h) => polygonOverlapArea(fp, h) <= HOLE_OVERLAP_AREA)) return true;
   }
   return false;
 }
@@ -81,7 +71,7 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
       },
     ];
   }
-  const { w, d, h } = info.footprint;
+  const { w, h } = info.footprint;
   const out: Issue[] = [];
 
   if (item.mount === 'wall') {
@@ -100,9 +90,7 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
     }
     for (const o of Object.values(floor.openings)) {
       if (o.wall !== item.wall) continue;
-      const dx =
-        Math.min(item.offset + w / 2, o.offset + o.width / 2) -
-        Math.max(item.offset - w / 2, o.offset - o.width / 2);
+      const dx = spanOverlap(openingSpan({ offset: item.offset, width: w }), openingSpan(o));
       const dy = Math.min(item.elevation + h, o.sill + o.height) - Math.max(item.elevation, o.sill);
       if (dx > GEOM_TOL && dy > GEOM_TOL) {
         out.push({
@@ -115,8 +103,8 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
     return out;
   }
 
-  const obb = footprintOBB(item, w, d);
-  if (!insideSomeRoom(floor, obb)) {
+  const fp = itemFootprint(item, floor, presets)!;
+  if (!insideSomeRoom(floor, fp)) {
     out.push({
       code: 'outside-room',
       ids: [item.id],
@@ -125,11 +113,10 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
   }
   if (item.mount === 'ceiling') return out;
 
+  const outlines = wallOutlines(floor);
   for (const wall of Object.values(floor.walls)) {
-    const a = floor.nodes[wall.a];
-    const b = floor.nodes[wall.b];
-    if (!a || !b) continue;
-    if (obbOverlap(obb, wallOBB(a, b, wall.thickness))) {
+    const outline = outlines[wall.id];
+    if (outline && convexOverlap(fp, outline)) {
       out.push({
         code: 'hits-wall',
         ids: [item.id, wall.id],
@@ -141,7 +128,8 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
     if (other.id === item.id || other.mount !== 'floor') continue;
     const oi = presets(other.preset);
     if (!oi || info.layer === 'covering' || oi.layer === 'covering') continue;
-    if (obbOverlap(obb, footprintOBB(other, oi.footprint.w, oi.footprint.d))) {
+    const ofp = itemFootprint(other, floor, presets);
+    if (ofp && convexOverlap(fp, ofp)) {
       out.push({
         code: 'hits-item',
         ids: [item.id, other.id],
