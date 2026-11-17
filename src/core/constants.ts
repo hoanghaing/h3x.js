@@ -3,6 +3,8 @@ export const MIN_ROOM_AREA = 1.0;
 export const OPENING_END_MARGIN = 0.1;
 /** Largest allowed column width / depth (diameter for round columns), in meters. */
 export const MAX_COLUMN_SIZE = 2;
+/** Default floor slab thickness in meters. */
+export const DEFAULT_SLAB_THICKNESS = 0.15;
 export const XML_DECIMALS = 4;
 export const FORMAT_VERSION = 1;
 /**

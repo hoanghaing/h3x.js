@@ -23,6 +23,7 @@ const emptyFloor = (): Floor => ({
   level: 0,
   elevation: 0,
   wallHeight: 3.2,
+  slabThickness: 0.15,
   nodes: {},
   walls: {},
   openings: {},
