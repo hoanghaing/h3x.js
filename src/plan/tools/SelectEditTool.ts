@@ -11,6 +11,7 @@ import {
   removeWall,
   setSite,
   splitWall,
+  stairOutline,
   updateStair,
   type Command,
   type Id,
@@ -336,9 +337,9 @@ export class SelectEditTool implements Tool {
     const ctx = this.ctx!;
     const s = ctx.doc.floor.stairs[g.id];
     if (!s) return;
-    // The pointer delta snaps to the grid (so an off-grid bay keeps its offset); bay corners that
-    // come near a room's wall faces snap onto them when alignment is on (the whole bay moves by
-    // that delta).
+    // The pointer delta snaps to the grid (so an off-grid stair keeps its offset); outline corners
+    // that come near a room's wall faces snap onto them when alignment is on (the whole stair
+    // moves by that delta).
     const grid = ctx.plan.snapOptions.grid;
     const d = sub(p, this.press!.plan);
     const raw = add(g.start, free ? d : { x: snapScalar(d.x, grid), y: snapScalar(d.y, grid) });
@@ -349,21 +350,14 @@ export class SelectEditTool implements Tool {
     ctx.showGuides(ok ? r.guides : []);
   }
 
+  /** Move that puts the nearest corner of the stair's outline (at `centre`) on a wall-face vertex. */
   private faceDelta(s: Stair, centre: Vec2): Vec2 | null {
     const ctx = this.ctx!;
     const radius = SNAP_RADIUS_PX / ctx.plan.view.scale;
-    const c = Math.cos(s.rotation);
-    const n = Math.sin(s.rotation);
+    const shift = sub(centre, s);
     let best: { d: number; delta: Vec2 } | null = null;
-    for (const [sx, sy] of [
-      [-1, -1],
-      [1, -1],
-      [1, 1],
-      [-1, 1],
-    ] as const) {
-      const lx = (sx * s.width) / 2;
-      const ly = (sy * s.depth) / 2;
-      const corner = { x: centre.x + lx * c - ly * n, y: centre.y + lx * n + ly * c };
+    for (const p of stairOutline(s, ctx.plan.stairRise())) {
+      const corner = add(p, shift);
       const v = nearestFaceVertex(corner, ctx.doc.floor, radius);
       if (!v) continue;
       const d = Math.hypot(v.x - corner.x, v.y - corner.y);

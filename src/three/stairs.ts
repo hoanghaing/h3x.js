@@ -256,9 +256,7 @@ export function handrailPath(layout: OkLayout, floor: Floor): Vector3[] | null {
       y: mid.y + left.y * s * (fw / 2),
     });
     const sign =
-      boundaryDistance(at(1), layout.opening) >= boundaryDistance(at(-1), layout.opening) - 1e-9
-        ? 1
-        : -1;
+      boundaryDistance(at(1), layout.bay) >= boundaryDistance(at(-1), layout.bay) - 1e-9 ? 1 : -1;
     offset = sign * Math.max(0, fw / 2 - RAIL_INSET);
   } else {
     // spiral: the walking line is at 2/3 of the radius; the rail runs inside the outer edge

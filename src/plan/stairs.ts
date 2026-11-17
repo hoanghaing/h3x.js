@@ -1,4 +1,4 @@
-import { layoutStair, stairBay, type Stair, type StairPiece, type Vec2 } from '../core';
+import { layoutStair, stairOutline, type Stair, type StairPiece, type Vec2 } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { NON_SCALING, pointsAttr, screenSpaceTransform, svgEl } from './render';
 import type { View } from './view';
@@ -111,20 +111,21 @@ export function firstAboveCut(
 }
 
 /**
- * Children of a stair on its own floor: the bay outline, steps and landings (dashed above
- * STAIR_CUT_HEIGHT), a break line at the cut, the walking line with an arrow and the up label.
- * A stair without a valid layout draws only its bay outline.
+ * Children of a stair on its own floor: its outline (`stairOutline`, also what selection, hit
+ * testing and validation use), steps and landings (dashed above STAIR_CUT_HEIGHT), a break line at
+ * the cut, the walking line with an arrow and the up label. A stair without a valid layout draws
+ * only its outline, which is then the bay.
  */
 export function stairOwnShapes(stair: Stair, ctx: StairDrawContext): SVGElement[] {
   const { prefix } = ctx;
-  const bay = svgEl('polygon', {
-    class: `${prefix}-stair-bay`,
-    points: pointsAttr(stairBay(stair)),
+  const outline = svgEl('polygon', {
+    class: `${prefix}-stair-outline`,
+    points: pointsAttr(stairOutline(stair, ctx.rise)),
     ...NON_SCALING,
   });
   const l = Number.isFinite(ctx.rise) ? layoutStair(stair, ctx.rise) : undefined;
-  if (!l?.ok || l.walkLine.length < 2) return [bay];
-  const out: SVGElement[] = [bay];
+  if (!l?.ok || l.walkLine.length < 2) return [outline];
+  const out: SVGElement[] = [outline];
   for (const piece of [...l.steps, ...l.landings]) {
     const hidden = piece.top > STAIR_CUT_HEIGHT;
     out.push(piecePolygon(piece, `${prefix}-stair-step${hidden ? ` ${prefix}-stair-hidden` : ''}`));
@@ -146,8 +147,8 @@ export function stairOwnShapes(stair: Stair, ctx: StairDrawContext): SVGElement[
 }
 
 /**
- * A stair of the floor below seen from the floor above: the slab opening (the stair bay, cut for
- * every stair as in 3D) and, when the layout is valid, every step and landing as thin lines and
+ * A stair of the floor below seen from the floor above: the slab opening (the stair outline, cut
+ * for every stair as in 3D) and, when the layout is valid, every step and landing as thin lines and
  * the down label near the top.
  */
 export function stairFromAbove(stair: Stair, ctx: StairDrawContext): SVGGElement {
@@ -156,7 +157,7 @@ export function stairFromAbove(stair: Stair, ctx: StairDrawContext): SVGGElement
   g.append(
     svgEl('polygon', {
       class: `${prefix}-stair-opening`,
-      points: pointsAttr(stairBay(stair)),
+      points: pointsAttr(stairOutline(stair, ctx.rise)),
       ...NON_SCALING,
     }),
   );

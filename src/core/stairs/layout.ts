@@ -1,7 +1,7 @@
 import { signedArea } from '../geometry/polygon';
 import { closestPointOnSegment } from '../geometry/segment';
 import { distance } from '../geometry/vec';
-import type { Stair, Vec2 } from '../types';
+import type { Stair, StairType, Vec2 } from '../types';
 import {
   MAX_RISER,
   SPIRAL_COLUMN_DIAMETER,
@@ -28,7 +28,10 @@ export type StairLayout =
       steps: StairPiece[]; // plan polygons, world coords; top above floor
       landings: StairPiece[];
       walkLine: Vec2[]; // from first riser to last
-      opening: Vec2[]; // bay rectangle, world coords
+      /** The stair's outline (stairOutline): the slab opening on the floor above, world coords. */
+      opening: Vec2[];
+      /** The bay rectangle (stairBay), world coords. */
+      bay: Vec2[];
     };
 
 const TOL = 1e-9;
@@ -538,6 +541,11 @@ export function layoutStair(stair: Stair, rise: number): StairLayout {
     return mirror ? pts.reverse() : pts;
   };
   const piece = (s: StairPiece): StairPiece => ({ outline: poly(s.outline), top: s.top });
+  const r = Math.min(w, d) / 2;
+  const outline =
+    stair.type === 'spiral'
+      ? rect(-r, -r, r, r)
+      : bounds([...local.steps, ...local.landings].flatMap((p) => p.outline));
 
   return {
     ok: true,
@@ -547,13 +555,33 @@ export function layoutStair(stair: Stair, rise: number): StairLayout {
     steps: local.steps.map(piece),
     landings: local.landings.map(piece),
     walkLine: local.walkLine.map(toWorld),
-    opening: stairBay(stair),
+    opening: poly(outline),
+    bay: stairBay(stair),
   };
 }
 
+/** Axis-aligned bounding rectangle of `pts`, counter-clockwise. */
+function bounds(pts: Vec2[]): Vec2[] {
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  return rect(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+}
+
 /**
- * The stair's bay rectangle (footprint), counter-clockwise in world coordinates: the slab
- * opening on the floor above, whether or not the flights fit.
+ * The stair's exact plan outline, counter-clockwise in world coordinates: the tightest rectangle
+ * in the stair's rotated frame around every step and landing (for a spiral, the square whose side
+ * is the diameter, centred on the spiral), or the bay (`stairBay`) when the layout is not ok for
+ * `rise`. The plan draws, selects, hit-tests and snaps this outline; `stair-overlaps-wall` and the
+ * slab opening on the floor above use it too.
+ */
+export function stairOutline(stair: Stair, rise: number): Vec2[] {
+  const l = layoutStair(stair, rise);
+  return l.ok ? l.opening : stairBay(stair);
+}
+
+/**
+ * The stair's bay rectangle, counter-clockwise in world coordinates: the area the stair is laid
+ * out in (and its outline when the flights do not fit).
  */
 export function stairBay(stair: Stair): Vec2[] {
   const cos = Math.cos(stair.rotation);
@@ -564,4 +592,23 @@ export function stairBay(stair: Stair): Vec2[] {
     x: stair.x + p.x * cos - p.y * sin,
     y: stair.y + p.x * sin + p.y * cos,
   }));
+}
+
+/** A stair parameter that applies to some types only. */
+export type StairParam = 'turn' | 'hand' | 'flightWidth';
+
+const PARAMS: Record<StairType, ReadonlyArray<StairParam>> = {
+  straight: ['hand', 'flightWidth'],
+  L: ['turn', 'hand', 'flightWidth'],
+  U: ['turn', 'hand', 'flightWidth'],
+  spiral: ['hand'],
+};
+
+/**
+ * The parameters that shape a stair of `type`: straight uses hand and flightWidth, L and U add
+ * turn, spiral uses hand only (its diameter is the bay's smaller side). An editor can disable the
+ * inputs for the others.
+ */
+export function stairParams(type: StairType): ReadonlyArray<StairParam> {
+  return PARAMS[type] ?? [];
 }

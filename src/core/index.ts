@@ -35,8 +35,8 @@ export {
 export type { NewItem } from './commands/objects';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
 export { addStair, updateStair, removeStair, validateStairParams } from './commands/stairs';
-export { layoutStair, stairBay } from './stairs/layout';
-export type { StairLayout, StairPiece } from './stairs/layout';
+export { layoutStair, stairBay, stairOutline, stairParams } from './stairs/layout';
+export type { StairLayout, StairParam, StairPiece } from './stairs/layout';
 export * from './stairs/constants';
 export { setWallFinish, setRoomFinish, renameRoom } from './commands/finishes';
 export {

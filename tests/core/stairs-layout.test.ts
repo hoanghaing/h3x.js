@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutStair } from '../../src/core/stairs/layout';
+import { layoutStair, stairBay, stairOutline, stairParams } from '../../src/core/stairs/layout';
 import type { StairLayout } from '../../src/core/stairs/layout';
 import { pointInPolygon, signedArea } from '../../src/core/geometry/polygon';
 import type { Stair, Vec2 } from '../../src/core/types';
@@ -375,7 +375,8 @@ describe('layoutStair — rotation and errors', () => {
       base.steps.forEach((s, i) => close(rot.steps[i]!.outline, r(s.outline)));
       close(rot.walkLine, r(base.walkLine));
       close(rot.opening, r(base.opening));
-      close(base.opening, [
+      close(rot.bay, r(base.bay));
+      close(base.bay, [
         { x: 2.5, y: -4.5 },
         { x: 3.5, y: -4.5 },
         { x: 3.5, y: 0.5 },
@@ -449,5 +450,68 @@ describe('layoutStair property sweep', () => {
     expect(problems.slice(0, 10)).toEqual([]);
     for (const type of ['straight', 'L', 'U', 'spiral'])
       expect(okCount[type] ?? 0).toBeGreaterThan(0);
+  });
+});
+
+describe('stairOutline', () => {
+  const size = (o: Vec2[]): [number, number] => [maxX(o) - minX(o), maxY(o) - minY(o)];
+
+  it('a spiral in a 3.4 × 4.85 bay is the 3.4 × 3.4 square centred on the spiral', () => {
+    const o = stairOutline(stair({ type: 'spiral', width: 3.4, depth: 4.85, x: 2, y: 1 }), H);
+    expect(o).toHaveLength(4);
+    expect(signedArea(o)).toBeCloseTo(3.4 * 3.4, 9);
+    const [w, d] = size(o);
+    expect(w).toBeCloseTo(3.4, 9);
+    expect(d).toBeCloseTo(3.4, 9);
+    expect(cx(o)).toBeCloseTo(2, 9);
+    expect(ys(o).reduce((a, b) => a + b, 0) / 4).toBeCloseTo(1, 9);
+  });
+
+  for (const hand of ['right', 'left'] as const) {
+    it(`a straight 1.0 flight in a 2.0 bay is 1.0 wide on the ${hand} side`, () => {
+      const s = stair({ width: 2, flightWidth: 1, hand });
+      const o = stairOutline(s, H);
+      const l = ok(layoutStair(s, H));
+      expect(signedArea(o)).toBeGreaterThan(0);
+      expect(minX(o)).toBeCloseTo(hand === 'right' ? 0 : -1, 9);
+      expect(maxX(o)).toBeCloseTo(hand === 'right' ? 1 : 0, 9);
+      // tight in depth too: from the first riser (the slack stays outside) to the bay edge
+      expect(minY(o)).toBeCloseTo(Math.min(...l.steps.map((p) => minY(p.outline))), 9);
+      expect(maxY(o)).toBeCloseTo(2.5, 9);
+    });
+  }
+
+  it('contains every step and landing of every type, rotated', () => {
+    const cases: Partial<Stair>[] = [
+      { type: 'U', turn: 'landing', width: 2.4, depth: 4.5, flightWidth: 0.9 },
+      { type: 'U', turn: 'winder', width: 2.0, depth: 3.2, flightWidth: 0.9 },
+      { type: 'L', turn: 'landing', width: 3.5, depth: 3.5, flightWidth: 1.0 },
+      { type: 'L', turn: 'winder', width: 2.6, depth: 3.2, flightWidth: 0.9, hand: 'left' },
+    ];
+    for (const c of cases) {
+      const s = stair({ ...c, x: 1, y: -2, rotation: 0.4 });
+      const l = ok(layoutStair(s, H));
+      const o = stairOutline(s, H);
+      expect(signedArea(o)).toBeGreaterThan(0);
+      const grow = o.map((p) => ({ x: 1 + (p.x - 1) * 1.000001, y: -2 + (p.y + 2) * 1.000001 }));
+      for (const piece of [...l.steps, ...l.landings]) {
+        for (const p of piece.outline) expect(pointInPolygon(p, grow)).toBe(true);
+      }
+    }
+  });
+
+  it('is the bay when the layout is not ok', () => {
+    const s = stair({ width: 1.2, depth: 1.2, type: 'spiral' });
+    expect(stairOutline(s, H)).toEqual(stairBay(s));
+    expect(stairOutline(stair({}), NaN)).toEqual(stairBay(stair({})));
+  });
+});
+
+describe('stairParams', () => {
+  it('lists the parameters each type uses', () => {
+    expect(stairParams('straight')).toEqual(['hand', 'flightWidth']);
+    expect(stairParams('L')).toEqual(['turn', 'hand', 'flightWidth']);
+    expect(stairParams('U')).toEqual(['turn', 'hand', 'flightWidth']);
+    expect(stairParams('spiral')).toEqual(['hand']);
   });
 });

@@ -1,5 +1,12 @@
 import { Group, type LineLoop, type Mesh } from 'three';
-import { stairBay, type ChangeEvent, type Floor, type H3xDocument, type Id } from '../core';
+import {
+  stairOutline,
+  stairRise,
+  type ChangeEvent,
+  type Floor,
+  type H3xDocument,
+  type Id,
+} from '../core';
 import { FloorView, type FloorContext } from './floorView';
 import { MaterialLibrary, type FinishResolver } from './materials';
 import { buildSiteLine } from './site';
@@ -26,7 +33,7 @@ export type H3xViewMode = 'active' | 'cutaway' | 'all';
  * A three.js scene graph kept in sync with an H3xDocument: one Group per floor
  * (`h3x-floor-<id>`, lowest first) holding its walls, room floors, joins, columns, stairs and
  * slab, plus the site line on the root. The slab and room floors of a floor are cut by the stair
- * bays of the floor below.
+ * outlines (`stairOutline`) of the floor below.
  */
 export class H3xScene {
   readonly root = new Group();
@@ -172,7 +179,7 @@ export class H3xScene {
       const moved = this.neighbours.get(floor.id) !== pair;
       this.neighbours.set(floor.id, pair);
       if (fresh || moved || !touched || touched.has(floor.id)) {
-        view.rebuild(floor, this.context(floors[i - 1], floors[i + 1]));
+        view.rebuild(floor, this.context(floor, floors[i - 1], floors[i + 1]));
       }
     });
     // Re-add in level order, keeping foreign objects (and the site line) after the floors.
@@ -184,11 +191,15 @@ export class H3xScene {
     if (visibility) this.applyVisibility();
   }
 
+  /** Neighbours of `floor`; its slab is cut by the outline of every stair of the floor below. */
   private context(
+    floor: Readonly<Floor>,
     below: Readonly<Floor> | undefined,
     above: Readonly<Floor> | undefined,
   ): FloorContext {
-    return { above, openings: below ? Object.values(below.stairs).map(stairBay) : [] };
+    if (!below) return { above, openings: [] };
+    const rise = stairRise(below as Floor, floor as Floor);
+    return { above, openings: Object.values(below.stairs).map((s) => stairOutline(s, rise)) };
   }
 
   private applyVisibility(): void {

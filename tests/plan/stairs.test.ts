@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   H3xDocument,
   layoutStair,
+  stairOutline,
   setFloorHeight,
   updateStair,
   type Floor,
@@ -71,6 +72,14 @@ afterEach(() => {
 const P = 'h3x-plan';
 const stairGroups = (plan: H3xPlan): SVGGElement[] =>
   Array.from(plan.svg.querySelectorAll<SVGGElement>(`.${P}-layer-stairs .${P}-stair`));
+const pts = (el: Element) =>
+  el
+    .getAttribute('points')!
+    .split(' ')
+    .map((p) => {
+      const [x, y] = p.split(',').map(Number);
+      return { x: x!, y: y! };
+    });
 const okLayout = () => {
   const l = layoutStair(uStair(), 3.35);
   if (!l.ok) throw new Error('fixture stair must fit');
@@ -122,7 +131,34 @@ describe('plan stairs: own floor', () => {
     expect(plan.svg.querySelector(`.${P}-underlay .${P}-stair-label`)!.textContent).toBe('XUỐNG');
   });
 
-  it('hit-tests the bay as the stair', () => {
+  it('draws one outline (stairOutline) as the frame: a spiral square, not its bay', () => {
+    const spiral = uStair({ type: 'spiral', width: 3.4, depth: 4.85 });
+    const plan = makePlan(H3xDocument.fromProject(project(spiral)));
+    const frame = stairGroups(plan)[0]!.querySelectorAll(`.${P}-stair-outline`);
+    expect(frame).toHaveLength(1);
+    expect(pts(frame[0]!)).toEqual(stairOutline(spiral, 3.35));
+    const ys = pts(frame[0]!).map((p) => p.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(3.4, 9);
+    expect(DEFAULT_CSS(P)).toContain(`.${P}-stair-outline`);
+    // selection highlights the same polygon
+    plan.select({ kind: 'stair', id: 's1' });
+    expect(stairGroups(plan)[0]!.classList.contains(`${P}-selected`)).toBe(true);
+    expect(DEFAULT_CSS(P)).toContain(`.${P}-stair.${P}-selected .${P}-stair-outline`);
+  });
+
+  it('a flight width edit redraws the outline and the steps at once', () => {
+    const plan = makePlan(H3xDocument.fromProject(project(uStair({ type: 'straight' }))));
+    const frame = () => pts(stairGroups(plan)[0]!.querySelector(`.${P}-stair-outline`)!);
+    const width = () => Math.max(...frame().map((p) => p.x)) - Math.min(...frame().map((p) => p.x));
+    expect(width()).toBeCloseTo(1.0, 9);
+    plan.doc.execute(updateStair('s1', { flightWidth: 0.8 }));
+    expect(width()).toBeCloseTo(0.8, 9);
+    const step = stairGroups(plan)[0]!.querySelector(`.${P}-stair-step`)!;
+    const xs = pts(step).map((p) => p.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(0.8, 9);
+  });
+
+  it('hit-tests the outline as the stair', () => {
     const plan = makePlan();
     expect(plan.hitAt(plan.planToScreen({ x: 5, y: 5 }))).toEqual({ kind: 'stair', id: 's1' });
     expect(plan.hitAt(plan.planToScreen({ x: 8, y: 5 }))).toBeNull();
@@ -178,6 +214,14 @@ describe('plan stairs: floor above', () => {
     expect(opening[0]!.getAttribute('points')!.split(' ')).toHaveLength(4);
     expect(below(plan).querySelector(`.${P}-stair-step`)).toBeNull();
     expect(below(plan).querySelector(`.${P}-stair-label`)).toBeNull();
+  });
+
+  it('the opening is the stair outline of the floor below', () => {
+    const spiral = uStair({ type: 'spiral', width: 3.4, depth: 4.85 });
+    const plan = makePlan(H3xDocument.fromProject(project(spiral)));
+    plan.doc.setActiveFloor('u');
+    const opening = below(plan).querySelector(`.${P}-stair-opening`)!;
+    expect(pts(opening)).toEqual(stairOutline(spiral, 3.35));
   });
 
   it('refreshes when the stair below changes', () => {

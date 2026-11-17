@@ -54,6 +54,27 @@ describe('hitTest', () => {
     expect(hitTest(scene(), at(2, 2))).toEqual({ kind: 'room', id: 'r1' });
   });
 
+  it('hits a stair on its outline only: a 1.0 flight in a 2.0 bay leaves the other half free', () => {
+    const s = scene({ stairRise: 2 }); // 11 risers, 10 treads of 0.26 m
+    s.floor.stairs['s1'] = {
+      id: 's1',
+      x: 2,
+      y: 2,
+      width: 2,
+      depth: 3,
+      rotation: 0,
+      type: 'straight',
+      turn: 'landing',
+      hand: 'right',
+      flightWidth: 1,
+    };
+    expect(hitTest(s, at(2.5, 3))).toEqual({ kind: 'stair', id: 's1' });
+    expect(hitTest(s, at(2.01, 3))).toEqual({ kind: 'stair', id: 's1' });
+    expect(hitTest(s, at(1.99, 3))).toEqual({ kind: 'room', id: 'r1' }); // bay, not outline
+    // without a rise (top floor) the outline is the bay
+    expect(hitTest({ ...s, stairRise: NaN }, at(1.5, 3))).toEqual({ kind: 'stair', id: 's1' });
+  });
+
   it('returns null far outside', () => {
     expect(hitTest(scene(), { x: 5, y: 5 })).toBeNull();
   });
