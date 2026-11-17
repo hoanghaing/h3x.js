@@ -5,6 +5,7 @@ export * from './errors';
 
 export { H3xDocument } from './document/H3xDocument';
 export type {
+  ActiveFloorEvent,
   ChangeEvent,
   Command,
   CommandContext,

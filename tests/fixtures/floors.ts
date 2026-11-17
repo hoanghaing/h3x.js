@@ -1,4 +1,5 @@
 import type { Floor, PlanNode, PresetInfo, PresetResolver, Wall } from '../../src/core/types';
+import type { CommandContext } from '../../src/core/document/changes';
 
 const node = (id: string, x: number, y: number): PlanNode => ({ id, x, y });
 const wall = (id: string, a: string, b: string): Wall => ({
@@ -117,4 +118,14 @@ export function holedRoomFloor(): Floor {
   });
   f.rooms.r1!.holes = [['hw0', 'hw1', 'hw2', 'hw3']];
   return f;
+}
+
+/** A CommandContext for running a command directly against one floor. */
+export function ctxFor(floor: Floor, presets?: PresetResolver): CommandContext {
+  return {
+    floor,
+    floorId: floor.id,
+    project: { version: 1, unit: 'm', meta: { name: '', created: '' }, floors: [floor] },
+    presets,
+  };
 }
