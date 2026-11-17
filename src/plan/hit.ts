@@ -1,5 +1,5 @@
 import type { Floor, Id, PresetResolver, Room, Site } from '../core';
-import { H3xValidationError, roomShape } from '../core';
+import { H3xValidationError, roomShape, stairBay } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { WallCorners } from '../shared/walls/joins';
@@ -80,6 +80,10 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   for (const item of Object.values(floor.items)) {
     const fp = itemFootprint(item, floor, scene.presets);
     if (fp && pointInPolygon(p, fp)) return { kind: 'item', id: item.id };
+  }
+
+  for (const stair of Object.values(floor.stairs)) {
+    if (pointInPolygon(p, stairBay(stair))) return { kind: 'stair', id: stair.id };
   }
 
   for (const room of Object.values(floor.rooms)) {

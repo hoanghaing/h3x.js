@@ -20,6 +20,16 @@ ${p} .${prefix}-opening .${prefix}-opening-gap { fill: #fafaf9; stroke: none; }
 ${p} .${prefix}-opening path { fill: none; stroke: #292524; stroke-width: 1.5; }
 ${p} .${prefix}-opening .${prefix}-opening-arc { stroke-width: 1; stroke-dasharray: 4 3; }
 ${p} .${prefix}-column circle, ${p} .${prefix}-column polygon { fill: #a8a29e; stroke: #292524; stroke-width: 1; }
+${p} .${prefix}-stair polygon, ${p} .${prefix}-stair path { fill: none; stroke: #44403c; stroke-width: 1; }
+${p} .${prefix}-stair .${prefix}-stair-bay { stroke: #57534e; }
+${p} .${prefix}-stair .${prefix}-stair-hidden { stroke-dasharray: 4 3; }
+${p} .${prefix}-stair .${prefix}-stair-walk { stroke: #57534e; }
+${p} .${prefix}-stair .${prefix}-stair-arrow { fill: #57534e; stroke: none; }
+${p} .${prefix}-stair .${prefix}-stair-break { stroke: #292524; stroke-width: 1.5; }
+${p} .${prefix}-stair-label { fill: #44403c; font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: #fafaf9; stroke-width: 3px; }
+${p} .${prefix}-underlay .${prefix}-stair-step { stroke-width: 0.75; }
+${p} .${prefix}-underlay .${prefix}-stair-opening { stroke: #57534e; stroke-width: 1.5; opacity: 0.8; }
+${p} .${prefix}-underlay .${prefix}-stair-label { fill: #78716c; }
 ${p} .${prefix}-site polygon { fill: none; stroke: #78716c; stroke-width: 1.5; stroke-dasharray: 8 4; }
 ${p} .${prefix}-item polygon { fill: none; stroke: #78716c; stroke-width: 1; }
 ${p} .${prefix}-dimension path { fill: none; stroke: #2563eb; stroke-width: 1; }

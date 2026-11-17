@@ -18,6 +18,7 @@ const LAYERS = [
   'grid',
   'site',
   'rooms',
+  'stairs',
   'walls',
   'joins',
   'columns',
