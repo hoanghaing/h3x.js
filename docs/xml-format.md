@@ -190,6 +190,11 @@ to the floor above (risers of at most 0.18 m, so the count follows the storey he
 | `hand`        | `left` \| `right`                    | no       | `right`   | Turn direction for L / U, rotation sense for spiral. |
 | `flightWidth` | number                               | no       | `0.9`     | Width of one flight, meters (> 0).                   |
 
+Parse errors (`element: 'stair'`): a `type`, `turn` or `hand` outside the listed values; a
+non-finite `x`, `y` or `rotation`; a non-positive `width`, `depth` or `flightWidth`; a
+`flightWidth` greater than `width` (greater than `width / 2` for a `U` stair; spiral ignores
+`flightWidth`). `H3xDocument.fromProject` rejects the same stairs with `invalid-stair`.
+
 Non-blocking warnings (reported by `validateLayout`): `stair-no-floor-above`,
 `stair-does-not-fit` and `stair-overlaps-wall`; see [validation.md](validation.md).
 

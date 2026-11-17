@@ -148,15 +148,21 @@ A floor holds `stairs`: a bay (`x`, `y`, `width`, `depth`, `rotation`) plus `typ
 A stair links its floor to the floor above; the slab and room floors above get an opening.
 
 - Commands: `addStair({ x, y, width, depth, type?, turn?, hand?, flightWidth?, rotation? })`
-  (`createdId`), `updateStair(id, patch)` and `removeStair(id)`.
+  (`createdId`; defaults `type: 'U'`, `turn: 'landing'`, `hand: 'right'`, `flightWidth: 0.9`,
+  `rotation: 0`), `updateStair(id, patch)` and `removeStair(id)`. A non-finite position or
+  rotation, an unknown type / turn / hand, a non-positive size or a flight wider than the bay
+  (wider than half the bay for U) is `invalid-stair`; `fromProject` and `fromXML` reject such a
+  stair too.
 - Layout: `layoutStair(stair, rise)` returns risers, riser height, tread depth, step and landing
   polygons and the walking line, or `{ ok: false }` when the flights do not fit; `stairRise` and
   `stairBay` are helpers. Warnings `stair-does-not-fit`, `stair-no-floor-above` and
   `stair-overlaps-wall` come from `validateLayout()`.
 - 3D: `scene.getStairMesh(id, floorId?)` (`h3xKind: 'stair'`); a handrail is part of the stair.
-- Plan: `new StairTool({ type, turn, hand, flightWidth })` drags a bay (corners snap to wall
-  faces); `SelectEditTool` selects, drags, nudges and deletes stairs; the `stairLabels` option
-  (default `{ up: 'UP', down: 'DN' }`) sets the walking-line labels.
+- Plan: `new StairTool({ type, turn, hand, flightWidth })` drags a bay and adds an axis-aligned
+  stair (rotation 0; rotate it afterwards with `updateStair`). Bay corners snap to wall-face
+  vertices with `snapBayCorner(p, floor, opts)` (grid only when `align` is off);
+  `SelectEditTool` selects, drags, nudges and deletes stairs; the `stairLabels` option (default
+  `{ up: 'UP', down: 'DN' }`) sets the walking-line labels.
 
 ### Validation and issue codes
 
@@ -393,8 +399,8 @@ both views.
   the middle of a drag cannot be detected, because it emits no event, so the drag's next steps
   start a new undo step.
 - **Options.** `new H3xPlan(container, doc, { grid?, snap?: { grid?, align? }, classPrefix?,
-presets?, tool? })`. Defaults: grid shown, `snap` 0.05 m with alignment on, prefix
-  `h3x-plan`, `presets` taken from the document.
+presets?, tool?, stairLabels? })`. Defaults: grid shown, `snap` 0.05 m with alignment on,
+  prefix `h3x-plan`, `presets` taken from the document, `stairLabels` `{ up: 'UP', down: 'DN' }`.
 - **Styling.** The plan injects a stylesheet scoped under the root class (`h3x-plan`, or your
   `classPrefix`); override it with more specific rules. Every entity is a `<g>` with class
   `h3x-plan-<kind>` (`node`, `wall`, `room`, `opening`, `item`, `column`, `site`) and
@@ -416,7 +422,8 @@ active floor commits an in-progress drag as it stands (one undo step), resets th
 clears the selection and redraws.
 
 The example page shows the plan and the 3D view side by side on one document, with a throwaway
-toolbar (select, draw wall, draw site, columns, stair, clear, sample houses), controls for the selected stair (type, turn, hand, flight width, rotate 90°), demo inputs wired to
+toolbar (select, draw wall, draw site, columns, stair, clear, sample houses), controls for the
+selected stair (type, turn, hand, flight width, rotate 90°), demo inputs wired to
 `lengthEditRequest` and `segmentLengthRequest`, and a floor bar (floor picker, add above / below,
 remove, wall height, slab thickness, ground elevation and view mode). It opens a sample
 three-storey townhouse with a basement (`examples/layouts/townhouse-3f.xml`) (`pnpm dev`).
