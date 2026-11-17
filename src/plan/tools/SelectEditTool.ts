@@ -336,13 +336,13 @@ export class SelectEditTool implements Tool {
     const ctx = this.ctx!;
     const s = ctx.doc.floor.stairs[g.id];
     if (!s) return;
-    const raw = add(g.start, sub(p, this.press!.plan));
-    // Bay corners that come near a room's wall faces snap onto them (the whole bay moves by
-    // that delta); otherwise the centre snaps like other items.
+    // The pointer delta snaps to the grid (so an off-grid bay keeps its offset); bay corners that
+    // come near a room's wall faces snap onto them (the whole bay moves by that delta).
+    const grid = ctx.plan.snapOptions.grid;
+    const d = sub(p, this.press!.plan);
+    const raw = add(g.start, free ? d : { x: snapScalar(d.x, grid), y: snapScalar(d.y, grid) });
     const face = free ? null : this.faceDelta(s, raw);
-    const r = face
-      ? { point: add(raw, face), guides: [] }
-      : ctx.snapDraw(raw, undefined, free, undefined, { structure: false });
+    const r = { point: face ? add(raw, face) : raw, guides: [] as SnapGuide[] };
     const same = r.point.x === s.x && r.point.y === s.y;
     const ok = same || this.run(updateStair(g.id, { x: r.point.x, y: r.point.y }), g.key);
     ctx.showGuides(ok ? r.guides : []);

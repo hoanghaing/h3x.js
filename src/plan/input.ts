@@ -135,8 +135,13 @@ export class PlanInput {
       return;
     }
     if (this.pointers.size > 0 && e.pointerId !== this.primary) return;
-    if (this.mode === 'pan' && e.pointerType === 'mouse' && e.buttons === 0) {
-      // The button was released where we never saw the pointerup.
+    if (
+      (this.mode === 'pan' || this.mode === 'tool') &&
+      e.pointerType === 'mouse' &&
+      e.buttons === 0
+    ) {
+      // The button was released where we never saw the pointerup: end the gesture (a tool sees
+      // its release) instead of letting a stale press follow the hovering mouse.
       this.up(e);
       return;
     }
