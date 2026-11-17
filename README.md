@@ -150,18 +150,26 @@ A stair links its floor to the floor above; the slab and room floors above get a
 - Commands: `addStair({ x, y, width, depth, type?, turn?, hand?, flightWidth?, rotation? })`
   (`createdId`; defaults `type: 'U'`, `turn: 'landing'`, `hand: 'right'`, `flightWidth: 0.9`,
   `rotation: 0`), `updateStair(id, patch)` and `removeStair(id)`. A non-finite position or
-  rotation, an unknown type / turn / hand, a non-positive size or a flight wider than the bay
-  (wider than half the bay for U) is `invalid-stair`; `fromProject` and `fromXML` reject such a
-  stair too.
+  rotation, an unknown type / turn / hand, a non-positive size (`flightWidth` too, for every
+  type) or a flight wider than the bay (wider than half the bay for U) by more than
+  `FLIGHT_WIDTH_TOL` (1e-4 m, so 4-decimal XML reloads) is `invalid-stair`; `fromProject` and
+  `fromXML` reject such a stair too. `updateStair` ignores patch keys whose value is `undefined`.
+- Parameters by type: `stairParams(type)` lists the parameters that shape a stair of that type
+  (`straight`: `hand`, `flightWidth`; `L` / `U`: `turn`, `hand`, `flightWidth`; `spiral`: `hand`),
+  so an editor can disable the other inputs.
 - Layout: `layoutStair(stair, rise)` returns risers, riser height, tread depth, step and landing
-  polygons and the walking line, or `{ ok: false }` when the flights do not fit; `stairRise` and
-  `stairBay` are helpers. Warnings `stair-does-not-fit`, `stair-no-floor-above` and
+  polygons, the walking line, `opening` (the outline) and `bay`, or `{ ok: false }` when the
+  flights do not fit; `stairRise` and `stairBay` are helpers. `stairOutline(stair, rise)` is the
+  stair's one exact outline: the tight rectangle around its steps and landings (the diameter
+  square for a spiral; the bay when the layout is not ok). The plan draws, selects, hit-tests and
+  snaps it, `stair-overlaps-wall` checks it and it is the slab opening on the floor above. Warnings `stair-does-not-fit`, `stair-no-floor-above` and
   `stair-overlaps-wall` come from `validateLayout()`.
 - 3D: `scene.getStairMesh(id, floorId?)` (`h3xKind: 'stair'`); a handrail is part of the stair.
 - Plan: `new StairTool({ type, turn, hand, flightWidth })` drags a bay and adds an axis-aligned
   stair (rotation 0; rotate it afterwards with `updateStair`). Bay corners snap to wall-face
   vertices with `snapBayCorner(p, floor, opts)` (grid only when `align` is off);
-  `SelectEditTool` selects, drags, nudges and deletes stairs; the `stairLabels` option (default
+  `SelectEditTool` selects, drags (outline corners snap to wall faces), nudges and deletes stairs;
+  the frame drawn around a stair is its outline (class `h3x-plan-stair-outline`); the `stairLabels` option (default
   `{ up: 'UP', down: 'DN' }`) sets the walking-line labels.
 
 ### Validation and issue codes
@@ -236,6 +244,11 @@ U+FFFD.
 ### Geometry helpers
 
 `obbCorners(obb)` and `wallOBB(a, b, thickness)` work with oriented boxes (`OBB`).
+One plan outline per kind, shared by the plan (drawing, selection, hit-testing) and the
+validators (overlap and containment): `wallOutline(corners)` / `wallOutlines(floor)` (the mitred
+outline as drawn), `columnShape(column)` / `columnPolygon(column)`, `itemFootprint(item, floor,
+presets)`, `openingSpan(opening)` and `stairOutline(stair, rise)`; `convexOverlap(a, b)` and
+`circleOverlapArea(a, b)` are the overlap tests (touching is not overlap).
 `createId()` makes 10-character nanoid ids.
 
 ## h3x/three
