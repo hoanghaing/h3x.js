@@ -56,4 +56,16 @@ export { polygonOverlapArea } from './geometry/clip';
 export { projectToXML } from './xml/serialize';
 export { projectFromXML } from './xml/parse';
 export { obbCorners, wallOBB } from './geometry/obb';
+export {
+  WALL_ITEM_DEPTH,
+  circleOverlapArea,
+  columnPolygon,
+  columnShape,
+  convexOverlap,
+  itemFootprint,
+  openingSpan,
+  wallOutline,
+  wallOutlines,
+} from './shapes';
+export type { WallCorners } from './walls/joins';
 export type { OBB } from './geometry/obb';
