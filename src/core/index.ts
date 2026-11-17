@@ -48,6 +48,7 @@ export {
 } from './commands/floors';
 
 export { validateLayout } from './validate/layout';
+export { validateStairs, stairRise } from './validate/stairs';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';
 export { detectRooms, roomPolygon, roomShape, roomArea } from './rooms/detect';
 export type { DetectedRoom } from './rooms/detect';

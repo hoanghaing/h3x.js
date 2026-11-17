@@ -4,6 +4,7 @@ import { H3xValidationError } from '../errors';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { layoutValidator, validateLayout } from '../validate/layout';
 import { validateColumnSupport } from '../validate/floors';
+import { validateStairs } from '../validate/stairs';
 import { checkRefs } from '../validate/refs';
 import { placementValidator, validatePlacements } from '../validate/placement';
 import type { Floor, Id, Issue, PresetResolver, Project } from '../types';
@@ -219,6 +220,7 @@ export class H3xDocument {
         this.floor as Floor,
         this.floorBelow(this.floor.id) as Floor | undefined,
       ),
+      ...validateStairs(this.floor as Floor, this.floorAbove(this.floor.id) as Floor | undefined),
     ];
   }
 
