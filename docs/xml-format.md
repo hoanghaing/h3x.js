@@ -52,15 +52,29 @@ first). Fewer than 3 points or a malformed pair is a parse error (`element: site
 
 ### `<floor>`
 
-| Attribute    | Type   | Required | Default | Notes                              |
-| ------------ | ------ | -------- | ------- | ---------------------------------- |
-| `id`         | string | yes      | -       |                                    |
-| `level`      | number | no       | `0`     | Storey index.                      |
-| `elevation`  | number | no       | `0`     | Floor height above ground, meters. |
-| `wallHeight` | number | yes      | -       | Default wall height, meters.       |
+| Attribute       | Type   | Required | Default | Notes                                                                |
+| --------------- | ------ | -------- | ------- | -------------------------------------------------------------------- |
+| `id`            | string | yes      | -       | Unique among floors (a duplicate is a parse error).                  |
+| `level`         | number | no       | `0`     | Storey index; used to order floors on load, see below.               |
+| `elevation`     | number | no       | `0`     | Height of the floor surface above ground, meters. Ground floor only. |
+| `wallHeight`    | number | yes      | -       | Default wall height, meters.                                         |
+| `slabThickness` | number | no       | `0.15`  | Thickness of the slab under this floor, meters; must be above 0.     |
 
-Children: `node`, `wall`, `opening`, `room`, `item`, `column`, in any order. A file may hold several
-floors; the editing APIs work on the first and keep the others as loaded.
+Children: `node`, `wall`, `opening`, `room`, `item`, `column`, in any order. A file may hold
+several floors; every floor can be edited by making it the active floor (see the README).
+
+**Stack normalisation.** On load the floors are sorted by `level` (file order breaks ties) and
+the stack is rebuilt:
+
+- The **ground floor** is the single floor with `level="0"`; if several share level 0 or none
+  does, it is the lowest floor with `level >= 0`, else the highest floor. It is renumbered to
+  level 0 and the others contiguously (basements `-1`, `-2`, ..., upper floors `1`, `2`, ...), so
+  in memory `level` is always contiguous.
+- Only the ground floor's `elevation` is read. Every other elevation is derived and written back
+  on save:
+  - above the ground: `elevation(n) = elevation(n-1) + wallHeight(n-1) + slabThickness(n)`
+  - below the ground: `elevation(n) = elevation(n+1) - slabThickness(n+1) - wallHeight(n)`
+- Ids need to be unique only within one floor; two floors may both hold a `w1`.
 
 ### `<node>`
 
@@ -169,7 +183,7 @@ The `Mount` type also lists `opening`; that is a preset mount used by `addOpenin
   `<h3x>`; missing, non-integer or `< 1` `version`; `unit` other than `m`; no `<floor>`; a
   missing required attribute; a non-numeric number (empty, `NaN`, `Infinity`); a bad `side`,
   `mount` or column `shape`; a bad or missing `<site>` (fewer than 3 points, malformed point, more
-  than one); a duplicate id within a floor; a reference to a missing node or wall (wall `a` / `b`,
+  than one); a duplicate id within a floor; a duplicate floor id; a `slabThickness` not above 0; a reference to a missing node or wall (wall `a` / `b`,
   opening `wall`, room `walls` / `holes`, wall-item `wall`); a room whose walls or hole loops do
   not form a loop.
 - `H3xVersionError` (`found`) when `version` is greater than the supported `FORMAT_VERSION`.

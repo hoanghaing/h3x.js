@@ -82,8 +82,18 @@ This example is run by the test suite (`tests/core/public-api.test.ts`); keep bo
   on `kind` (`'node' | 'wall' | 'opening' | 'room' | 'item'`), so `before` / `after` narrow to
   the entity type (`null` = absent).
 - `doc.addValidator(fn)`, `doc.validateLayout()`, `doc.validatePlacements()`.
-- A file may hold several `<floor>` elements. Phase-1 editing APIs work on `floors[0]`; the
-  other floors are kept untouched and saved as loaded.
+- **Floors.** A file may hold several `<floor>` elements (basements, ground, upper floors),
+  normalised on load (see [docs/xml-format.md](docs/xml-format.md)). `doc.activeFloorId`,
+  `doc.setActiveFloor(id)` (throws `unknown-floor`), `doc.floorById(id)`, `doc.floorBelow(id)` and
+  `doc.floorAbove(id)`; `doc.floor` is the active floor, and commands, `validateLayout()` and the
+  plan work on it. `doc.on('activefloor', fn)` fires when it changes, also when the active floor
+  is removed (after the `'change'` event). `EntityChange` has a `floorId`, and a `'floor'` kind
+  for floor properties (height, slab thickness, elevation, level).
+- Floor commands: `addFloor({ position: 'above' | 'below', wallHeight?, slabThickness? })`,
+  `removeFloor(id)` (the ground floor is protected: `floor-protected`),
+  `setFloorHeight(id, h)`, `setSlabThickness(id, t)`, `setGroundElevation(e)`
+  (`invalid-floor-dimension` for bad numbers). `doc.validateLayout()` also warns with
+  `column-unsupported` for a column with none below it.
 
 Item and opening sizes come from a `PresetResolver` (`(presetId) => PresetInfo | undefined`)
 passed as `presets`.
@@ -238,6 +248,12 @@ viewer.viewFromAxis('y'); // top view
 - **Render on demand.** There is no animation loop. The viewer renders after document changes,
   camera moves and resizes; call `viewer.requestRender()` after changing anything yourself, and
   `viewer.dispose()` / `scene.dispose()` when done.
+- **Floors and view modes.** Each floor has its own group (`h3x-floor-<id>`) holding its walls,
+  room floors and a slab mesh (`h3xKind: 'slab'`, thickness from `slabThickness`).
+  `scene.setViewMode('active' | 'cutaway' | 'all')` shows the active floor only, the active floor
+  with the ones below it, or the whole house (default `'all'`); read it with `scene.viewMode`.
+  `getWallMesh(id, floorId?)`, `getFloorMesh(id, floorId?)` and `getSlabMesh(floorId?)` default
+  to the active floor; `buildSlabGeometry` is exported too.
 - **Picking.** Meshes carry `userData = { h3xKind: 'wall' | 'room' | 'join', h3xId }`. A `join`
   mesh closes the top of a T or X junction (or the slot of a very acute corner); its `h3xId` is
   the node id. Mesh objects keep their identity across document changes: only their geometry
@@ -373,9 +389,14 @@ In 3D, columns, the site outline (a line loop on the ground around the house) an
 holes (inner light wells) are rendered too. Columns and `<site>` are stored as their own XML
 elements; see [docs/xml-format.md](docs/xml-format.md).
 
+The plan shows the active floor, with the floor below drawn faded underneath. Switching the
+active floor clears the selection, cancels any gesture and redraws.
+
 The example page shows the plan and the 3D view side by side on one document, with a throwaway
-toolbar (select, draw wall, draw site, columns, clear, sample house) and demo inputs wired to
-`lengthEditRequest` and `segmentLengthRequest` (`pnpm dev`).
+toolbar (select, draw wall, draw site, columns, clear, sample houses), demo inputs wired to
+`lengthEditRequest` and `segmentLengthRequest`, and a floor bar (floor picker, add above / below,
+remove, wall height, slab thickness, ground elevation and view mode). It opens a sample
+three-storey townhouse with a basement (`examples/layouts/townhouse-3f.xml`) (`pnpm dev`).
 
 ## Tolerance
 
