@@ -434,6 +434,24 @@ describe('xml: stairs', () => {
     expect(err(wrap(u))).toMatchObject({ element: 'stair' });
   });
 
+  it('reloads a half-width U flight that 4-decimal rounding made 5e-5 too wide', () => {
+    const p = projectFromXML(wrap(full.replace('type="L"', 'type="U"')));
+    const s = p.floors[0]!.stairs.s1!;
+    s.width = 2.33333;
+    s.flightWidth = 2.33333 / 2; // saved as width 2.3333, flightWidth 1.1667 (> 2.3333 / 2)
+    const back = projectFromXML(projectToXML(p)).floors[0]!.stairs.s1!;
+    expect(back.flightWidth).toBe(1.1667);
+    expect(back.flightWidth).toBeGreaterThan(back.width / 2);
+  });
+
+  it('rejects a spiral with a non-positive flightWidth (as addStair does)', () => {
+    const spiral = full.replace('type="L"', 'type="spiral"');
+    expect(err(wrap(spiral.replace('flightWidth="1"', 'flightWidth="0"')))).toMatchObject({
+      element: 'stair',
+    });
+    expect(projectFromXML(wrap(spiral.replace('flightWidth="1"', 'flightWidth="9"')))).toBeTruthy();
+  });
+
   it('rejects a non-finite rotation', () => {
     expect(err(wrap(full.replace('rotation="1.5708"', 'rotation="NaN"')))).toMatchObject({
       element: 'stair',

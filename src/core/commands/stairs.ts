@@ -1,6 +1,7 @@
 import type { Command } from '../document/changes';
 import { H3xValidationError } from '../errors';
 import { createId } from '../ids';
+import { FLIGHT_WIDTH_TOL } from '../stairs/constants';
 import type { Id, Issue, Stair } from '../types';
 import { assertFreeId, notFound } from './shared';
 
@@ -14,7 +15,8 @@ const HANDS: readonly string[] = ['left', 'right'];
 
 /**
  * Issues (code `invalid-stair`) for a non-finite position or rotation, an unknown type / turn /
- * hand, non-positive sizes or a flight wider than the footprint allows.
+ * hand, non-positive sizes (flightWidth included, for every type) or a flight wider than the bay
+ * (half the bay for U) by more than FLIGHT_WIDTH_TOL. A spiral ignores flightWidth otherwise.
  */
 export function validateStairParams(s: Stair): Issue[] {
   const out: Issue[] = [];
@@ -30,12 +32,13 @@ export function validateStairParams(s: Stair): Issue[] {
   if (!HANDS.includes(s.hand)) bad(`Stair hand must be left or right: "${String(s.hand)}"`);
   if (!pos(s.width)) bad('Stair width must be finite and > 0');
   if (!pos(s.depth)) bad('Stair depth must be finite and > 0');
-  if (s.type === 'spiral') return out;
   if (!pos(s.flightWidth)) {
     bad('Stair flightWidth must be finite and > 0');
-  } else if (pos(s.width)) {
+  } else if (pos(s.width) && s.type !== 'spiral') {
     const max = s.type === 'U' ? s.width / 2 : s.width;
-    if (s.flightWidth > max) bad(`Stair flightWidth ${s.flightWidth} exceeds the allowed ${max}`);
+    if (s.flightWidth > max + FLIGHT_WIDTH_TOL) {
+      bad(`Stair flightWidth ${s.flightWidth} exceeds the allowed ${max}`);
+    }
   }
   return out;
 }

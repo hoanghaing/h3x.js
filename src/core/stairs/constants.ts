@@ -10,3 +10,9 @@ export const WINDERS_PER_QUARTER = 3;
 export const SPIRAL_COLUMN_DIAMETER = 0.15;
 /** Minimum rise of one full spiral turn (m) for headroom. */
 export const SPIRAL_MIN_TURN_RISE = 2.1;
+/**
+ * How far (m) flightWidth may exceed the bay width (half of it for U) and still be accepted: XML
+ * rounds to 4 decimals, so a flight saved at full width may come back up to 5e-5 wider. Within
+ * this tolerance the layout treats the flight as exactly full width.
+ */
+export const FLIGHT_WIDTH_TOL = 1e-4;

@@ -6,6 +6,7 @@ import {
   H3xDocument,
   layoutStair,
   removeStair,
+  updateStair,
   setFloorHeight,
   stairRise,
   type Floor,
@@ -326,6 +327,25 @@ describe('H3xScene stairs', () => {
     const slab = scene.getSlabMesh(upper.id)!.geometry;
     expect(hasTriangleAt(slab, 4.5, 3)).toBe(false); // the flight (hand right: x 4 … 5)
     expect(hasTriangleAt(slab, 3.5, 3)).toBe(true); // the empty half of the bay
+  });
+
+  it('updateStair(flightWidth) rebuilds the stair mesh and the hole at once', () => {
+    const { doc, upper } = twoStorey();
+    const cmd = addStair({ ...STRAIGHT, width: 2, flightWidth: 1 });
+    doc.execute(cmd);
+    const scene = new H3xScene(doc);
+    let invalidated = 0;
+    scene.onInvalidate(() => invalidated++);
+    const width = () => {
+      const box = new Box3().setFromObject(scene.getStairMesh(cmd.createdId, 'f1')!);
+      return box.max.x - box.min.x;
+    };
+    expect(width()).toBeCloseTo(1, 6);
+    doc.execute(updateStair(cmd.createdId, { flightWidth: 1.6 }));
+    expect(invalidated).toBe(1);
+    expect(width()).toBeCloseTo(1.6, 6);
+    const slab = scene.getSlabMesh(upper.id)!.geometry;
+    expect(hasTriangleAt(slab, 3.6, 3)).toBe(false); // the flight now spans x 3.4 … 5
   });
 
   it('removeStair then undo brings the hole and the stair mesh back', () => {

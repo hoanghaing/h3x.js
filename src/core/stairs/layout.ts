@@ -3,6 +3,7 @@ import { closestPointOnSegment } from '../geometry/segment';
 import { distance } from '../geometry/vec';
 import type { Stair, StairType, Vec2 } from '../types';
 import {
+  FLIGHT_WIDTH_TOL,
   MAX_RISER,
   SPIRAL_COLUMN_DIAMETER,
   SPIRAL_MIN_TURN_RISE,
@@ -512,8 +513,9 @@ function spiralLocal(w: number, d: number, n: number, h: number): LocalLayout | 
  */
 export function layoutStair(stair: Stair, rise: number): StairLayout {
   if (!Number.isFinite(rise) || rise <= 0) return { ok: false, reason: 'no-rise' };
-  const { width: w, depth: d, flightWidth: fw } = stair;
+  const { width: w, depth: d } = stair;
   if (!(w > 0) || !(d > 0)) return DOES_NOT_FIT;
+  const fw = maxFlightWidth(stair, stair.flightWidth);
   const n = Math.ceil(rise / MAX_RISER - TOL);
   const h = rise / n;
 
@@ -558,6 +560,12 @@ export function layoutStair(stair: Stair, rise: number): StairLayout {
     opening: poly(outline),
     bay: stairBay(stair),
   };
+}
+
+/** `fw`, or the widest allowed flight when `fw` exceeds it by at most FLIGHT_WIDTH_TOL. */
+function maxFlightWidth(stair: Stair, fw: number): number {
+  const max = stair.type === 'U' ? stair.width / 2 : stair.width;
+  return fw > max && fw <= max + FLIGHT_WIDTH_TOL ? max : fw;
 }
 
 /** Axis-aligned bounding rectangle of `pts`, counter-clockwise. */

@@ -6,6 +6,7 @@ import {
   setFloorHeight,
   setGroundElevation,
   setSlabThickness,
+  stairParams,
   updateStair,
   type Stair,
 } from 'h3x/core';
@@ -122,13 +123,26 @@ function refreshStairControls(): void {
   stairTypeSelect.value = s.type;
   stairTurnSelect.value = s.turn;
   stairHandButton.textContent = s.hand === 'right' ? 'Tay phải' : 'Tay trái';
-  stairWidthInput.value = String(s.flightWidth);
+  // Not while the user is typing in it: a keystroke may be mid-number or rejected.
+  if (document.activeElement !== stairWidthInput) stairWidthInput.value = String(s.flightWidth);
+  // Inputs that do not shape this type stay visible but disabled.
+  const params = stairParams(s.type);
+  stairTurnSelect.disabled = !params.includes('turn');
+  stairHandButton.toggleAttribute('disabled', !params.includes('hand'));
+  stairWidthInput.disabled = !params.includes('flightWidth');
 }
 
-/** Updates the selected stair, reporting a rejection in the status line. */
-function patchStair(patch: Partial<Omit<Stair, 'id'>>, ok: string): void {
+/**
+ * Updates the selected stair, reporting a rejection in the status line. Edits sharing a
+ * `coalesceKey` (keystrokes in one input) make one undo step.
+ */
+function patchStair(patch: Partial<Omit<Stair, 'id'>>, ok: string, coalesceKey?: string): void {
   const s = selectedStair();
-  if (s) run(updateStair(s.id, patch), ok);
+  if (s) {
+    const r = doc.tryExecute(updateStair(s.id, patch), { coalesceKey });
+    if (r.ok) say(ok);
+    else say(`Không hợp lệ: ${r.issues.map((i) => i.message).join('; ')}`, true);
+  }
   refreshStairControls();
 }
 
@@ -185,9 +199,19 @@ stairHandButton.addEventListener('click', () => {
   const s = selectedStair();
   if (s) patchStair({ hand: s.hand === 'right' ? 'left' : 'right' }, 'Đã đổi chiều quay');
 });
-stairWidthInput.addEventListener('change', () =>
-  patchStair({ flightWidth: Number(stairWidthInput.value) }, 'Đã đổi bề rộng vế thang'),
-);
+// Each keystroke that parses to a positive width applies at once (2D and 3D follow the change
+// event); the keystrokes of one edit are one undo step, closed on change (Enter / blur).
+stairWidthInput.addEventListener('input', () => {
+  const v = Number(stairWidthInput.value);
+  if (stairWidthInput.value.trim() !== '' && Number.isFinite(v) && v > 0) {
+    patchStair({ flightWidth: v }, 'Đã đổi bề rộng vế thang', 'stair-width');
+  }
+});
+stairWidthInput.addEventListener('change', () => {
+  doc.endCoalesce();
+  const s = selectedStair();
+  if (s) stairWidthInput.value = String(s.flightWidth); // drop a rejected value
+});
 on('btn-stair-rotate', () => {
   const s = selectedStair();
   if (s) patchStair({ rotation: s.rotation + Math.PI / 2 }, 'Đã xoay cầu thang 90°');
