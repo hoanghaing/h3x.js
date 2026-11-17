@@ -4,6 +4,7 @@ import { createId } from '../ids';
 import { detectRooms } from '../rooms/detect';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { checkRefs } from '../validate/refs';
+import { validateStairParams } from '../commands/stairs';
 import { signedArea } from '../geometry/polygon';
 import type {
   Column,
@@ -148,6 +149,9 @@ function parseStair(e: Element): Stair {
   for (const k of ['width', 'depth', 'flightWidth'] as const) {
     if (s[k] <= 0) throw bad(k, `must be positive: "${s[k]}"`);
   }
+  const issue = validateStairParams(s)[0];
+  if (issue)
+    throw new H3xParseError(`<stair id="${s.id}">: ${issue.message}`, { element: 'stair' });
   return s;
 }
 

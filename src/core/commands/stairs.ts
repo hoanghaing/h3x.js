@@ -8,12 +8,26 @@ type Created = Command & { createdId: Id };
 
 const pos = (n: number): boolean => Number.isFinite(n) && n > 0;
 
-/** Issues (code `invalid-stair`) for non-positive sizes or a flight wider than the footprint allows. */
+const TYPES: readonly string[] = ['straight', 'L', 'U', 'spiral'];
+const TURNS: readonly string[] = ['landing', 'winder'];
+const HANDS: readonly string[] = ['left', 'right'];
+
+/**
+ * Issues (code `invalid-stair`) for a non-finite position or rotation, an unknown type / turn /
+ * hand, non-positive sizes or a flight wider than the footprint allows.
+ */
 export function validateStairParams(s: Stair): Issue[] {
   const out: Issue[] = [];
   const bad = (message: string): void => {
     out.push({ code: 'invalid-stair', ids: [s.id], message });
   };
+  for (const k of ['x', 'y', 'rotation'] as const) {
+    if (!Number.isFinite(s[k])) bad(`Stair ${k} must be finite`);
+  }
+  if (!TYPES.includes(s.type))
+    bad(`Stair type must be straight, L, U or spiral: "${String(s.type)}"`);
+  if (!TURNS.includes(s.turn)) bad(`Stair turn must be landing or winder: "${String(s.turn)}"`);
+  if (!HANDS.includes(s.hand)) bad(`Stair hand must be left or right: "${String(s.hand)}"`);
   if (!pos(s.width)) bad('Stair width must be finite and > 0');
   if (!pos(s.depth)) bad('Stair depth must be finite and > 0');
   if (s.type === 'spiral') return out;
@@ -47,7 +61,9 @@ export function addStair(input: NewStair): Created {
         turn: 'landing',
         hand: 'right',
         flightWidth: 0.9,
-        ...structuredClone(input),
+        ...(Object.fromEntries(
+          Object.entries(structuredClone(input)).filter(([, v]) => v !== undefined),
+        ) as NewStair),
         id,
       };
       check(after);
