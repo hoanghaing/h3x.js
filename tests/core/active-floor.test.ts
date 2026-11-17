@@ -5,6 +5,7 @@ import type { ChangeEvent, Command, EntityChange } from '../../src/core/document
 import { applyChanges } from '../../src/core/document/changes';
 import { H3xValidationError } from '../../src/core/errors';
 import { moveNode } from '../../src/core/commands/layout';
+import { removeFloor } from '../../src/core/commands/floors';
 import type { Project } from '../../src/core/types';
 
 const FLOOR_BODY = `
@@ -189,5 +190,16 @@ describe('active floor', () => {
     d.undo();
     expect(d.floorById('f2')).toBeDefined();
     expect(d.activeFloorId).toBe('f1');
+  });
+
+  it('skips validators when the change removes the active floor', () => {
+    const d = twoFloors();
+    d.setActiveFloor('f1');
+    const spy = vi.fn(() => [{ code: 'always', ids: [], message: 'blocked' }]);
+    d.addValidator(spy);
+    d.execute(removeFloor('f1'));
+    expect(spy).not.toHaveBeenCalled();
+    expect(d.floorById('f1')).toBeUndefined();
+    expect(d.activeFloorId).toBe('f0');
   });
 });
