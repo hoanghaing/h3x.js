@@ -87,6 +87,27 @@ describe('addFloor', () => {
     expect(d.project).toEqual(before);
   });
 
+  it('addFloor with a wallHeight gives copied walls at the source height the new height', () => {
+    const f = oneRoomFloor();
+    f.walls.w2!.height = 2.4;
+    const d = H3xDocument.fromProject({
+      version: 1,
+      unit: 'm',
+      meta: { name: '', created: '' },
+      floors: [f],
+    });
+    const before = snap(d);
+    const cmd = addFloor({ position: 'above', wallHeight: 3.5 });
+    d.execute(cmd);
+    const heights = Object.values(d.floorById(cmd.createdId)!.walls)
+      .map((w) => w.height)
+      .sort();
+    expect(heights).toEqual([2.4, 3.5, 3.5, 3.5]);
+    for (const w of Object.values(d.floorById('f1')!.walls)) expect([2.4, 3.2]).toContain(w.height);
+    d.undo();
+    expect(d.project).toEqual(before);
+  });
+
   it('adds below with level -1 and keeps ground', () => {
     const d = groundDoc();
     const cmd = addFloor({ position: 'below' });
@@ -148,6 +169,40 @@ describe('floor sizing', () => {
     expect(d.project.floors[0]!.elevation).toBe(f0);
     d.undo();
     expect(d.project.floors[1]!.elevation).toBeCloseTo(f1!, 9);
+  });
+
+  it('setFloorHeight moves walls at the old storey height, keeps custom heights; one undo', () => {
+    const f = oneRoomFloor();
+    f.walls.w2!.height = 2.4;
+    const d = H3xDocument.fromProject({
+      version: 1,
+      unit: 'm',
+      meta: { name: '', created: '' },
+      floors: [f],
+    });
+    const before = snap(d);
+    const cmd = setFloorHeight('f1', 3.6);
+    const changes = cmd.run(ctx(d));
+    const wallChanges = changes.filter((c) => c.kind === 'wall');
+    expect(wallChanges.map((c) => c.id).sort()).toEqual(['w1', 'w3', 'w4']);
+    for (const c of wallChanges) expect(c.floorId).toBe('f1');
+    d.execute(cmd);
+    const walls = d.floorById('f1')!.walls;
+    expect(walls.w1!.height).toBe(3.6);
+    expect(walls.w3!.height).toBe(3.6);
+    expect(walls.w4!.height).toBe(3.6);
+    expect(walls.w2!.height).toBe(2.4);
+    expect(d.floorById('f1')!.wallHeight).toBe(3.6);
+    d.undo();
+    expect(d.project).toEqual(before);
+  });
+
+  it("setFloorHeight on another floor updates that floor's walls only", () => {
+    const d = stackDoc(2);
+    const up = d.project.floors[1]!.id;
+    d.execute(setFloorHeight(up, 2.9));
+    for (const w of Object.values(d.floorById(up)!.walls)) expect(w.height).toBe(2.9);
+    for (const w of Object.values(d.floorById('f1')!.walls)) expect(w.height).toBe(3.2);
   });
 
   it('rejects bad dimensions', () => {

@@ -41,12 +41,20 @@ const restack = (props: FloorProps[], ground: number): FloorProps[] =>
 
 const unknownFloor = (id: Id) => fail('unknown-floor', [id], `No floor with id ${id}`);
 
+/** Walls following the storey height: those whose height equals `oldHeight` (custom heights are kept). */
+const atStoreyHeight = (w: Wall, oldHeight: number): boolean =>
+  Math.abs(w.height - oldHeight) <= 1e-9;
+
 function checkDimension(value: number, what: string, id: Id): void {
   if (!Number.isFinite(value) || value <= 0) {
     throw fail('invalid-floor-dimension', [id], `${what} must be a positive number`);
   }
 }
 
+/**
+ * Adds a floor above the top or below the bottom, copying the nearest floor's nodes, walls
+ * and columns. With `wallHeight`, copied walls at the source storey height get the new one.
+ */
 export function addFloor(opts: {
   position: 'above' | 'below';
   wallHeight?: number;
@@ -90,6 +98,7 @@ export function addFloor(opts: {
       for (const w of Object.values(src.walls)) {
         const id = createId();
         walls[id] = { ...w, id, a: nodeMap.get(w.a)!, b: nodeMap.get(w.b)! };
+        if (atStoreyHeight(w, src.wallHeight)) walls[id].height = wallHeight;
         add({ kind: 'wall', id, after: walls[id]! });
       }
       for (const c of Object.values(src.columns)) {
@@ -166,15 +175,36 @@ function edited(
   return stackChanges(props, restack(next, ground));
 }
 
+/**
+ * Sets a floor's storey height and re-derives elevations. Walls whose height equals the
+ * old storey height follow it; walls with a custom height are kept.
+ */
 export function setFloorHeight(floorId: Id, wallHeight: number): Command {
   return {
     label: 'Set floor height',
     run(ctx) {
       if (!ctx.project.floors.some((f) => f.id === floorId)) throw unknownFloor(floorId);
       checkDimension(wallHeight, 'wallHeight', floorId);
-      return edited(ctx, (p) => {
-        p.find((f) => f.id === floorId)!.wallHeight = wallHeight;
-      });
+      const floor = ctx.project.floors.find((f) => f.id === floorId)!;
+      const changes: EntityChange[] = [];
+      if (floor.wallHeight !== wallHeight) {
+        for (const w of Object.values(floor.walls)) {
+          if (!atStoreyHeight(w, floor.wallHeight) || w.height === wallHeight) continue;
+          changes.push({
+            kind: 'wall',
+            id: w.id,
+            floorId,
+            before: { ...w },
+            after: { ...w, height: wallHeight },
+          });
+        }
+      }
+      changes.push(
+        ...edited(ctx, (p) => {
+          p.find((f) => f.id === floorId)!.wallHeight = wallHeight;
+        }),
+      );
+      return changes;
     },
   };
 }

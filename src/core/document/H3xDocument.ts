@@ -95,8 +95,10 @@ export class H3xDocument {
   }
 
   /**
-   * Throws H3xValidationError 'no-floor' for an empty floor list and
-   * 'bad-reference' for dangling wall / node references.
+   * Throws H3xValidationError 'no-floor' for an empty floor list, 'duplicate-id' for
+   * repeated floor ids, 'invalid-floor-dimension' for a non-finite or non-positive
+   * slabThickness (a missing one defaults to 0.15) and 'bad-reference' for dangling
+   * wall / node references. Levels and elevations are normalised as in fromXML.
    */
   static fromProject(p: Project, opts: { presets?: PresetResolver } = {}): H3xDocument {
     if (p.floors.length === 0) {
@@ -105,10 +107,28 @@ export class H3xDocument {
       ]);
     }
     const project = structuredClone(p);
+    const ids = new Set<Id>();
+    for (const f of project.floors) {
+      if (ids.has(f.id)) {
+        throw new H3xValidationError([
+          { code: 'duplicate-id', ids: [f.id], message: `Duplicate floor id ${f.id}` },
+        ]);
+      }
+      ids.add(f.id);
+    }
     for (const f of project.floors) {
       // Floors from before columns existed (M3) have no `columns` map.
       (f as { columns?: Floor['columns'] }).columns ??= {};
       (f as { slabThickness?: number }).slabThickness ??= DEFAULT_SLAB_THICKNESS;
+      if (!Number.isFinite(f.slabThickness) || f.slabThickness <= 0) {
+        throw new H3xValidationError([
+          {
+            code: 'invalid-floor-dimension',
+            ids: [f.id],
+            message: `Floor ${f.id} slabThickness must be a positive number`,
+          },
+        ]);
+      }
       const bad = checkRefs(f);
       if (bad.length > 0) {
         throw new H3xValidationError(
@@ -130,8 +150,8 @@ export class H3xDocument {
    * Callers must not mutate it.
    */
   get floor(): Readonly<Floor> {
-    // The fallback only shows while a change removing the active floor is being
-    // validated; the active floor is moved right after every apply.
+    // The fallback only shows between applying a change that removes the active floor
+    // and moving the active floor (validators are skipped in that window).
     return this.floorById(this._activeFloorId) ?? this._project.floors[0]!;
   }
 
@@ -265,8 +285,12 @@ export class H3xDocument {
     return changes;
   }
 
-  /** Validators see only active-floor and site changes, and are skipped when there are none. */
+  /**
+   * Validators see only active-floor and site changes, and are skipped when there are none
+   * or when the change removed the active floor (`floor` would fall back to another one).
+   */
   private validate(changes: EntityChange[]): Issue[] {
+    if (!this.floorById(this._activeFloorId)) return [];
     const own = changes.filter((c) => c.kind === 'site' || c.floorId === this._activeFloorId);
     if (own.length === 0) return [];
     return this.validators.flatMap((v) => v(this, own));
