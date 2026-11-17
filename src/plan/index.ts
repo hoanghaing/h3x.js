@@ -10,7 +10,14 @@ export {
   zoomAt,
   type View,
 } from './view';
-export { snapBayCorner, snapPoint, snapScalar, type SnapGuide, type SnapOptions, type SnapResult } from './snap';
+export {
+  snapBayCorner,
+  snapPoint,
+  snapScalar,
+  type SnapGuide,
+  type SnapOptions,
+  type SnapResult,
+} from './snap';
 export {
   itemFootprint,
   junctionPolygons,

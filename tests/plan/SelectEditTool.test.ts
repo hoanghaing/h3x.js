@@ -7,6 +7,7 @@ import {
   addWall,
   moveNode,
   setSite,
+  validateStairs,
   splitWall,
   type Floor,
   type Id,
@@ -679,5 +680,59 @@ describe('SelectEditTool stairs', () => {
     expect({ x: st().x, y: st().y }).toEqual({ x: 2, y: 2 });
     key(plan, 'Delete');
     expect(plan.doc.floor.stairs[add.createdId]).toBeUndefined();
+  });
+
+  it('arrows nudge a selected stair', () => {
+    const plan = makePlan();
+    const add = addStair({ x: 2, y: 2, width: 2, depth: 3 });
+    plan.doc.execute(add);
+    plan.select({ kind: 'stair', id: add.createdId });
+    key(plan, 'ArrowRight');
+    key(plan, 'ArrowUp', { shiftKey: true });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(2.01, 9);
+    expect(st.y).toBeCloseTo(2.1, 9);
+    expect(Object.keys(plan.doc.floor.columns)).toHaveLength(0);
+  });
+
+  it('dragging a bay onto another stairwell lands on its wall faces', () => {
+    const f = oneRoomFloor();
+    f.openings = {};
+    f.nodes = {};
+    f.walls = {};
+    f.rooms = {};
+    [0, 6].forEach((ox, r) => {
+      const pts = [
+        [0, 0],
+        [2.4, 0],
+        [2.4, 4.7],
+        [0, 4.7],
+      ];
+      pts.forEach(([x, y], i) => {
+        f.nodes[`n${r}${i}`] = { id: `n${r}${i}`, x: x! + ox, y: y! };
+      });
+      const wallIds = pts.map((_, i) => {
+        const id = `w${r}${i}`;
+        f.walls[id] = { id, a: `n${r}${i}`, b: `n${r}${(i + 1) % 4}`, thickness: 0.2, height: 3.2 };
+        return id;
+      });
+      f.rooms[`r${r}`] = { id: `r${r}`, walls: wallIds, name: `r${r}` };
+    });
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+    document.body.appendChild(el);
+    const plan = new H3xPlan(el, docOf(f));
+    plan.fitToContent();
+    plans.push(plan);
+    const add = addStair({ x: 1.2, y: 2.35, width: 2.2, depth: 4.5 });
+    plan.doc.execute(add);
+    drag(plan, { x: 1.2, y: 2.35 }, { x: 7.23, y: 2.37 });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(7.2, 9);
+    expect(st.y).toBeCloseTo(2.35, 9);
+    expect(validateStairs(plan.doc.floor, undefined).map((w) => w.code)).not.toContain(
+      'stair-overlaps-wall',
+    );
   });
 });

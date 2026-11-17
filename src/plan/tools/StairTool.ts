@@ -1,4 +1,5 @@
 import { addStair, type Stair, type StairType, type Vec2 } from '../../core';
+import { GEOM_TOL } from '../../core/constants';
 import { snapBayCorner } from '../snap';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
 
@@ -60,13 +61,13 @@ export class StairTool implements Tool {
     this.cancel();
     const width = Math.abs(p.x - s.x);
     const depth = Math.abs(p.y - s.y);
-    if (width < MIN_SIDE || depth < MIN_SIDE) return;
+    if (width < MIN_SIDE - GEOM_TOL || depth < MIN_SIDE - GEOM_TOL) return;
     const cmd = addStair({
       x: (s.x + p.x) / 2,
       y: (s.y + p.y) / 2,
       width,
       depth,
-      ...this.opts,
+      ...Object.fromEntries(Object.entries(this.opts).filter(([, v]) => v !== undefined)),
     });
     const res = ctx.doc.tryExecute(cmd);
     if (!res.ok) {

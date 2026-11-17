@@ -149,22 +149,28 @@ export function snapDraw(
   return { point, guides: [], target: free, angleLock: { from: opts.from, to: point } };
 }
 
-/**
- * Snap for stair bay corners: a room's inner-outline (wall face) vertex within `alignRadius`
- * wins; otherwise the point rounds to the grid.
- */
-export function snapBayCorner(p: Vec2, floor: Readonly<Floor>, opts: SnapOptions): SnapResult {
-  let best: Vec2 | undefined;
+/** The nearest room wall-face (inner outline) vertex within `radius` of `p`, if any. */
+export function nearestFaceVertex(p: Vec2, floor: Readonly<Floor>, radius: number): Vec2 | null {
+  let best: Vec2 | null = null;
   let bestDist = Infinity;
   for (const room of Object.values(floor.rooms)) {
     for (const v of roomPolygon(floor as Floor, room, 'inner')) {
       const d = Math.hypot(v.x - p.x, v.y - p.y);
-      if (d <= opts.alignRadius && d < bestDist) {
+      if (d <= radius && d < bestDist) {
         best = v;
         bestDist = d;
       }
     }
   }
+  return best;
+}
+
+/**
+ * Snap for stair bay corners: a room's inner-outline (wall face) vertex within `alignRadius`
+ * wins; otherwise the point rounds to the grid.
+ */
+export function snapBayCorner(p: Vec2, floor: Readonly<Floor>, opts: SnapOptions): SnapResult {
+  const best = nearestFaceVertex(p, floor, opts.alignRadius);
   if (best) return { point: { x: best.x, y: best.y }, guides: [] };
   return { point: { x: snapScalar(p.x, opts.grid), y: snapScalar(p.y, opts.grid) }, guides: [] };
 }

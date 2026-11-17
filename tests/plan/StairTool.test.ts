@@ -74,7 +74,9 @@ describe('StairTool', () => {
     expect(s!.width).toBeCloseTo(2.2, 9);
     expect(s!.depth).toBeCloseTo(4.5, 9);
     expect(s!.rotation).toBe(0);
-    expect(validateStairs(plan.doc.floor, undefined).map((w) => w.code)).not.toContain('stair-overlaps-wall');
+    expect(validateStairs(plan.doc.floor, undefined).map((w) => w.code)).not.toContain(
+      'stair-overlaps-wall',
+    );
     expect(plan.doc.canUndo).toBe(true);
   });
 
@@ -111,5 +113,21 @@ describe('snapBayCorner', () => {
     expect(c.x).toBeCloseTo(0.1, 9);
     expect(c.y).toBeCloseTo(0.1, 9);
     expect(snapBayCorner({ x: 1.01, y: 1.02 }, f, opts).point).toEqual({ x: 1, y: 1 });
+  });
+});
+
+describe('StairTool tolerance and options', () => {
+  it('an exact 0.6 m drag is accepted', () => {
+    const plan = makePlan(new StairTool({ type: 'straight', flightWidth: 0.6 }));
+    fire(plan, 'pointerdown', { x: 1, y: 1 });
+    fire(plan, 'pointerup', { x: 1.6, y: 1.6 });
+    expect(stairs(plan)).toHaveLength(1);
+  });
+
+  it('undefined options do not overwrite defaults', () => {
+    const plan = makePlan(new StairTool({ hand: undefined, type: undefined, flightWidth: 0.7 }));
+    fire(plan, 'pointerdown', { x: 0.5, y: 0.5 });
+    fire(plan, 'pointerup', { x: 2, y: 3 });
+    expect(stairs(plan)[0]).toMatchObject({ type: 'U', hand: 'right' });
   });
 });
