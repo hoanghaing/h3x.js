@@ -6,32 +6,42 @@
     <node id="l0" x="0" y="0"/><node id="r0" x="5" y="0"/>
     <node id="l1" x="0" y="7.5"/><node id="r1" x="5" y="7.5"/>
     <node id="l2" x="0" y="15"/><node id="r2" x="5" y="15"/>
+    <node id="ml" x="0" y="10"/><node id="m2" x="3.55" y="10"/><node id="m3" x="3.55" y="15"/>
     <wall id="wf" a="l0" b="r0" thickness="0.2" height="2.8"/>
     <wall id="wr1" a="r0" b="r1" thickness="0.2" height="2.8"/>
     <wall id="wr2" a="r1" b="r2" thickness="0.2" height="2.8"/>
-    <wall id="wb" a="r2" b="l2" thickness="0.2" height="2.8"/>
-    <wall id="wl2" a="l2" b="l1" thickness="0.2" height="2.8"/>
+    <wall id="wb" a="r2" b="m3" thickness="0.2" height="2.8"/>
+    <wall id="wb2" a="m3" b="l2" thickness="0.2" height="2.8"/>
+    <wall id="wl2" a="l2" b="ml" thickness="0.2" height="2.8"/>
+    <wall id="wl2b" a="ml" b="l1" thickness="0.2" height="2.8"/>
+    <wall id="wp2" a="ml" b="m2" thickness="0.1" height="2.8"/>
+    <wall id="wsw" a="m2" b="m3" thickness="0.1" height="2.8"/>
     <wall id="wl1" a="l1" b="l0" thickness="0.2" height="2.8"/>
     <wall id="wp1" a="l1" b="r1" thickness="0.1" height="2.8"/>
     <opening id="d-front" wall="wf" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
     <opening id="d-p1" wall="wp1" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
     <column id="c1" x="2.5" y="7.5" shape="square" width="0.25" depth="0.25"/>
+  <stair id="st1" x="1.8" y="12.475" width="3.4" depth="4.85" type="U" turn="landing" hand="right" flightWidth="0.9"/>
   </floor>
   <floor id="f1" level="0" elevation="0.45" wallHeight="3.3" slabThickness="0.15">
     <node id="l0" x="0" y="0"/><node id="r0" x="5" y="0"/>
     <node id="l1" x="0" y="5"/><node id="r1" x="5" y="5"/>
     <node id="l2" x="0" y="10"/><node id="r2" x="5" y="10"/>
     <node id="l3" x="0" y="15"/><node id="r3" x="5" y="15"/>
+    <node id="m2" x="3.55" y="10"/><node id="m3" x="3.55" y="15"/>
     <wall id="wf" a="l0" b="r0" thickness="0.2" height="3.3"/>
     <wall id="wr1" a="r0" b="r1" thickness="0.2" height="3.3"/>
     <wall id="wr2" a="r1" b="r2" thickness="0.2" height="3.3"/>
     <wall id="wr3" a="r2" b="r3" thickness="0.2" height="3.3"/>
-    <wall id="wb" a="r3" b="l3" thickness="0.2" height="3.3"/>
+    <wall id="wb" a="r3" b="m3" thickness="0.2" height="3.3"/>
+    <wall id="wb2" a="m3" b="l3" thickness="0.2" height="3.3"/>
     <wall id="wl3" a="l3" b="l2" thickness="0.2" height="3.3"/>
     <wall id="wl2" a="l2" b="l1" thickness="0.2" height="3.3"/>
     <wall id="wl1" a="l1" b="l0" thickness="0.2" height="3.3"/>
     <wall id="wp1" a="l1" b="r1" thickness="0.1" height="3.3"/>
-    <wall id="wp2" a="l2" b="r2" thickness="0.1" height="3.3"/>
+    <wall id="wp2" a="l2" b="m2" thickness="0.1" height="3.3"/>
+    <wall id="wp2b" a="m2" b="r2" thickness="0.1" height="3.3"/>
+    <wall id="wsw" a="m2" b="m3" thickness="0.1" height="3.3"/>
     <opening id="d-front" wall="wf" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
     <opening id="win-l1" wall="wl1" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="win-l2" wall="wl2" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
@@ -39,44 +49,54 @@
     <opening id="d-p1" wall="wp1" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
     <opening id="d-p2" wall="wp2" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
     <column id="c1" x="2.5" y="7.5" shape="square" width="0.25" depth="0.25"/>
+  <stair id="st1" x="1.8" y="12.475" width="3.4" depth="4.85" type="U" turn="landing" hand="right" flightWidth="0.9"/>
   </floor>
   <floor id="f2" level="1" wallHeight="3.3" slabThickness="0.15">
     <node id="l0" x="0" y="0"/><node id="r0" x="5" y="0"/>
     <node id="l1" x="0" y="5"/><node id="r1" x="5" y="5"/>
     <node id="l2" x="0" y="10"/><node id="r2" x="5" y="10"/>
     <node id="l3" x="0" y="15"/><node id="r3" x="5" y="15"/>
+    <node id="m2" x="3.55" y="10"/><node id="m3" x="3.55" y="15"/>
     <wall id="wf" a="l0" b="r0" thickness="0.2" height="3.3"/>
     <wall id="wr1" a="r0" b="r1" thickness="0.2" height="3.3"/>
     <wall id="wr2" a="r1" b="r2" thickness="0.2" height="3.3"/>
     <wall id="wr3" a="r2" b="r3" thickness="0.2" height="3.3"/>
-    <wall id="wb" a="r3" b="l3" thickness="0.2" height="3.3"/>
+    <wall id="wb" a="r3" b="m3" thickness="0.2" height="3.3"/>
+    <wall id="wb2" a="m3" b="l3" thickness="0.2" height="3.3"/>
     <wall id="wl3" a="l3" b="l2" thickness="0.2" height="3.3"/>
     <wall id="wl2" a="l2" b="l1" thickness="0.2" height="3.3"/>
     <wall id="wl1" a="l1" b="l0" thickness="0.2" height="3.3"/>
     <wall id="wp1" a="l1" b="r1" thickness="0.1" height="3.3"/>
-    <wall id="wp2" a="l2" b="r2" thickness="0.1" height="3.3"/>
+    <wall id="wp2" a="l2" b="m2" thickness="0.1" height="3.3"/>
+    <wall id="wp2b" a="m2" b="r2" thickness="0.1" height="3.3"/>
+    <wall id="wsw" a="m2" b="m3" thickness="0.1" height="3.3"/>
     <opening id="win-l1" wall="wl1" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="win-l2" wall="wl2" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="win-l3" wall="wl3" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="d-p1" wall="wp1" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
     <opening id="d-p2" wall="wp2" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
     <column id="c1" x="2.5" y="7.5" shape="square" width="0.25" depth="0.25"/>
+  <stair id="st1" x="1.8" y="12.475" width="3.4" depth="4.85" type="U" turn="landing" hand="right" flightWidth="0.9"/>
   </floor>
   <floor id="f3" level="2" wallHeight="3" slabThickness="0.12">
     <node id="l0" x="0" y="0"/><node id="r0" x="5" y="0"/>
     <node id="l1" x="0" y="5"/><node id="r1" x="5" y="5"/>
     <node id="l2" x="0" y="10"/><node id="r2" x="5" y="10"/>
     <node id="l3" x="0" y="15"/><node id="r3" x="5" y="15"/>
+    <node id="m2" x="3.55" y="10"/><node id="m3" x="3.55" y="15"/>
     <wall id="wf" a="l0" b="r0" thickness="0.2" height="3"/>
     <wall id="wr1" a="r0" b="r1" thickness="0.2" height="3"/>
     <wall id="wr2" a="r1" b="r2" thickness="0.2" height="3"/>
     <wall id="wr3" a="r2" b="r3" thickness="0.2" height="3"/>
-    <wall id="wb" a="r3" b="l3" thickness="0.2" height="3"/>
+    <wall id="wb" a="r3" b="m3" thickness="0.2" height="3"/>
+    <wall id="wb2" a="m3" b="l3" thickness="0.2" height="3"/>
     <wall id="wl3" a="l3" b="l2" thickness="0.2" height="3"/>
     <wall id="wl2" a="l2" b="l1" thickness="0.2" height="3"/>
     <wall id="wl1" a="l1" b="l0" thickness="0.2" height="3"/>
     <wall id="wp1" a="l1" b="r1" thickness="0.1" height="3"/>
-    <wall id="wp2" a="l2" b="r2" thickness="0.1" height="3"/>
+    <wall id="wp2" a="l2" b="m2" thickness="0.1" height="3"/>
+    <wall id="wp2b" a="m2" b="r2" thickness="0.1" height="3"/>
+    <wall id="wsw" a="m2" b="m3" thickness="0.1" height="3"/>
     <opening id="win-l1" wall="wl1" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="win-l2" wall="wl2" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="win-l3" wall="wl3" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
