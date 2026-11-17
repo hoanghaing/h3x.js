@@ -19,6 +19,8 @@ const RAIL_INSET = 0.05;
 /** Spacing (m) of the walking-line samples used to follow the nosings. */
 const RAIL_SAMPLE = 0.02;
 const COLUMN_SEGMENTS = 16;
+/** How many pieces past the current one a handrail sample may move to. */
+const SEARCH_AHEAD = 3;
 
 interface Piece {
   outline: Vec2[];
@@ -220,6 +222,20 @@ function railBox(sink: TriangleSink, p: Vector3, q: Vector3): void {
  * Returns null when the layout has no walking line.
  */
 export function buildHandrailGeometry(layout: OkLayout, floor: Floor): BufferGeometry | null {
+  const line = handrailPath(layout, floor);
+  if (!line) return null;
+  const sink = new TriangleSink();
+  for (let i = 0; i + 1 < line.length; i++) railBox(sink, line[i]!, line[i + 1]!);
+  return finish(sink);
+}
+
+/**
+ * Centre line of the handrail (world coordinates), collinear points dropped; null when the
+ * layout has no walking line. Each walking-line sample takes the piece it lies in, searched in
+ * climbing order from the previous sample's piece, so a spiral of more than one turn (whose
+ * pieces overlap in plan) never jumps to a step of another turn.
+ */
+export function handrailPath(layout: OkLayout, floor: Floor): Vector3[] | null {
   const walk = layout.walkLine;
   const first = layout.steps[0];
   if (walk.length < 2 || !first) return null;
@@ -262,6 +278,7 @@ export function buildHandrailGeometry(layout: OkLayout, floor: Floor): BufferGeo
   }
   const samples: Sample[] = [];
   let acc = 0;
+  let last = -1;
   for (let k = 0; k + 1 < walk.length; k++) {
     const a = walk[k]!;
     const b = walk[k + 1]!;
@@ -279,15 +296,19 @@ export function buildHandrailGeometry(layout: OkLayout, floor: Floor): BufferGeo
         { x: p.x + dir.x * 1e-6, y: p.y + dir.y * 1e-6 },
         { x: p.x - dir.x * 1e-6, y: p.y - dir.y * 1e-6 },
       ];
+      // Before the first hit, any piece (lowest first); then the current piece or the next
+      // few in climbing order (on a shared riser either gives the same nosing height).
+      const from = Math.max(0, last);
+      const to = last < 0 ? list.length - 1 : Math.min(list.length - 1, last + SEARCH_AHEAD);
       let piece = -1;
       for (const q of probes) {
-        // highest piece wins on a shared riser (both give the same nosing height there)
-        for (let i = list.length - 1; i >= 0 && piece < 0; i--) {
+        for (let i = from; i <= to && piece < 0; i++) {
           if (pointInPolygon(q, list[i]!.outline)) piece = i;
         }
         if (piece >= 0) break;
       }
       if (piece < 0) continue;
+      last = piece;
       samples.push({
         s: acc + len * t,
         rail: { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t },
@@ -326,8 +347,5 @@ export function buildHandrailGeometry(layout: OkLayout, floor: Floor): BufferGeo
     }
     if (line.length === 0 || line[line.length - 1]!.distanceTo(p) > 1e-6) line.push(p);
   }
-  if (line.length < 2) return null;
-  const sink = new TriangleSink();
-  for (let i = 0; i + 1 < line.length; i++) railBox(sink, line[i]!, line[i + 1]!);
-  return finish(sink);
+  return line.length < 2 ? null : line;
 }

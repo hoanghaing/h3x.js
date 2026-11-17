@@ -20,6 +20,7 @@ import {
   buildStairGeometry,
   H3xScene,
 } from '../../src/three';
+import { handrailPath } from '../../src/three/stairs';
 import { twoRoomFloor } from '../fixtures/floors';
 
 /** One 8 x 6 room (walls 0.2 thick), ground floor. */
@@ -182,6 +183,37 @@ describe('buildStairGeometry', () => {
 });
 
 describe('buildHandrailGeometry', () => {
+  it.each([
+    ['spiral', 'landing', 2.0, 2.0, 3.3],
+    ['spiral', 'landing', 1.8, 1.8, 3.6],
+    ['straight', 'landing', 1.2, 5, 3.3],
+    ['L', 'landing', 3.5, 5, 3.3],
+    ['L', 'winder', 2.6, 3.4, 3.3],
+    ['U', 'landing', 2.2, 4.5, 3.3],
+    ['U', 'winder', 2.2, 3.6, 3.6],
+  ] as const)('%s %s %s x %s at rise %s: rail heights never drop', (type, turn, w, d, rise) => {
+    const s: Stair = {
+      id: 's',
+      x: 0,
+      y: 0,
+      width: w,
+      depth: d,
+      rotation: 0,
+      type,
+      turn,
+      hand: 'right',
+      flightWidth: 0.9,
+    };
+    const l = layoutStair(s, rise);
+    expect(l.ok).toBe(true);
+    if (!l.ok) return;
+    const pts = handrailPath(l, { elevation: 0 } as Floor)!;
+    expect(pts.length).toBeGreaterThan(1);
+    for (let i = 1; i < pts.length; i++)
+      expect(pts[i]!.y).toBeGreaterThanOrEqual(pts[i - 1]!.y - 1e-9);
+    expect(pts[pts.length - 1]!.y - pts[0]!.y).toBeGreaterThan(rise - 2 * l.riserHeight);
+  });
+
   it('runs along the well side of a U stair', () => {
     const { doc, upper } = twoStorey();
     const floor = doc.floorById('f1') as Floor;
