@@ -160,6 +160,7 @@ describe('pushPullWall', () => {
       level: 0,
       elevation: 0,
       wallHeight: 3.2,
+      slabThickness: 0.15,
       nodes: {
         p: { id: 'p', x: 0, y: 0 },
         q: { id: 'q', x: 2, y: 0 },
@@ -227,6 +228,7 @@ describe('pushPullWall', () => {
       level: 0,
       elevation: 0,
       wallHeight: 3.2,
+      slabThickness: 0.15,
       nodes: { p: { id: 'p', x: 0, y: 0 }, q: { id: 'q', x: 2, y: 0 } },
       walls: { w: { id: 'w', a: 'p', b: 'q', thickness: 0.2, height: 3.2 } },
       openings: {},

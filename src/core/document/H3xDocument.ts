@@ -1,4 +1,5 @@
-import { FORMAT_VERSION } from '../constants';
+import { DEFAULT_SLAB_THICKNESS, FORMAT_VERSION } from '../constants';
+import { normalizeFloors } from '../floors/stack';
 import { H3xValidationError } from '../errors';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { layoutValidator, validateLayout } from '../validate/layout';
@@ -49,6 +50,7 @@ export class H3xDocument {
   private readonly validators: Validator[] = [];
 
   private constructor(project: Project, presets?: PresetResolver) {
+    normalizeFloors(project);
     this._project = project;
     this.presets = presets;
     this.validators.push(layoutValidator, placementValidator);
@@ -60,6 +62,7 @@ export class H3xDocument {
       level: 0,
       elevation: 0,
       wallHeight: 3.2,
+      slabThickness: DEFAULT_SLAB_THICKNESS,
       nodes: {},
       walls: {},
       openings: {},
@@ -96,6 +99,7 @@ export class H3xDocument {
     for (const f of project.floors) {
       // Floors from before columns existed (M3) have no `columns` map.
       (f as { columns?: Floor['columns'] }).columns ??= {};
+      (f as { slabThickness?: number }).slabThickness ??= DEFAULT_SLAB_THICKNESS;
       const bad = checkRefs(f);
       if (bad.length > 0) {
         throw new H3xValidationError(

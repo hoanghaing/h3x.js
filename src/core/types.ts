@@ -90,6 +90,8 @@ export interface Floor {
   level: number;
   elevation: number;
   wallHeight: number;
+  /** Slab thickness in meters; the slab occupies [elevation - slabThickness, elevation]. */
+  slabThickness: number;
   nodes: Record<Id, PlanNode>;
   walls: Record<Id, Wall>;
   openings: Record<Id, Opening>;
@@ -97,6 +99,7 @@ export interface Floor {
   items: Record<Id, Item>;
   columns: Record<Id, Column>;
 }
+export type FloorProps = Pick<Floor, 'id' | 'level' | 'elevation' | 'wallHeight' | 'slabThickness'>;
 export interface ProjectMeta {
   name: string;
   created: string; // ISO 8601
@@ -115,7 +118,8 @@ export interface PresetInfo {
   sill?: number;
 }
 export type PresetResolver = (presetId: string) => PresetInfo | undefined;
-export type EntityKind = 'node' | 'wall' | 'opening' | 'room' | 'item' | 'column' | 'site';
+export type EntityKind =
+  'node' | 'wall' | 'opening' | 'room' | 'item' | 'column' | 'site' | 'floor';
 export interface Issue {
   code: string;
   ids: Id[];

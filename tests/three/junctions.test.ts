@@ -20,6 +20,7 @@ function floorOf(
     level: 0,
     elevation: 0,
     wallHeight: 3,
+    slabThickness: 0.15,
     nodes: Object.fromEntries(Object.entries(nodes).map(([id, [x, y]]) => [id, { id, x, y }])),
     walls: Object.fromEntries(
       walls.map(([id, a, b, thickness]) => [id, { id, a, b, thickness, height: 3 }]),

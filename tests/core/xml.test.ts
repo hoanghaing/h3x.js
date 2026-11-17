@@ -343,3 +343,37 @@ describe('xml: site, columns and room holes', () => {
     expect(projectToXML(p)).not.toContain('holes=');
   });
 });
+
+describe('floor slabThickness and floor ids', () => {
+  const body = `${NODES}${WALLS}`;
+  const xml = (floorAttrs: string) =>
+    `<h3x version="1" unit="m"><floor id="f1" ${floorAttrs}>${body}</floor></h3x>`;
+
+  it('defaults a missing slabThickness and keeps the ground elevation', () => {
+    const p = projectFromXML(xml('level="0" elevation="0.3" wallHeight="3.2"'));
+    expect(p.floors[0]!.slabThickness).toBe(0.15);
+    expect(p.floors[0]!.elevation).toBe(0.3);
+    expect(projectToXML(p)).toContain('slabThickness="0.15"');
+  });
+  it('round-trips slabThickness', () => {
+    const p = projectFromXML(xml('wallHeight="3.2" slabThickness="0.12"'));
+    expect(projectFromXML(projectToXML(p)).floors[0]!.slabThickness).toBe(0.12);
+  });
+  it.each(['0', '-0.1', 'abc'])('rejects slabThickness "%s"', (v) => {
+    try {
+      projectFromXML(xml(`wallHeight="3.2" slabThickness="${v}"`));
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xParseError);
+      expect(e).toMatchObject({ element: 'floor', attribute: 'slabThickness' });
+    }
+  });
+  it('rejects duplicate floor ids', () => {
+    const dup = `<h3x version="1" unit="m"><floor id="f1" wallHeight="3">${body}</floor><floor id="f1" level="1" wallHeight="3">${body}</floor></h3x>`;
+    expect(() => projectFromXML(dup)).toThrow(H3xParseError);
+  });
+  it('allows the same wall id on two floors', () => {
+    const two = `<h3x version="1" unit="m"><floor id="f1" wallHeight="3">${body}</floor><floor id="f2" level="1" wallHeight="3">${body}</floor></h3x>`;
+    expect(projectFromXML(two).floors).toHaveLength(2);
+  });
+});

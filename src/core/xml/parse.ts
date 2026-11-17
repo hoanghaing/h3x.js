@@ -1,4 +1,4 @@
-import { FORMAT_VERSION } from '../constants';
+import { DEFAULT_SLAB_THICKNESS, FORMAT_VERSION } from '../constants';
 import { H3xParseError, H3xVersionError } from '../errors';
 import { createId } from '../ids';
 import { detectRooms } from '../rooms/detect';
@@ -146,6 +146,7 @@ function parseFloor(fe: Element): Floor {
     level: num(fe, 'level', 0),
     elevation: num(fe, 'elevation', 0),
     wallHeight: num(fe, 'wallHeight'),
+    slabThickness: num(fe, 'slabThickness', DEFAULT_SLAB_THICKNESS),
     nodes: {},
     walls: {},
     openings: {},
@@ -153,6 +154,15 @@ function parseFloor(fe: Element): Floor {
     items: {},
     columns: {},
   };
+  if (floor.slabThickness <= 0) {
+    throw new H3xParseError(
+      `<floor> attribute "slabThickness" must be positive: "${floor.slabThickness}"`,
+      {
+        element: 'floor',
+        attribute: 'slabThickness',
+      },
+    );
+  }
   const seen = new Set<Id>();
   const add = <T extends { id: Id }>(rec: Record<Id, T>, ent: T, element: string): void => {
     if (seen.has(ent.id)) {
@@ -300,6 +310,17 @@ export function projectFromXML(xml: string): Project {
   if (siteEls.length > 1) {
     throw new H3xParseError('<h3x> has more than one <site>', { element: 'site' });
   }
+  const floors = floorEls.map(parseFloor);
+  const floorIds = new Set<Id>();
+  for (const f of floors) {
+    if (floorIds.has(f.id)) {
+      throw new H3xParseError(`duplicate floor id "${f.id}"`, {
+        element: 'floor',
+        attribute: 'id',
+      });
+    }
+    floorIds.add(f.id);
+  }
   const site = siteEls[0] ? parseSite(siteEls[0]) : undefined;
   return {
     version,
@@ -308,7 +329,7 @@ export function projectFromXML(xml: string): Project {
       name: metaEl?.getAttribute('name') ?? '',
       created: metaEl?.getAttribute('created') ?? '',
     },
-    floors: floorEls.map(parseFloor),
+    floors,
     ...(site ? { site } : {}),
   };
 }

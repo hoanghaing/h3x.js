@@ -2,6 +2,7 @@ import type {
   Column,
   EntityKind,
   Floor,
+  FloorProps,
   Id,
   Item,
   Opening,
@@ -21,6 +22,7 @@ interface EntityByKind {
   item: Item;
   column: Column;
   site: Site;
+  floor: FloorProps;
 }
 
 /**
@@ -63,6 +65,7 @@ function put(project: Project, c: EntityChange, snap: EntityChange['after']): vo
     else project.site = structuredClone(snap) as Site;
     return;
   }
+  if (c.kind === 'floor') throw new Error('floor changes are not supported yet');
   const floor = project.floors[0] as Floor;
   const rec = floor[COLLECTION[c.kind]] as Record<Id, unknown>;
   if (snap === null) delete rec[c.id];
