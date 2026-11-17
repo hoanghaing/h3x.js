@@ -11,12 +11,14 @@ Milestone 5: multi-floor.
   on the active floor; `EntityChange` carries `floorId` and a new `'floor'` kind.
 - Commands: `addFloor`, `removeFloor`, `setFloorHeight`, `setSlabThickness`, `setGroundElevation`;
   new codes `unknown-floor`, `floor-protected`, `invalid-floor-dimension` and the
-  `column-unsupported` layout warning.
+  `column-unsupported` layout warning. Walls at the storey height follow `setFloorHeight` (and
+  `addFloor({ wallHeight })`); custom-height walls are kept. `fromProject` rejects duplicate floor
+  ids and a bad `slabThickness` like `fromXML`.
 - 3D: one group per floor, slab meshes with thickness and
   `scene.setViewMode('active' | 'cutaway' | 'all')`; `getWallMesh(id, floorId?)` and
-  `getSlabMesh(floorId?)`.
-- Plan: the floor below is drawn faded underneath; switching floors clears the selection and
-  cancels a gesture.
+  `getSlabMesh(floorId?)`; every mesh carries `userData.h3xFloorId`.
+- Plan: the floor below is drawn faded underneath; switching floors commits an in-progress drag
+  (one undo step), resets the tool and clears the selection.
 - Example page: floor picker, add / remove floor, height, slab and ground elevation inputs, view
   mode select and a sample three-storey townhouse with a basement
   (`examples/layouts/townhouse-3f.xml`).

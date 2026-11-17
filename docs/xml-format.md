@@ -180,12 +180,12 @@ The `Mount` type also lists `opening`; that is a preset mount used by `addOpenin
 `projectFromXML` throws:
 
 - `H3xParseError` (`element` and `attribute` say where, when known) for: malformed XML; root not
-  `<h3x>`; missing, non-integer or `< 1` `version`; `unit` other than `m`; no `<floor>`; a
-  missing required attribute; a non-numeric number (empty, `NaN`, `Infinity`); a bad `side`,
-  `mount` or column `shape`; a bad or missing `<site>` (fewer than 3 points, malformed point, more
-  than one); a duplicate id within a floor; a duplicate floor id; a `slabThickness` not above 0; a reference to a missing node or wall (wall `a` / `b`,
-  opening `wall`, room `walls` / `holes`, wall-item `wall`); a room whose walls or hole loops do
-  not form a loop.
+  `<h3x>`; missing, non-integer or `< 1` `version`; `unit` other than `m`; no `<floor>`; a missing
+  required attribute; a non-numeric number (empty, `NaN`, `Infinity`); a bad `side`, `mount` or
+  column `shape`; a bad or missing `<site>` (fewer than 3 points, malformed point, more than one); a
+  duplicate id within a floor; a duplicate floor id; a `slabThickness` not above 0; a reference to a
+  missing node or wall (wall `a` / `b`, opening `wall`, room `walls` / `holes`, wall-item `wall`); a
+  room whose walls or hole loops do not form a loop.
 - `H3xVersionError` (`found`) when `version` is greater than the supported `FORMAT_VERSION`.
 
 Parsing does not run geometric validation (wall length, collisions, ...). Use `validateLayout` /
