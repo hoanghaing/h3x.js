@@ -6,8 +6,17 @@ import {
   setFloorHeight,
   setGroundElevation,
   setSlabThickness,
+  updateStair,
+  type Stair,
 } from 'h3x/core';
-import { ColumnTool, DrawSiteTool, DrawWallTool, H3xPlan, SelectEditTool } from 'h3x/plan';
+import {
+  ColumnTool,
+  DrawSiteTool,
+  DrawWallTool,
+  H3xPlan,
+  SelectEditTool,
+  StairTool,
+} from 'h3x/plan';
 import { H3xScene, H3xViewer, type H3xViewMode } from 'h3x/three';
 import layoutXml from './layouts/nha-ong-4x16.h3x?raw';
 import townhouseXml from './layouts/townhouse-3f.xml?raw';
@@ -32,13 +41,16 @@ function mount(next: H3xDocument): void {
   viewer = new H3xViewer(appHost, scene);
   scene.setViewMode(viewSelect.value as H3xViewMode);
   viewer.fitToContent();
-  plan = new H3xPlan(planHost, doc);
+  plan = new H3xPlan(planHost, doc, { stairLabels: { up: 'LÊN', down: 'XUỐNG' } });
   plan.fitToContent();
   teardown = [
     attachLengthInput(plan, planHost),
     attachSegmentLengthInput(plan, planHost),
     doc.on('change', refreshFloorControls),
     doc.on('activefloor', refreshFloorControls),
+    doc.on('change', refreshStairControls),
+    doc.on('activefloor', refreshStairControls),
+    plan.on('selectionchange', refreshStairControls),
     plan.on('issues', ({ standing }) => {
       if (standing.length > 0) say(`${standing.length} vấn đề tồn tại`, true);
       else say('');
@@ -48,6 +60,7 @@ function mount(next: H3xDocument): void {
     () => scene.dispose(),
   ];
   refreshFloorControls();
+  refreshStairControls();
 }
 
 const status = document.getElementById('status')!;
@@ -89,6 +102,36 @@ function run(cmd: Parameters<H3xDocument['tryExecute']>[0], ok: string): void {
   refreshFloorControls();
 }
 
+const stairBar = document.getElementById('stairbar')!;
+const stairTypeSelect = document.getElementById('sel-stair-type') as HTMLSelectElement;
+const stairTurnSelect = document.getElementById('sel-stair-turn') as HTMLSelectElement;
+const stairHandButton = document.getElementById('btn-stair-hand')!;
+const stairWidthInput = document.getElementById('in-stair-width') as HTMLInputElement;
+
+/** The stair selected in the plan, if any. */
+function selectedStair(): Stair | undefined {
+  const sel = plan.selection;
+  return sel?.kind === 'stair' ? doc.floor.stairs[sel.id] : undefined;
+}
+
+/** Shows the stair controls only while a stair is selected and syncs them with it. */
+function refreshStairControls(): void {
+  const s = selectedStair();
+  stairBar.style.display = s ? 'flex' : 'none';
+  if (!s) return;
+  stairTypeSelect.value = s.type;
+  stairTurnSelect.value = s.turn;
+  stairHandButton.textContent = s.hand === 'right' ? 'Tay phải' : 'Tay trái';
+  stairWidthInput.value = String(s.flightWidth);
+}
+
+/** Updates the selected stair, reporting a rejection in the status line. */
+function patchStair(patch: Partial<Omit<Stair, 'id'>>, ok: string): void {
+  const s = selectedStair();
+  if (s) run(updateStair(s.id, patch), ok);
+  refreshStairControls();
+}
+
 const viewSelect = document.getElementById('sel-view') as HTMLSelectElement;
 
 mount(H3xDocument.fromXML(townhouseXml));
@@ -127,6 +170,27 @@ on('btn-column-round', () => {
 on('btn-column-square', () => {
   plan.setTool(new ColumnTool({ shape: 'square' }));
   say('Cột vuông: nhấp để đặt');
+});
+on('btn-stair', () => {
+  plan.setTool(new StairTool({ type: 'U', turn: 'landing', hand: 'right', flightWidth: 0.9 }));
+  say('Cầu thang: kéo một ô chữ nhật (bám góc mặt tường), chọn rồi chỉnh kiểu ở góc phải dưới');
+});
+stairTypeSelect.addEventListener('change', () =>
+  patchStair({ type: stairTypeSelect.value as Stair['type'] }, 'Đã đổi kiểu cầu thang'),
+);
+stairTurnSelect.addEventListener('change', () =>
+  patchStair({ turn: stairTurnSelect.value as Stair['turn'] }, 'Đã đổi kiểu chiếu'),
+);
+stairHandButton.addEventListener('click', () => {
+  const s = selectedStair();
+  if (s) patchStair({ hand: s.hand === 'right' ? 'left' : 'right' }, 'Đã đổi chiều quay');
+});
+stairWidthInput.addEventListener('change', () =>
+  patchStair({ flightWidth: Number(stairWidthInput.value) }, 'Đã đổi bề rộng vế thang'),
+);
+on('btn-stair-rotate', () => {
+  const s = selectedStair();
+  if (s) patchStair({ rotation: s.rotation + Math.PI / 2 }, 'Đã xoay cầu thang 90°');
 });
 on('btn-clear', () => {
   mount(H3xDocument.create());

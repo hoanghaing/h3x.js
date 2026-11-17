@@ -141,6 +141,23 @@ passed as `presets`.
 - Finishes and names: `setWallFinish(wallId, side, finish)`, `setRoomFinish(roomId, finish)`,
   `renameRoom(roomId, name)`.
 
+### Stairs
+
+A floor holds `stairs`: a bay (`x`, `y`, `width`, `depth`, `rotation`) plus `type`
+(`'straight' | 'L' | 'U' | 'spiral'`), `turn` (`'landing' | 'winder'`), `hand` and `flightWidth`.
+A stair links its floor to the floor above; the slab and room floors above get an opening.
+
+- Commands: `addStair({ x, y, width, depth, type?, turn?, hand?, flightWidth?, rotation? })`
+  (`createdId`), `updateStair(id, patch)` and `removeStair(id)`.
+- Layout: `layoutStair(stair, rise)` returns risers, riser height, tread depth, step and landing
+  polygons and the walking line, or `{ ok: false }` when the flights do not fit; `stairRise` and
+  `stairBay` are helpers. Warnings `stair-does-not-fit`, `stair-no-floor-above` and
+  `stair-overlaps-wall` come from `validateLayout()`.
+- 3D: `scene.getStairMesh(id, floorId?)` (`h3xKind: 'stair'`); a handrail is part of the stair.
+- Plan: `new StairTool({ type, turn, hand, flightWidth })` drags a bay (corners snap to wall
+  faces); `SelectEditTool` selects, drags, nudges and deletes stairs; the `stairLabels` option
+  (default `{ up: 'UP', down: 'DN' }`) sets the walking-line labels.
+
 ### Validation and issue codes
 
 Validators return `Issue { code, ids, message }`. Layout edits are never blocked by furniture:
@@ -399,7 +416,7 @@ active floor commits an in-progress drag as it stands (one undo step), resets th
 clears the selection and redraws.
 
 The example page shows the plan and the 3D view side by side on one document, with a throwaway
-toolbar (select, draw wall, draw site, columns, clear, sample houses), demo inputs wired to
+toolbar (select, draw wall, draw site, columns, stair, clear, sample houses), controls for the selected stair (type, turn, hand, flight width, rotate 90°), demo inputs wired to
 `lengthEditRequest` and `segmentLengthRequest`, and a floor bar (floor picker, add above / below,
 remove, wall height, slab thickness, ground elevation and view mode). It opens a sample
 three-storey townhouse with a basement (`examples/layouts/townhouse-3f.xml`) (`pnpm dev`).

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+Milestone 6: stairs.
+
+- Core: `Floor.stairs` and `Stair` (`straight`, `L`, `U`, `spiral`; `landing` or `winder` turns;
+  hand, flight width); XML `<stair>` (see `docs/xml-format.md`) and `addFloor` copies stairs.
+- Commands: `addStair`, `updateStair`, `removeStair`; new blocking code `invalid-stair`.
+- Layout: `layoutStair(stair, rise)` (risers of at most 0.18 m, tread 2h + b between 0.60 and
+  0.62 m, winders 3 per quarter turn, spiral headroom 2.1 m), `stairBay` and `stairRise`;
+  `validateLayout` warns with `stair-does-not-fit`, `stair-no-floor-above` and
+  `stair-overlaps-wall`.
+- 3D: stair meshes (`h3xKind: 'stair'`) with a handrail, `scene.getStairMesh(id, floorId?)`,
+  `buildStairGeometry` and `buildHandrailGeometry`; the slab and room floors of the floor above
+  get an opening for every stair below.
+- Plan: stairs drawn with steps, walking line, arrow and UP / DN labels (`stairLabels` option), a
+  break line at 1.2 m with dashed steps above it, and the opening plus stair shown on the floor
+  above; `StairTool` (drag a bay, corners snap to wall faces) and `snapBayCorner`;
+  `SelectEditTool` selects, drags, nudges and deletes stairs.
+- Example page: "Cầu thang" tool and controls for the selected stair (type, turn, hand, flight
+  width, rotate 90°); the sample townhouse gains a stairwell with a U stair on floors -1, 0 and 1.
+
 Milestone 5: multi-floor.
 
 - Core: `Floor.slabThickness` (XML `slabThickness`, default 0.15); floors are normalised on load
