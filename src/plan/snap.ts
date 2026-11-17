@@ -1,6 +1,7 @@
 import type { Floor, Id, Vec2 } from '../core';
 import { GEOM_TOL, MIN_WALL_LENGTH } from '../core/constants';
 import { closestPointOnSegment } from '../core/geometry/segment';
+import { roomPolygon } from '../core/rooms/detect';
 
 export interface SnapOptions {
   /** Grid step in meters; `<= 0` disables grid snapping. */
@@ -146,4 +147,24 @@ export function snapDraw(
     y: tidy(opts.from.y + snappedLen * Math.sin(step)),
   };
   return { point, guides: [], target: free, angleLock: { from: opts.from, to: point } };
+}
+
+/**
+ * Snap for stair bay corners: a room's inner-outline (wall face) vertex within `alignRadius`
+ * wins; otherwise the point rounds to the grid.
+ */
+export function snapBayCorner(p: Vec2, floor: Readonly<Floor>, opts: SnapOptions): SnapResult {
+  let best: Vec2 | undefined;
+  let bestDist = Infinity;
+  for (const room of Object.values(floor.rooms)) {
+    for (const v of roomPolygon(floor as Floor, room, 'inner')) {
+      const d = Math.hypot(v.x - p.x, v.y - p.y);
+      if (d <= opts.alignRadius && d < bestDist) {
+        best = v;
+        bestDist = d;
+      }
+    }
+  }
+  if (best) return { point: { x: best.x, y: best.y }, guides: [] };
+  return { point: { x: snapScalar(p.x, opts.grid), y: snapScalar(p.y, opts.grid) }, guides: [] };
 }
