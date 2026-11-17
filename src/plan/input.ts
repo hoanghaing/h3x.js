@@ -134,17 +134,17 @@ export class PlanInput {
       this.updatePinch();
       return;
     }
-    if (this.pointers.size > 0 && e.pointerId !== this.primary) return;
-    if (
-      (this.mode === 'pan' || this.mode === 'tool') &&
-      e.pointerType === 'mouse' &&
-      e.buttons === 0
-    ) {
-      // The button was released where we never saw the pointerup: end the gesture (a tool sees
-      // its release) instead of letting a stale press follow the hovering mouse.
-      this.up(e);
-      return;
+    if (e.pointerType === 'mouse' && e.buttons === 0 && this.pointers.has(e.pointerId)) {
+      // The button was released where we never saw the pointerup. Mid-gesture: end it (a tool
+      // sees its release) instead of letting a stale press follow the hovering mouse. After a
+      // tool swap (no gesture): just forget the pointer so hover reaches the new tool.
+      if (e.pointerId === this.primary && (this.mode === 'pan' || this.mode === 'tool')) {
+        this.up(e);
+        return;
+      }
+      if (this.mode === 'none') this.pointers.delete(e.pointerId);
     }
+    if (this.pointers.size > 0 && e.pointerId !== this.primary) return;
     this.host.tool?.onPointerMove?.(this.planEvent(e, screen));
     if (this.mode === 'pan') {
       this.host.setView(panBy(this.host.view, screen.x - this.last.x, screen.y - this.last.y));

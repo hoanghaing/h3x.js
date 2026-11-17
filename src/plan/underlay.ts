@@ -41,8 +41,7 @@ export function renderUnderlay(
     const s = ctx.stairs;
     if (s) {
       for (const stair of Object.values(below.stairs)) {
-        const g = stairFromAbove(stair, { ...s, view: ctx.view });
-        if (g) shapes.push(g);
+        shapes.push(stairFromAbove(stair, { ...s, view: ctx.view }));
       }
     }
   }

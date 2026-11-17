@@ -169,14 +169,25 @@ describe('plan stairs: floor above', () => {
     expect(DEFAULT_CSS(P)).toContain(`.${P}-stair-opening`);
   });
 
+  it('a stair below that does not fit still shows its opening (the bay), without steps or DN', () => {
+    const plan = makePlan();
+    plan.doc.execute(updateStair('s1', { depth: 1.5 }));
+    plan.doc.setActiveFloor('u');
+    const opening = below(plan).querySelectorAll(`.${P}-stair-opening`);
+    expect(opening).toHaveLength(1);
+    expect(opening[0]!.getAttribute('points')!.split(' ')).toHaveLength(4);
+    expect(below(plan).querySelector(`.${P}-stair-step`)).toBeNull();
+    expect(below(plan).querySelector(`.${P}-stair-label`)).toBeNull();
+  });
+
   it('refreshes when the stair below changes', () => {
     const plan = makePlan();
     plan.doc.execute(updateStair('s1', { depth: 1.5 }));
     plan.doc.setActiveFloor('u');
-    expect(below(plan).querySelector(`.${P}-stair-opening`)).toBeNull();
+    expect(below(plan).querySelector(`.${P}-stair-step`)).toBeNull();
     plan.doc.undo(); // a stair change on the floor below the active one
     expect(plan.doc.activeFloorId).toBe('u');
-    expect(below(plan).querySelectorAll(`.${P}-stair-opening`)).toHaveLength(1);
+    expect(below(plan).querySelectorAll(`.${P}-stair-step`).length).toBeGreaterThan(0);
   });
 });
 

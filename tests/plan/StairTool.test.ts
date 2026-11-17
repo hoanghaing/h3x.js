@@ -114,6 +114,12 @@ describe('snapBayCorner', () => {
     expect(c.y).toBeCloseTo(0.1, 9);
     expect(snapBayCorner({ x: 1.01, y: 1.02 }, f, opts).point).toEqual({ x: 1, y: 1 });
   });
+
+  it('with align off, only the grid applies', () => {
+    const c = snapBayCorner({ x: 0.13, y: 0.14 }, narrowRoom(), { ...opts, align: false }).point;
+    expect(c.x).toBeCloseTo(0.15, 9);
+    expect(c.y).toBeCloseTo(0.15, 9);
+  });
 });
 
 describe('StairTool tolerance and options', () => {
