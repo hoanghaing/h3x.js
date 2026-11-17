@@ -395,6 +395,46 @@ describe('fromProject checks', () => {
     throw new Error('expected throw');
   };
 
+  it('duplicate floor ids give duplicate-id', () => {
+    const a = oneRoomFloor();
+    const b = { ...oneRoomFloor(), level: 1 };
+    const e = err(proj([a, b]));
+    expect(e.issues[0]!.code).toBe('duplicate-id');
+    expect(e.issues[0]!.ids).toEqual(['f1']);
+  });
+
+  it('a non-finite or non-positive slabThickness gives invalid-floor-dimension', () => {
+    for (const t of [0, -0.1, NaN, Infinity]) {
+      const f = { ...oneRoomFloor(), slabThickness: t };
+      const e = err(proj([f]));
+      expect(e.issues[0]!.code).toBe('invalid-floor-dimension');
+      expect(e.issues[0]!.ids).toEqual(['f1']);
+    }
+    const g = oneRoomFloor() as Partial<Project['floors'][number]>;
+    delete g.slabThickness;
+    const d = H3xDocument.fromProject(proj([g as Project['floors'][number]]));
+    expect(d.floor.slabThickness).toBe(0.15);
+  });
+
+  it('fromProject and fromXML both normalise levels', () => {
+    const a = { ...oneRoomFloor(), level: 1 };
+    const b = { ...oneRoomFloor(), id: 'f2', level: 2 };
+    const d = H3xDocument.fromProject(proj([b, a]));
+    expect(d.project.floors.map((f) => [f.id, f.level])).toEqual([
+      ['f1', 0],
+      ['f2', 1],
+    ]);
+    const xml = `<h3x version="1" unit="m">
+      <floor id="f1" level="1" elevation="0" wallHeight="3.2"/>
+      <floor id="f2" level="2" elevation="0" wallHeight="3.2"/>
+    </h3x>`;
+    const x = H3xDocument.fromXML(xml);
+    expect(x.project.floors.map((f) => [f.id, f.level])).toEqual([
+      ['f1', 0],
+      ['f2', 1],
+    ]);
+  });
+
   it('no floors gives no-floor', () => {
     expect(err(proj([])).issues[0]!.code).toBe('no-floor');
   });

@@ -105,7 +105,8 @@ describe('H3xViewer', () => {
     const dir = new Vector3();
     viewer.camera.getWorldDirection(dir);
     expect(dir.y).toBeLessThan(-0.99);
-    expect(dir.distanceTo(new Vector3(0, -1, 0))).toBeLessThan(1e-6);
+    // OrbitControls clamps the polar angle to EPS = 1e-6, so allow a little more than that
+    expect(dir.distanceTo(new Vector3(0, -1, 0))).toBeLessThan(1e-5);
     expect(viewer.camera.up.toArray()).toEqual([0, 0, -1]);
     expect(viewer.camera.position.y).toBeGreaterThan(viewer.target.y);
     viewer.dispose();

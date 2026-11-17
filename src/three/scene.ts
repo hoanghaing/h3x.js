@@ -1,39 +1,34 @@
-import { Group, Mesh, type BufferGeometry, type LineLoop } from 'three';
+import { Group, type LineLoop, type Mesh } from 'three';
 import type { ChangeEvent, H3xDocument, Id } from '../core';
-import { buildColumnGeometry } from './columns';
-import { buildFloorGeometry } from './floors';
+import { FloorView } from './floorView';
 import { MaterialLibrary, type FinishResolver } from './materials';
 import { buildSiteLine } from './site';
-import { buildJoinGeometry } from './walls/joinGeometry';
-import { computeJoins } from './walls/joins';
-import { buildWallGeometry } from './walls/wallGeometry';
 
-const GEOMETRY_KINDS = new Set(['node', 'wall', 'opening', 'room', 'column', 'site']);
+export type { H3xKind } from './floorView';
 
-/** userData.h3xKind of the meshes an H3xScene creates. */
-export type H3xKind = 'wall' | 'room' | 'join' | 'column';
+const FLOOR_GEOMETRY_KINDS = new Set(['node', 'wall', 'opening', 'room', 'column', 'floor']);
 
-interface Built {
-  geom: BufferGeometry;
-  material: Mesh['material'];
-}
+/**
+ * Which floors are visible: `'active'` only the active floor, `'cutaway'` the active floor
+ * and every floor below it, `'all'` the whole house.
+ */
+export type H3xViewMode = 'active' | 'cutaway' | 'all';
 
-/** A three.js scene graph (walls + floors) kept in sync with an H3xDocument. */
+/**
+ * A three.js scene graph kept in sync with an H3xDocument: one Group per floor
+ * (`h3x-floor-<id>`, lowest first) holding its walls, room floors, joins, columns and slab,
+ * plus the site line on the root.
+ */
 export class H3xScene {
   readonly root = new Group();
-  private readonly wallsGroup = new Group();
-  private readonly floorsGroup = new Group();
-  private readonly joinsGroup = new Group();
-  private readonly columnsGroup = new Group();
   private siteLine: LineLoop | undefined;
   private readonly materials: MaterialLibrary;
   private readonly ownsMaterials: boolean;
-  private readonly wallMeshes = new Map<Id, Mesh>();
-  private readonly floorMeshes = new Map<Id, Mesh>();
-  private readonly joinMeshes = new Map<Id, Mesh>();
-  private readonly columnMeshes = new Map<Id, Mesh>();
+  private readonly views = new Map<Id, FloorView>();
+  private mode: H3xViewMode = 'all';
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
+  private readonly unsubscribeActive: () => void;
   private disposed = false;
 
   constructor(
@@ -43,30 +38,44 @@ export class H3xScene {
     this.ownsMaterials = !opts.materials;
     this.materials = opts.materials ?? new MaterialLibrary({ resolveFinish: opts.resolveFinish });
     this.root.name = 'h3x-root';
-    this.wallsGroup.name = 'h3x-walls';
-    this.floorsGroup.name = 'h3x-floors';
-    this.joinsGroup.name = 'h3x-joins';
-    this.columnsGroup.name = 'h3x-columns';
-    this.root.add(this.wallsGroup, this.floorsGroup, this.joinsGroup, this.columnsGroup);
     this.rebuild();
-    this.unsubscribe = doc.on('change', (e: ChangeEvent) => {
-      if (e.changes.some((c) => GEOMETRY_KINDS.has(c.kind))) this.rebuild();
+    this.unsubscribe = doc.on('change', (e: ChangeEvent) => this.onChange(e));
+    this.unsubscribeActive = doc.on('activefloor', () => {
+      if (this.disposed) return;
+      this.applyVisibility();
+      this.notify();
     });
   }
 
-  getWallMesh(id: Id): Mesh | undefined {
-    return this.wallMeshes.get(id);
+  get viewMode(): H3xViewMode {
+    return this.mode;
   }
 
-  getColumnMesh(id: Id): Mesh | undefined {
-    return this.columnMeshes.get(id);
+  /** Changes which floors are visible. No geometry is rebuilt; fires onInvalidate. */
+  setViewMode(mode: H3xViewMode): void {
+    this.mode = mode;
+    if (this.disposed) return;
+    this.applyVisibility();
+    this.notify();
   }
 
-  getFloorMesh(roomId: Id): Mesh | undefined {
-    return this.floorMeshes.get(roomId);
+  getWallMesh(id: Id, floorId?: Id): Mesh | undefined {
+    return this.view(floorId)?.wallMeshes.get(id);
   }
 
-  /** Subscribe to rebuilds. Returns an unsubscribe function. */
+  getColumnMesh(id: Id, floorId?: Id): Mesh | undefined {
+    return this.view(floorId)?.columnMeshes.get(id);
+  }
+
+  getFloorMesh(roomId: Id, floorId?: Id): Mesh | undefined {
+    return this.view(floorId)?.floorMeshes.get(roomId);
+  }
+
+  getSlabMesh(floorId?: Id): Mesh | undefined {
+    return this.view(floorId)?.slabMesh;
+  }
+
+  /** Subscribe to rebuilds and visibility changes. Returns an unsubscribe function. */
   onInvalidate(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => {
@@ -74,55 +83,10 @@ export class H3xScene {
     };
   }
 
-  /**
-   * Rebuilds all geometry from the document. Meshes keep their identity per id:
-   * geometry is swapped (old one disposed) and materials are updated in place;
-   * meshes are only created or removed when ids appear or disappear.
-   * A no-op after dispose().
-   */
+  /** Rebuilds every floor from the document. A no-op after dispose(). */
   rebuild(): void {
     if (this.disposed) return;
-    const floor = this.doc.floor;
-    const { corners, junctions } = computeJoins(floor);
-
-    const walls = new Map<Id, Built>();
-    for (const wall of Object.values(floor.walls)) {
-      const wallCorners = corners[wall.id];
-      if (!wallCorners) continue;
-      walls.set(wall.id, {
-        geom: buildWallGeometry(floor, wall.id, wallCorners),
-        material: [
-          this.materials.wall(wall.finishLeft),
-          this.materials.wall(wall.finishRight),
-          this.materials.trim(),
-        ],
-      });
-    }
-    const floors = new Map<Id, Built>();
-    for (const room of Object.values(floor.rooms)) {
-      const geom = buildFloorGeometry(floor, room);
-      if (geom) floors.set(room.id, { geom, material: this.materials.floor(room.floorFinish) });
-    }
-    const joins = new Map<Id, Built>();
-    for (const [nodeId, junction] of Object.entries(junctions)) {
-      joins.set(nodeId, {
-        geom: buildJoinGeometry(junction, floor.elevation),
-        material: this.materials.trim(),
-      });
-    }
-
-    const columns = new Map<Id, Built>();
-    for (const column of Object.values(floor.columns)) {
-      columns.set(column.id, {
-        geom: buildColumnGeometry(floor, column),
-        material: this.materials.wall(),
-      });
-    }
-
-    this.sync(this.wallMeshes, this.wallsGroup, 'wall', walls);
-    this.sync(this.floorMeshes, this.floorsGroup, 'room', floors);
-    this.sync(this.joinMeshes, this.joinsGroup, 'join', joins);
-    this.sync(this.columnMeshes, this.columnsGroup, 'column', columns);
+    this.syncFloors(null);
     this.syncSite();
     this.notify();
   }
@@ -132,34 +96,73 @@ export class H3xScene {
     if (this.disposed) return;
     this.disposed = true;
     this.unsubscribe();
-    this.clear();
+    this.unsubscribeActive();
+    this.removeSite();
+    for (const view of this.views.values()) view.dispose();
+    this.views.clear();
     this.listeners.clear();
     if (this.ownsMaterials) this.materials.dispose();
   }
 
-  private sync(meshes: Map<Id, Mesh>, group: Group, kind: H3xKind, built: Map<Id, Built>): void {
-    for (const [id, mesh] of meshes) {
-      if (built.has(id)) continue;
-      mesh.geometry.dispose();
-      mesh.removeFromParent();
-      meshes.delete(id);
+  private view(floorId: Id = this.doc.activeFloorId): FloorView | undefined {
+    return this.views.get(floorId);
+  }
+
+  private onChange(e: ChangeEvent): void {
+    const touched = new Set<Id>();
+    let site = false;
+    for (const c of e.changes) {
+      if (c.kind === 'site') site = true;
+      else if (FLOOR_GEOMETRY_KINDS.has(c.kind) && c.floorId !== undefined) touched.add(c.floorId);
     }
-    for (const [id, { geom, material }] of built) {
-      const mesh = meshes.get(id);
-      if (mesh) {
-        const old = mesh.geometry;
-        mesh.geometry = geom;
-        mesh.material = material;
-        old.dispose();
-        continue;
+    if (touched.size === 0 && !site) return;
+    // The active floor was removed: the 'activefloor' event that follows sets visibility
+    // and notifies, so no frame is drawn with every floor hidden.
+    const activeGone = !this.doc.floorById(this.doc.activeFloorId);
+    if (touched.size > 0) this.syncFloors(e.reason === 'load' ? null : touched, !activeGone);
+    if (site) this.syncSite();
+    if (!activeGone) this.notify();
+  }
+
+  /**
+   * Adds / removes floor views to match the document, rebuilds the touched floors
+   * (all when `touched` is null) plus any new ones, and restores level order and visibility.
+   */
+  private syncFloors(touched: Set<Id> | null, visibility = true): void {
+    const floors = this.doc.project.floors;
+    const ids = new Set(floors.map((f) => f.id));
+    for (const [id, view] of this.views) {
+      if (ids.has(id)) continue;
+      view.dispose();
+      this.views.delete(id);
+    }
+    for (const floor of floors) {
+      let view = this.views.get(floor.id);
+      const fresh = !view;
+      if (!view) {
+        view = new FloorView(floor.id, this.materials);
+        this.views.set(floor.id, view);
       }
-      const created = new Mesh(geom, material);
-      created.castShadow = true;
-      created.receiveShadow = true;
-      created.userData = { h3xKind: kind, h3xId: id };
-      group.add(created);
-      meshes.set(id, created);
+      if (fresh || !touched || touched.has(floor.id)) view.rebuild(floor);
     }
+    // Re-add in level order, keeping foreign objects (and the site line) after the floors.
+    const groups = floors.map((f) => this.views.get(f.id)!.group);
+    const others = this.root.children.filter((c) => !groups.includes(c as Group));
+    for (const g of groups) g.removeFromParent();
+    for (const o of others) o.removeFromParent();
+    this.root.add(...groups, ...others);
+    if (visibility) this.applyVisibility();
+  }
+
+  private applyVisibility(): void {
+    const floors = this.doc.project.floors;
+    const active = floors.findIndex((f) => f.id === this.doc.activeFloorId);
+    floors.forEach((floor, i) => {
+      const view = this.views.get(floor.id);
+      if (!view) return;
+      view.group.visible =
+        this.mode === 'all' || (this.mode === 'active' ? i === active : i <= active);
+    });
   }
 
   private syncSite(): void {
@@ -176,23 +179,6 @@ export class H3xScene {
     (this.siteLine.material as { dispose(): void }).dispose();
     this.siteLine.removeFromParent();
     this.siteLine = undefined;
-  }
-
-  private clear(): void {
-    this.removeSite();
-    for (const mesh of [
-      ...this.wallMeshes.values(),
-      ...this.floorMeshes.values(),
-      ...this.joinMeshes.values(),
-      ...this.columnMeshes.values(),
-    ]) {
-      mesh.geometry.dispose();
-      mesh.removeFromParent();
-    }
-    this.wallMeshes.clear();
-    this.floorMeshes.clear();
-    this.joinMeshes.clear();
-    this.columnMeshes.clear();
   }
 
   /** Runs every listener, then rethrows the first error (mirrors the document emitter). */

@@ -10,6 +10,8 @@ export * from './floors';
 
 export * from './columns';
 
+export * from './slab';
+
 export * from './site';
 
 export * from './materials';

@@ -11,7 +11,7 @@ import {
 import { diffFloors, wallsAt } from '../../src/core/topology/draft';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Floor, Project, Wall, WallItem } from '../../src/core/types';
-import { oneRoomFloor, testPresets, twoRoomFloor } from '../fixtures/floors';
+import { ctxFor, oneRoomFloor, testPresets, twoRoomFloor } from '../fixtures/floors';
 
 const mk = (floor: Floor): H3xDocument =>
   H3xDocument.fromProject(
@@ -74,7 +74,7 @@ describe('splitWall', () => {
 
   it('re-running the same command object is deterministic', () => {
     const cmd = splitWall('w1', { x: 2, y: 0 });
-    const ctx = { floor: oneRoomFloor(), presets: testPresets };
+    const ctx = ctxFor(oneRoomFloor(), testPresets);
     expect(cmd.run(ctx)).toEqual(cmd.run(ctx));
   });
 
@@ -484,7 +484,7 @@ describe('dropNode', () => {
     floor.nodes.n5 = { id: 'n5', x: 2, y: 2 };
     floor.walls.w5 = { id: 'w5', a: 'n5', b: 'n4', thickness: 0.2, height: 3.2 };
     const cmd = dropNode('n5', { wall: 'w1', at: { x: 2, y: 0 } });
-    const ctx = { floor, presets: testPresets };
+    const ctx = ctxFor(floor, testPresets);
     // new room ids are random, so compare the structural part of the change list
     const structure = (): unknown[] => cmd.run(ctx).filter((c) => c.kind !== 'room');
     expect(structure()).toEqual(structure());
