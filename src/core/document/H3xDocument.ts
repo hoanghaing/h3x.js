@@ -3,6 +3,7 @@ import { normalizeFloors } from '../floors/stack';
 import { H3xValidationError } from '../errors';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { layoutValidator, validateLayout } from '../validate/layout';
+import { validateColumnSupport } from '../validate/floors';
 import { checkRefs } from '../validate/refs';
 import { placementValidator, validatePlacements } from '../validate/placement';
 import type { Floor, Id, Issue, PresetResolver, Project } from '../types';
@@ -190,7 +191,13 @@ export class H3xDocument {
 
   /** All layout issues, including non-blocking ones. */
   validateLayout(): Issue[] {
-    return validateLayout(this.floor as Floor, this._project.site);
+    return [
+      ...validateLayout(this.floor as Floor, this._project.site),
+      ...validateColumnSupport(
+        this.floor as Floor,
+        this.floorBelow(this.floor.id) as Floor | undefined,
+      ),
+    ];
   }
 
   /** All placement issues for openings and items, including pre-existing ones. */
