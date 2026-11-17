@@ -265,9 +265,7 @@ describe('holes, columns and site validation', () => {
     const r = doc.tryExecute(moveNode('an2', { x: 9, y: 4 }));
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.issues.some((i) => i.code === 'room-degenerate' && i.ids.includes('r1'))).toBe(
-        true,
-      );
+      expect(r.issues.some((i) => i.code === 'room-degenerate' && i.ids.includes('r1'))).toBe(true);
     }
   });
 
@@ -299,13 +297,25 @@ describe('holes, columns and site validation', () => {
     ['width 0', { width: 0 }],
     ['width 2.5', { width: 2.5 }],
     ['depth -1', { depth: -1 }],
+    ['height 0', { height: 0 }],
+    ['height -1', { height: -1 }],
+    ['height NaN', { height: Number.NaN }],
+    ['height Infinity', { height: Number.POSITIVE_INFINITY }],
   ])('blocks column-size for %s', (_n, over) => {
     const f = oneRoomFloor();
     col(f, 'c1', over);
     expect(codes(f)).toContain('column-size');
     const doc = mk(f);
-    const issues = layoutValidator(doc, [{ kind: 'column', id: 'c1', before: null, after: f.columns.c1! }]);
+    const issues = layoutValidator(doc, [
+      { kind: 'column', id: 'c1', before: null, after: f.columns.c1! },
+    ]);
     expect(issues.map((i) => i.code)).toContain('column-size');
+  });
+
+  it('accepts a column with a positive height', () => {
+    const f = oneRoomFloor();
+    col(f, 'c1', { height: 2.4 });
+    expect(codes(f)).not.toContain('column-size');
   });
 
   it('reports columns-overlap only from validateLayout', () => {
@@ -314,7 +324,9 @@ describe('holes, columns and site validation', () => {
     col(f, 'c2', { x: 1.2 });
     expect(codes(f)).toContain('columns-overlap');
     const doc = mk(f);
-    const issues = layoutValidator(doc, [{ kind: 'column', id: 'c1', before: null, after: f.columns.c1! }]);
+    const issues = layoutValidator(doc, [
+      { kind: 'column', id: 'c1', before: null, after: f.columns.c1! },
+    ]);
     expect(issues.map((i) => i.code)).not.toContain('columns-overlap');
   });
 

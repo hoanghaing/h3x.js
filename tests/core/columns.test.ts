@@ -37,6 +37,24 @@ describe('column commands', () => {
     expect(doc.floor.columns[cmd.createdId]).toBeUndefined();
   });
 
+  it('fromProject accepts an M3-shaped floor without columns, then addColumn works', () => {
+    const floor = oneRoomFloor() as Partial<ReturnType<typeof oneRoomFloor>>;
+    delete floor.columns;
+    const doc = H3xDocument.fromProject(
+      {
+        version: 1,
+        unit: 'm',
+        meta: { name: 't', created: '2026-01-01T00:00:00Z' },
+        floors: [floor],
+      } as Project,
+      { presets: testPresets },
+    );
+    expect(doc.floor.columns).toEqual({});
+    const cmd = addColumn({ x: 1, y: 1, shape: 'round', width: 0.3 });
+    doc.execute(cmd);
+    expect(doc.floor.columns[cmd.createdId]).toBeDefined();
+  });
+
   it('re-running addColumn is duplicate-id', () => {
     const doc = mk();
     const cmd = addColumn({ x: 1, y: 1, shape: 'square', width: 0.3 });

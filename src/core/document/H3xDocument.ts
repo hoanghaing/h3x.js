@@ -94,6 +94,8 @@ export class H3xDocument {
     }
     const project = structuredClone(p);
     for (const f of project.floors) {
+      // Floors from before columns existed (M3) have no `columns` map.
+      (f as { columns?: Floor['columns'] }).columns ??= {};
       const bad = checkRefs(f);
       if (bad.length > 0) {
         throw new H3xValidationError(

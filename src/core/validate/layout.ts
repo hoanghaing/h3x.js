@@ -191,11 +191,12 @@ function columnSizeIssues(floor: Floor, ids: Iterable<Id>): Issue[] {
     const c = floor.columns[id];
     if (!c) continue;
     const sizes = c.shape === 'square' && c.depth !== undefined ? [c.width, c.depth] : [c.width];
-    if (sizes.some((s) => !(s > 0) || s > MAX_COLUMN_SIZE + GEOM_TOL)) {
+    const badHeight = c.height !== undefined && !(Number.isFinite(c.height) && c.height > 0);
+    if (badHeight || sizes.some((s) => !(s > 0) || s > MAX_COLUMN_SIZE + GEOM_TOL)) {
       out.push({
         code: 'column-size',
         ids: [id],
-        message: `Column ${id} size must be above 0 and at most ${MAX_COLUMN_SIZE} m`,
+        message: `Column ${id} size must be above 0 and at most ${MAX_COLUMN_SIZE} m, height above 0`,
       });
     }
   }
