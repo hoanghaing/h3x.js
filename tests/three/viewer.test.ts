@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { Box3, GridHelper, Sphere, Vector3, type Camera, type Material, type Scene } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { H3xDocument, type Project } from '../../src/core';
+import { H3xDocument, addFloor, type Project } from '../../src/core';
 import { H3xScene, H3xViewer, type RendererLike } from '../../src/three';
 import { oneRoomFloor } from '../fixtures/floors';
 
@@ -52,12 +52,13 @@ afterEach(() => {
 
 function setup() {
   const project = { name: 'p', floors: [oneRoomFloor()] } as unknown as Project;
-  const scene = new H3xScene(H3xDocument.fromProject(project));
+  const doc = H3xDocument.fromProject(project);
+  const scene = new H3xScene(doc);
   const container = document.createElement('div');
   document.body.appendChild(container);
   const fake = makeFake();
   const viewer = new H3xViewer(container, scene, { createRenderer: () => fake });
-  return { scene, container, fake, viewer };
+  return { doc, scene, container, fake, viewer };
 }
 
 const flush = () => {
@@ -109,6 +110,19 @@ describe('H3xViewer', () => {
     expect(dir.distanceTo(new Vector3(0, -1, 0))).toBeLessThan(1e-5);
     expect(viewer.camera.up.toArray()).toEqual([0, 0, -1]);
     expect(viewer.camera.position.y).toBeGreaterThan(viewer.target.y);
+    viewer.dispose();
+  });
+
+  it('fitToContent frames only floors the view mode shows', () => {
+    const { doc, scene, viewer } = setup();
+    doc.execute(addFloor({ position: 'above' }));
+    viewer.fitToContent();
+    const allY = viewer.target.y;
+    scene.setViewMode('active'); // the ground floor stays active
+    viewer.fitToContent();
+    const ground = doc.floor;
+    expect(viewer.target.y).toBeLessThan(allY);
+    expect(viewer.target.y).toBeLessThanOrEqual(ground.elevation + ground.wallHeight);
     viewer.dispose();
   });
 

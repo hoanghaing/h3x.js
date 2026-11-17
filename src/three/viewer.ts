@@ -1,11 +1,13 @@
 import {
   Box3,
+  type BufferGeometry,
   type Camera,
   Color,
   DirectionalLight,
   GridHelper,
   HemisphereLight,
   MathUtils,
+  type Object3D,
   OrthographicCamera,
   PerspectiveCamera,
   Scene,
@@ -192,7 +194,7 @@ export class H3xViewer {
   }
 
   fitToContent(): void {
-    const box = new Box3().setFromObject(this.scene.root);
+    const box = visibleBox(this.scene.root);
     if (box.isEmpty()) {
       this.requestRender();
       return;
@@ -328,4 +330,22 @@ export class H3xViewer {
     this.renderer.render(this.threeScene, this.cam);
     this.gizmo?.update(this.cam.quaternion);
   }
+}
+
+/** Bounds of the visible objects under `root`; hidden subtrees (e.g. floors a view mode hides) are skipped. */
+function visibleBox(root: Object3D): Box3 {
+  const box = new Box3();
+  const part = new Box3();
+  root.updateWorldMatrix(true, true);
+  const visit = (o: Object3D): void => {
+    if (!o.visible) return;
+    const geom = (o as Object3D & { geometry?: BufferGeometry }).geometry;
+    if (geom) {
+      if (!geom.boundingBox) geom.computeBoundingBox();
+      if (geom.boundingBox) box.union(part.copy(geom.boundingBox).applyMatrix4(o.matrixWorld));
+    }
+    for (const c of o.children) visit(c);
+  };
+  visit(root);
+  return box;
 }
