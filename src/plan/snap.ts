@@ -1,4 +1,5 @@
 import type { Floor, Id, Vec2 } from '../core';
+import { GEOM_TOL, MIN_WALL_LENGTH } from '../core/constants';
 import { closestPointOnSegment } from '../core/geometry/segment';
 
 export interface SnapOptions {
@@ -76,7 +77,8 @@ const ANGLE_TOLERANCE = (5 * Math.PI) / 180;
  * wall center line within `reach` > alignment to nodes and `extra` > 45-degree
  * angle lock from `from` (length grid-snapped) > grid. With `structure: false` the node and
  * wall targets are skipped (nodes still serve as alignment points). `exclude` nodes are neither
- * targets nor alignment points, and walls touching them are not targets.
+ * targets nor alignment points, and walls touching them are not targets. A wall hit closer than
+ * `MIN_WALL_LENGTH` to an end of the wall (where a split would fail) snaps to that end node.
  */
 export function snapDraw(
   p: Vec2,
@@ -101,7 +103,8 @@ export function snapDraw(
   }
   if (nodeHit) return { point: nodeHit.at, guides: [], target: { kind: 'node', id: nodeHit.id } };
 
-  let wallHit: { id: Id; d: number; at: Vec2 } | undefined;
+  let wallHit:
+    { id: Id; d: number; at: Vec2; a: Vec2 & { id: Id }; b: Vec2 & { id: Id } } | undefined;
   for (const w of structure ? Object.values(floor.walls) : []) {
     if (skip.has(w.a) || skip.has(w.b)) continue;
     const a = floor.nodes[w.a];
@@ -109,9 +112,21 @@ export function snapDraw(
     if (!a || !b) continue;
     const { point } = closestPointOnSegment(p, a, b);
     const d = Math.hypot(point.x - p.x, point.y - p.y);
-    if (d <= opts.reach && (!wallHit || d < wallHit.d)) wallHit = { id: w.id, d, at: point };
+    if (d <= opts.reach && (!wallHit || d < wallHit.d)) wallHit = { id: w.id, d, at: point, a, b };
   }
-  if (wallHit) return { point: wallHit.at, guides: [], target: { kind: 'wall', id: wallHit.id } };
+  if (wallHit) {
+    const { at, a, b } = wallHit;
+    const da = Math.hypot(at.x - a.x, at.y - a.y);
+    const db = Math.hypot(at.x - b.x, at.y - b.y);
+    const end = da <= db ? { n: a, d: da } : { n: b, d: db };
+    if (end.d < MIN_WALL_LENGTH - GEOM_TOL)
+      return {
+        point: { x: end.n.x, y: end.n.y },
+        guides: [],
+        target: { kind: 'node', id: end.n.id },
+      };
+    return { point: at, guides: [], target: { kind: 'wall', id: wallHit.id } };
+  }
 
   const snapped = snapPoint(p, [...nodes, ...(opts.extra ?? [])], opts);
   const free: DrawSnapTarget = { kind: 'free' };

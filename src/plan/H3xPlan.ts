@@ -374,7 +374,8 @@ export class H3xPlan {
 
   /**
    * Commits the segment the active drawing tool is drawing at `length` (meters) along the
-   * current preview direction. False when no segment is being drawn or it was rejected.
+   * current preview direction. False when no segment is being drawn, `length` is not a finite
+   * positive number, or it was rejected.
    */
   setPendingSegmentLength(length: number): boolean {
     if (this.disposed) return false;

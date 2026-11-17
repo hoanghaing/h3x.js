@@ -317,9 +317,9 @@ export class SelectEditTool implements Tool {
   /**
    * Push / pull is relative and may add connector walls, so each step reverts the open group
    * and re-runs `pushPullWall` with the total distance against the original geometry: one undo
-   * step, and Esc (`cancelCoalesce`) restores the start. A step that fails is undone back to
-   * the last good distance; `wall-too-short` (a connector below the minimum) is not flashed and
-   * keeps the snap guides.
+   * step, and Esc (`cancelCoalesce`) restores the start. A step that fails only with
+   * `wall-too-short` (a connector below the minimum) goes back to the start (distance 0), is not
+   * flashed and keeps the snap guides; any other failure is undone back to the last good distance.
    */
   private stepPush(g: Gesture, p: Vec2, free: boolean): void {
     const ctx = this.ctx!;
@@ -342,8 +342,12 @@ export class SelectEditTool implements Tool {
       ctx.showGuides(guides);
       return;
     }
-    if (g.applied !== 0) exec(g.applied);
     const issues = res.issues.filter((i) => i.code !== 'wall-too-short');
+    if (issues.length === 0) {
+      // Only a connector below the minimum: back to the start, so releasing here is a no-op.
+      exec(0);
+      g.applied = 0;
+    } else if (g.applied !== 0) exec(g.applied);
     this.reject(issues);
     ctx.showGuides(issues.length === 0 ? guides : []);
   }

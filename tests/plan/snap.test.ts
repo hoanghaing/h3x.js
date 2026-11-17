@@ -164,3 +164,18 @@ describe('snapDraw exclude option', () => {
     expect(c.point.x).toBe(4);
   });
 });
+
+describe('snapDraw near a wall end', () => {
+  it('a wall hit within MIN_WALL_LENGTH of an end node snaps to that node', () => {
+    // 0.2 m from a: past the node reach, but a split there would leave a part below 0.3 m.
+    const near = snapDraw({ x: 0.2, y: 0.05 }, floor, dopts);
+    expect(near.target).toEqual({ kind: 'node', id: 'a' });
+    expect(near.point).toEqual({ x: 0, y: 0 });
+    const end = snapDraw({ x: 3.75, y: -0.05 }, floor, dopts);
+    expect(end.target).toEqual({ kind: 'node', id: 'b' });
+    expect(end.point).toEqual({ x: 4, y: 0 });
+    // Exactly at the minimum the wall can be split.
+    const ok = snapDraw({ x: 0.3, y: 0.05 }, floor, dopts);
+    expect(ok.target).toEqual({ kind: 'wall', id: 'w1' });
+  });
+});
