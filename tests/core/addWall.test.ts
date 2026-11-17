@@ -266,6 +266,30 @@ describe('addWall', () => {
     ).toBe('wall-too-short');
   });
 
+  it.each([
+    ['thickness 0', { thickness: 0 }],
+    ['thickness -0.2', { thickness: -0.2 }],
+    ['thickness NaN', { thickness: Number.NaN }],
+    ['thickness Infinity', { thickness: Number.POSITIVE_INFINITY }],
+    ['height 0', { thickness: T, height: 0 }],
+    ['height NaN', { thickness: T, height: Number.NaN }],
+    ['height Infinity', { thickness: T, height: Number.POSITIVE_INFINITY }],
+  ])('rejects %s with invalid-thickness and changes nothing', (_n, over) => {
+    const doc = mk(oneRoomFloor());
+    const before = structuredClone(doc.floor);
+    expect(codeOf(() => doc.execute(addWall({ from: at(1, 1), to: at(3, 1), ...over })))).toBe(
+      'invalid-thickness',
+    );
+    expect(doc.floor).toEqual(before);
+  });
+
+  it('accepts a positive thickness and height', () => {
+    const doc = mk(oneRoomFloor());
+    const cmd = addWall({ from: at(1, 1), to: at(3, 1), thickness: 0.1, height: 2.5 });
+    doc.execute(cmd);
+    expect(doc.floor.walls[cmd.createdId]).toMatchObject({ thickness: 0.1, height: 2.5 });
+  });
+
   it('throws not-found for a missing node end', () => {
     const doc = mk(oneRoomFloor());
     expect(

@@ -314,7 +314,8 @@ const offLine = (c: Vec2, p: Vec2, q: Vec2): number =>
  * they lie on (T-junction); existing nodes on the way and crossed walls split the new
  * wall, crossed walls are split too. `ids.wall` names the piece touching `from`,
  * `ids.endNode` a new node at `to`. Ends already joined by a wall: no change, that wall
- * is returned. Throws `wall-too-short`, `walls-overlap` (collinear overlap), `not-found`.
+ * is returned. Throws `invalid-thickness` (thickness, or height when given, not finite or
+ * not above 0), `wall-too-short`, `walls-overlap` (collinear overlap), `not-found`.
  */
 export function addWallIn(
   draft: Floor,
@@ -322,6 +323,14 @@ export function addWallIn(
   ids: { wall: Id; endNode: Id },
   presets?: PresetResolver,
 ): { wallId: Id; endNodeId: Id } {
+  const positive = (v: number): boolean => Number.isFinite(v) && v > 0;
+  if (!positive(spec.thickness) || (spec.height !== undefined && !positive(spec.height))) {
+    throw fail(
+      'invalid-thickness',
+      [ids.wall],
+      'Wall thickness and height must be finite numbers above 0',
+    );
+  }
   const p = endPoint(draft, spec.from);
   const q = endPoint(draft, spec.to);
   const len = distance(p, q);
