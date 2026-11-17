@@ -12,6 +12,8 @@ export * from './columns';
 
 export * from './slab';
 
+export * from './stairs';
+
 export * from './site';
 
 export * from './materials';

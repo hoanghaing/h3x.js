@@ -1,12 +1,20 @@
 import { Group, type LineLoop, type Mesh } from 'three';
-import type { ChangeEvent, H3xDocument, Id } from '../core';
-import { FloorView } from './floorView';
+import { stairBay, type ChangeEvent, type Floor, type H3xDocument, type Id } from '../core';
+import { FloorView, type FloorContext } from './floorView';
 import { MaterialLibrary, type FinishResolver } from './materials';
 import { buildSiteLine } from './site';
 
 export type { H3xKind } from './floorView';
 
-const FLOOR_GEOMETRY_KINDS = new Set(['node', 'wall', 'opening', 'room', 'column', 'floor']);
+const FLOOR_GEOMETRY_KINDS = new Set([
+  'node',
+  'wall',
+  'opening',
+  'room',
+  'column',
+  'floor',
+  'stair',
+]);
 
 /**
  * Which floors are visible: `'active'` only the active floor, `'cutaway'` the active floor
@@ -16,8 +24,9 @@ export type H3xViewMode = 'active' | 'cutaway' | 'all';
 
 /**
  * A three.js scene graph kept in sync with an H3xDocument: one Group per floor
- * (`h3x-floor-<id>`, lowest first) holding its walls, room floors, joins, columns and slab,
- * plus the site line on the root.
+ * (`h3x-floor-<id>`, lowest first) holding its walls, room floors, joins, columns, stairs and
+ * slab, plus the site line on the root. The slab and room floors of a floor are cut by the stair
+ * bays of the floor below.
  */
 export class H3xScene {
   readonly root = new Group();
@@ -25,6 +34,8 @@ export class H3xScene {
   private readonly materials: MaterialLibrary;
   private readonly ownsMaterials: boolean;
   private readonly views = new Map<Id, FloorView>();
+  /** `below|above` neighbour ids per floor at the last sync (stairs depend on both). */
+  private readonly neighbours = new Map<Id, string>();
   private mode: H3xViewMode = 'all';
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
@@ -71,6 +82,11 @@ export class H3xScene {
     return this.view(floorId)?.floorMeshes.get(roomId);
   }
 
+  /** The stair mass mesh (not the handrail); undefined when the stair is not drawn. */
+  getStairMesh(id: Id, floorId?: Id): Mesh | undefined {
+    return this.view(floorId)?.stairMeshes.get(id);
+  }
+
   getSlabMesh(floorId?: Id): Mesh | undefined {
     return this.view(floorId)?.slabMesh;
   }
@@ -113,7 +129,14 @@ export class H3xScene {
     let site = false;
     for (const c of e.changes) {
       if (c.kind === 'site') site = true;
-      else if (FLOOR_GEOMETRY_KINDS.has(c.kind) && c.floorId !== undefined) touched.add(c.floorId);
+      else if (FLOOR_GEOMETRY_KINDS.has(c.kind) && c.floorId !== undefined) {
+        touched.add(c.floorId);
+        // a stair cuts the floor above; a storey change alters the rise of the stairs below
+        const above = this.doc.floorAbove(c.floorId);
+        const below = this.doc.floorBelow(c.floorId);
+        if (above && (c.kind === 'stair' || c.kind === 'floor')) touched.add(above.id);
+        if (below && c.kind === 'floor') touched.add(below.id);
+      }
     }
     if (touched.size === 0 && !site) return;
     // The active floor was removed: the 'activefloor' event that follows sets visibility
@@ -126,7 +149,8 @@ export class H3xScene {
 
   /**
    * Adds / removes floor views to match the document, rebuilds the touched floors
-   * (all when `touched` is null) plus any new ones, and restores level order and visibility.
+   * (all when `touched` is null) plus any new ones and those whose neighbours changed, and
+   * restores level order and visibility.
    */
   private syncFloors(touched: Set<Id> | null, visibility = true): void {
     const floors = this.doc.project.floors;
@@ -135,16 +159,22 @@ export class H3xScene {
       if (ids.has(id)) continue;
       view.dispose();
       this.views.delete(id);
+      this.neighbours.delete(id);
     }
-    for (const floor of floors) {
+    floors.forEach((floor, i) => {
       let view = this.views.get(floor.id);
       const fresh = !view;
       if (!view) {
         view = new FloorView(floor.id, this.materials);
         this.views.set(floor.id, view);
       }
-      if (fresh || !touched || touched.has(floor.id)) view.rebuild(floor);
-    }
+      const pair = (floors[i - 1]?.id ?? '') + '|' + (floors[i + 1]?.id ?? '');
+      const moved = this.neighbours.get(floor.id) !== pair;
+      this.neighbours.set(floor.id, pair);
+      if (fresh || moved || !touched || touched.has(floor.id)) {
+        view.rebuild(floor, this.context(floors[i - 1], floors[i + 1]));
+      }
+    });
     // Re-add in level order, keeping foreign objects (and the site line) after the floors.
     const groups = floors.map((f) => this.views.get(f.id)!.group);
     const others = this.root.children.filter((c) => !groups.includes(c as Group));
@@ -152,6 +182,13 @@ export class H3xScene {
     for (const o of others) o.removeFromParent();
     this.root.add(...groups, ...others);
     if (visibility) this.applyVisibility();
+  }
+
+  private context(
+    below: Readonly<Floor> | undefined,
+    above: Readonly<Floor> | undefined,
+  ): FloorContext {
+    return { above, openings: below ? Object.values(below.stairs).map(stairBay) : [] };
   }
 
   private applyVisibility(): void {

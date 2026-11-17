@@ -547,9 +547,21 @@ export function layoutStair(stair: Stair, rise: number): StairLayout {
     steps: local.steps.map(piece),
     landings: local.landings.map(piece),
     walkLine: local.walkLine.map(toWorld),
-    opening: rect(-w / 2, -d / 2, w / 2, d / 2).map((p) => ({
-      x: stair.x + p.x * cos - p.y * sin,
-      y: stair.y + p.x * sin + p.y * cos,
-    })),
+    opening: stairBay(stair),
   };
+}
+
+/**
+ * The stair's bay rectangle (footprint), counter-clockwise in world coordinates: the slab
+ * opening on the floor above, whether or not the flights fit.
+ */
+export function stairBay(stair: Stair): Vec2[] {
+  const cos = Math.cos(stair.rotation);
+  const sin = Math.sin(stair.rotation);
+  const w = stair.width;
+  const d = stair.depth;
+  return rect(-w / 2, -d / 2, w / 2, d / 2).map((p) => ({
+    x: stair.x + p.x * cos - p.y * sin,
+    y: stair.y + p.x * sin + p.y * cos,
+  }));
 }
