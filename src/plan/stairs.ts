@@ -98,6 +98,18 @@ function walkingLine(walk: readonly Vec2[], prefix: string): SVGElement[] {
   ];
 }
 
+/** The lowest step or landing whose top is above STAIR_CUT_HEIGHT: where the break line goes. */
+export function firstAboveCut(
+  steps: readonly StairPiece[],
+  landings: readonly StairPiece[],
+): StairPiece | undefined {
+  let best: StairPiece | undefined;
+  for (const p of [...steps, ...landings]) {
+    if (p.top > STAIR_CUT_HEIGHT && (!best || p.top < best.top)) best = p;
+  }
+  return best;
+}
+
 /**
  * Children of a stair on its own floor: the bay outline, steps and landings (dashed above
  * STAIR_CUT_HEIGHT), a break line at the cut, the walking line with an arrow and the up label.
@@ -117,7 +129,7 @@ export function stairOwnShapes(stair: Stair, ctx: StairDrawContext): SVGElement[
     const hidden = piece.top > STAIR_CUT_HEIGHT;
     out.push(piecePolygon(piece, `${prefix}-stair-step${hidden ? ` ${prefix}-stair-hidden` : ''}`));
   }
-  const cut = l.steps.find((s) => s.top > STAIR_CUT_HEIGHT);
+  const cut = firstAboveCut(l.steps, l.landings);
   if (cut) {
     out.push(
       svgEl('path', {
