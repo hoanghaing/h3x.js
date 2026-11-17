@@ -8,7 +8,7 @@ import type {
   Vec2,
 } from '../core';
 import { Emitter } from '../core/document/emitter';
-import { setWallLength } from '../core';
+import { setWallLength, stairRise } from '../core';
 import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
 import { PlanInput } from './input';
@@ -37,6 +37,7 @@ import { dirtyEntities, syncEntity, syncJoins } from './reconcile';
 import { wallOutline } from './shapes';
 import { DEFAULT_CSS } from './style';
 import { createUnderlayLayer, renderUnderlay } from './underlay';
+import { DEFAULT_STAIR_LABELS, type StairLabels } from './stairs';
 import type { PlanIssues, PlanKind, Rect, ScreenPoint, Selection } from './types';
 import {
   DEFAULT_SCALE,
@@ -59,6 +60,8 @@ export interface H3xPlanOptions {
   presets?: PresetResolver;
   /** Editing tool. Default `new SelectEditTool()`; `null` means no tool (the plan only pans and zooms). */
   tool?: Tool | null;
+  /** Stair label texts (walking up on the stair's floor, down on the floor above). Default `{ up: 'UP', down: 'DN' }`. */
+  stairLabels?: StairLabels;
 }
 
 /** A change touching more ids than this re-reconciles every entity. */
@@ -106,6 +109,7 @@ export class H3xPlan {
   readonly snapOptions: { grid: number; align: boolean };
   private readonly prefix: string;
   private readonly presets: PresetResolver | undefined;
+  private readonly stairLabels: StairLabels;
   private readonly root: SVGGElement;
   private readonly dom: PlanDom;
   private readonly grid: { major: SVGPathElement; minor: SVGPathElement } | undefined;
@@ -150,6 +154,7 @@ export class H3xPlan {
       dimensionRects: new Map(),
     };
     this.presets = opts.presets ?? doc.presets;
+    this.stairLabels = { ...DEFAULT_STAIR_LABELS, ...opts.stairLabels };
     this.snapOptions = { grid: opts.snap?.grid ?? 0.05, align: opts.snap?.align ?? true };
     this._view = {
       cx: 0,
@@ -258,6 +263,7 @@ export class H3xPlan {
       dimensions: [...this.dom.dimensionRects].map(([wallId, rect]) => ({ wallId, rect })),
       presets: this.presets,
       site: this.doc.project.site,
+      stairRise: this.stairRise(),
     };
     return hitTest(scene, s);
   }
@@ -459,9 +465,10 @@ export class H3xPlan {
     }
     if (scaleChanged) {
       // Screen-space children (labels, handles) are counter-scaled.
-      for (const kind of ['node', 'room'] as const) {
+      for (const kind of ['node', 'room', 'stair'] as const) {
         for (const id of this.dom.elements[kind].keys()) this.syncEntity(kind, id);
       }
+      this.refreshUnderlay(); // stair labels below
     }
     this.refreshDimensions();
     if (this.preview) renderPreview(this.dom.layers.overlay, next, this.prefix, this.preview);
@@ -484,9 +491,10 @@ export class H3xPlan {
       this.refreshUnderlay();
       return;
     }
-    if (e.changes.some((c) => c.kind === 'floor' || (below && floorOf(c) === below))) {
-      this.refreshUnderlay();
-    }
+    const heights = e.changes.some((c) => c.kind === 'floor');
+    if (heights || (below && e.changes.some((c) => floorOf(c) === below))) this.refreshUnderlay();
+    // Storey heights set the rise of the active floor's stairs.
+    if (heights) for (const id of this.dom.elements.stair.keys()) this.syncEntity('stair', id);
     if (own.length === 0) {
       this.refreshMarks();
       return;
@@ -512,7 +520,12 @@ export class H3xPlan {
   private refreshUnderlay(): void {
     const below = this.doc.floorBelow(this.doc.activeFloorId);
     const corners = below ? computeJoins(below).corners : {};
-    renderUnderlay(below, this.underlay, { view: this._view, corners });
+    const rise = below ? stairRise(below, this.doc.floorAbove(below.id)) : NaN;
+    renderUnderlay(below, this.underlay, {
+      view: this._view,
+      corners,
+      stairs: { rise, labels: this.stairLabels, prefix: this.prefix },
+    });
   }
 
   private reconcileAll(): void {
@@ -573,7 +586,17 @@ export class H3xPlan {
       corners: this.joins.corners,
       presets: this.presets,
       site: this.doc.project.site,
+      stairs: {
+        rise: this.stairRise(),
+        labels: this.stairLabels,
+        prefix: this.prefix,
+      },
     };
+  }
+
+  /** @internal Rise of the active floor's stairs to the floor above (NaN on the top floor). */
+  stairRise(): number {
+    return stairRise(this.doc.floor, this.doc.floorAbove(this.doc.activeFloorId));
   }
 
   private refreshDimensions(): void {

@@ -26,6 +26,7 @@ function floorOf(
     rooms: {},
     items: {},
     columns: {},
+    stairs: {},
   };
 }
 

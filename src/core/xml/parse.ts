@@ -4,9 +4,11 @@ import { createId } from '../ids';
 import { detectRooms } from '../rooms/detect';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { checkRefs } from '../validate/refs';
+import { validateStairParams } from '../commands/stairs';
 import { signedArea } from '../geometry/polygon';
 import type {
   Column,
+  Stair,
   Floor,
   Id,
   Item,
@@ -114,6 +116,45 @@ function parseColumn(e: Element): Column {
   return c;
 }
 
+function parseStair(e: Element): Stair {
+  const bad = (attribute: string, message: string): H3xParseError =>
+    new H3xParseError(`<stair> attribute "${attribute}" ${message}`, {
+      element: 'stair',
+      attribute,
+    });
+  const type = req(e, 'type');
+  if (type !== 'straight' && type !== 'L' && type !== 'U' && type !== 'spiral') {
+    throw bad('type', `must be straight, L, U or spiral: "${type}"`);
+  }
+  const turn = opt(e, 'turn') ?? 'landing';
+  if (turn !== 'landing' && turn !== 'winder') {
+    throw bad('turn', `must be landing or winder: "${turn}"`);
+  }
+  const hand = opt(e, 'hand') ?? 'right';
+  if (hand !== 'left' && hand !== 'right') {
+    throw bad('hand', `must be left or right: "${hand}"`);
+  }
+  const s: Stair = {
+    id: req(e, 'id'),
+    x: num(e, 'x'),
+    y: num(e, 'y'),
+    width: num(e, 'width'),
+    depth: num(e, 'depth'),
+    rotation: num(e, 'rotation', 0),
+    type,
+    turn,
+    hand,
+    flightWidth: num(e, 'flightWidth', 0.9),
+  };
+  for (const k of ['width', 'depth', 'flightWidth'] as const) {
+    if (s[k] <= 0) throw bad(k, `must be positive: "${s[k]}"`);
+  }
+  const issue = validateStairParams(s)[0];
+  if (issue)
+    throw new H3xParseError(`<stair id="${s.id}">: ${issue.message}`, { element: 'stair' });
+  return s;
+}
+
 function parseSite(e: Element): Site {
   const bad = (message: string): H3xParseError =>
     new H3xParseError(message, { element: 'site', attribute: 'points' });
@@ -153,6 +194,7 @@ function parseFloor(fe: Element): Floor {
     rooms: {},
     items: {},
     columns: {},
+    stairs: {},
   };
   if (floor.slabThickness <= 0) {
     throw new H3xParseError(
@@ -236,6 +278,9 @@ function parseFloor(fe: Element): Floor {
         break;
       case 'column':
         add(floor.columns, parseColumn(e), 'column');
+        break;
+      case 'stair':
+        add(floor.stairs, parseStair(e), 'stair');
         break;
       default:
         break; // unknown elements are ignored

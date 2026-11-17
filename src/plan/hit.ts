@@ -1,5 +1,5 @@
 import type { Floor, Id, PresetResolver, Room, Site } from '../core';
-import { H3xValidationError, roomShape } from '../core';
+import { H3xValidationError, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { WallCorners } from '../shared/walls/joins';
@@ -17,6 +17,8 @@ export interface HitScene {
   dimensions: Array<{ wallId: Id; rect: Rect }>;
   presets?: PresetResolver;
   site?: Readonly<Site>;
+  /** Rise of `floor`'s stairs to the floor above (`stairRise`); NaN / absent: stairs hit on their bay. */
+  stairRise?: number;
 }
 
 const NODE_TOLERANCE_PX = 8;
@@ -62,6 +64,8 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     const c = scene.corners[w.id];
     if (c && pointInPolygon(p, wallOutline(c))) return { kind: 'wall', id: w.id };
   }
+  // Pick aid for walls drawn thinner than 2 × WALL_TOLERANCE_PX: within that distance of the
+  // centre line. For a wall drawn wider this band lies inside its outline, so it adds nothing.
   let nearestWall: Id | undefined;
   let nearestWallDist = WALL_TOLERANCE_PX / view.scale;
   for (const w of Object.values(floor.walls)) {
@@ -82,6 +86,11 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     if (fp && pointInPolygon(p, fp)) return { kind: 'item', id: item.id };
   }
 
+  const rise = scene.stairRise ?? NaN;
+  for (const stair of Object.values(floor.stairs)) {
+    if (pointInPolygon(p, stairOutline(stair, rise))) return { kind: 'stair', id: stair.id };
+  }
+
   for (const room of Object.values(floor.rooms)) {
     const shape = closedRoomShape(floor, room);
     if (shape && inRoomShape(p, shape)) return { kind: 'room', id: room.id };
@@ -97,10 +106,10 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   return null;
 }
 
-/** The room's centre-line outline and holes, or undefined for a room that does not close (tolerated on load). */
+/** The room's drawn (inner) outline and holes, or undefined for a room that does not close (tolerated on load). */
 function closedRoomShape(floor: Floor, room: Room): ReturnType<typeof roomShape> | undefined {
   try {
-    return roomShape(floor, room, 'center');
+    return roomShape(floor, room, 'inner');
   } catch (e) {
     if (e instanceof H3xValidationError) return undefined;
     throw e;

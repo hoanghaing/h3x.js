@@ -351,4 +351,19 @@ describe('tool dispatch', () => {
     pointer(plan.svg, 'pointermove', 420, 300, { pointerType: 'mouse', buttons: 1 });
     expect(plan.view.cx).toBeCloseTo(panned - 20 / before.scale);
   });
+
+  it('after a tool swap and a lost release, a buttonless mouse move drops the stale pointer and hovers', () => {
+    const a = fakeTool(true);
+    const b = fakeTool(true);
+    const plan = makePlan(a.tool);
+    pointer(plan.svg, 'pointerdown', 400, 300, { pointerType: 'mouse', buttons: 1 });
+    plan.setTool(b.tool);
+    // The pointerup never arrives; the mouse then moves with no button held.
+    pointer(plan.svg, 'pointermove', 450, 300, { pointerType: 'mouse', buttons: 0 });
+    expect(b.tool.onPointerMove).toHaveBeenCalledTimes(1);
+    expect(b.tool.onPointerUp).not.toHaveBeenCalled();
+    // A fresh press is a normal one-finger gesture for the new tool (not a pinch).
+    pointer(plan.svg, 'pointerdown', 450, 300, { pointerType: 'mouse', buttons: 1 });
+    expect(b.tool.onPointerDown).toHaveBeenCalledTimes(1);
+  });
 });

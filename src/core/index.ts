@@ -34,6 +34,10 @@ export {
 } from './commands/objects';
 export type { NewItem } from './commands/objects';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
+export { addStair, updateStair, removeStair, validateStairParams } from './commands/stairs';
+export { layoutStair, stairBay, stairOutline, stairParams } from './stairs/layout';
+export type { StairLayout, StairParam, StairPiece } from './stairs/layout';
+export * from './stairs/constants';
 export { setWallFinish, setRoomFinish, renameRoom } from './commands/finishes';
 export {
   addFloor,
@@ -44,6 +48,7 @@ export {
 } from './commands/floors';
 
 export { validateLayout } from './validate/layout';
+export { validateStairs, stairRise } from './validate/stairs';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';
 export { detectRooms, roomPolygon, roomShape, roomArea } from './rooms/detect';
 export type { DetectedRoom } from './rooms/detect';
@@ -51,4 +56,16 @@ export { polygonOverlapArea } from './geometry/clip';
 export { projectToXML } from './xml/serialize';
 export { projectFromXML } from './xml/parse';
 export { obbCorners, wallOBB } from './geometry/obb';
+export {
+  WALL_ITEM_DEPTH,
+  circleOverlapArea,
+  columnPolygon,
+  columnShape,
+  convexOverlap,
+  itemFootprint,
+  openingSpan,
+  wallOutline,
+  wallOutlines,
+} from './shapes';
+export type { WallCorners } from './walls/joins';
 export type { OBB } from './geometry/obb';

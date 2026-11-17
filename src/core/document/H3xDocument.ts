@@ -4,6 +4,8 @@ import { H3xValidationError } from '../errors';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { layoutValidator, validateLayout } from '../validate/layout';
 import { validateColumnSupport } from '../validate/floors';
+import { validateStairs } from '../validate/stairs';
+import { validateStairParams } from '../commands/stairs';
 import { checkRefs } from '../validate/refs';
 import { placementValidator, validatePlacements } from '../validate/placement';
 import type { Floor, Id, Issue, PresetResolver, Project } from '../types';
@@ -78,6 +80,7 @@ export class H3xDocument {
       rooms: {},
       items: {},
       columns: {},
+      stairs: {},
     };
     return new H3xDocument(
       {
@@ -97,8 +100,9 @@ export class H3xDocument {
   /**
    * Throws H3xValidationError 'no-floor' for an empty floor list, 'duplicate-id' for
    * repeated floor ids, 'invalid-floor-dimension' for a non-finite or non-positive
-   * slabThickness (a missing one defaults to 0.15) and 'bad-reference' for dangling
-   * wall / node references. Levels and elevations are normalised as in fromXML.
+   * slabThickness (a missing one defaults to 0.15), 'invalid-stair' for a stair failing
+   * validateStairParams and 'bad-reference' for dangling wall / node references. Levels and
+   * elevations are normalised as in fromXML.
    */
   static fromProject(p: Project, opts: { presets?: PresetResolver } = {}): H3xDocument {
     if (p.floors.length === 0) {
@@ -119,6 +123,9 @@ export class H3xDocument {
     for (const f of project.floors) {
       // Floors from before columns existed (M3) have no `columns` map.
       (f as { columns?: Floor['columns'] }).columns ??= {};
+      (f as { stairs?: Floor['stairs'] }).stairs ??= {};
+      const stairIssues = Object.values(f.stairs).flatMap(validateStairParams);
+      if (stairIssues.length > 0) throw new H3xValidationError(stairIssues);
       (f as { slabThickness?: number }).slabThickness ??= DEFAULT_SLAB_THICKNESS;
       if (!Number.isFinite(f.slabThickness) || f.slabThickness <= 0) {
         throw new H3xValidationError([
@@ -217,6 +224,7 @@ export class H3xDocument {
         this.floor as Floor,
         this.floorBelow(this.floor.id) as Floor | undefined,
       ),
+      ...validateStairs(this.floor as Floor, this.floorAbove(this.floor.id) as Floor | undefined),
     ];
   }
 

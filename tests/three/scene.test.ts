@@ -41,6 +41,7 @@ describe('H3xScene', () => {
       'h3x-floors',
       'h3x-joins',
       'h3x-columns',
+      'h3x-stairs',
       'h3x-slab',
     ]);
     for (const id of ['w1', 'w2', 'w3', 'w4']) {

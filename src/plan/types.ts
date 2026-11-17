@@ -1,6 +1,6 @@
 import type { Id, Issue } from '../core';
 
-export type PlanKind = 'node' | 'wall' | 'room' | 'opening' | 'item' | 'column' | 'site';
+export type PlanKind = 'node' | 'wall' | 'room' | 'opening' | 'item' | 'column' | 'stair' | 'site';
 
 export interface Selection {
   kind: PlanKind;

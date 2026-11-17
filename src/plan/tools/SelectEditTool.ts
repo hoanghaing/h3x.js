@@ -7,17 +7,21 @@ import {
   pushPullWall,
   removeColumn,
   removeNode,
+  removeStair,
   removeWall,
   setSite,
   splitWall,
+  stairOutline,
+  updateStair,
   type Command,
   type Id,
   type Issue,
+  type Stair,
   type Vec2,
 } from '../../core';
 import { add, dot, leftNormal, scale, sub } from '../../core/geometry/vec';
 import type { HitTarget } from '../hit';
-import { snapScalar, type SnapGuide } from '../snap';
+import { nearestFaceVertex, snapScalar, type SnapGuide } from '../snap';
 import type { ScreenPoint } from '../types';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
 
@@ -46,7 +50,7 @@ type Drop = { node: Id; at: Vec2 } | { wall: Id; at: Vec2 };
 interface Gesture {
   key: string;
   /** 'push' is a Shift + wall drag (push / pull). */
-  kind: 'node' | 'wall' | 'push' | 'column';
+  kind: 'node' | 'wall' | 'push' | 'column' | 'stair';
   id: Id;
   /** Wall drags: unit left normal at gesture start. */
   normal: Vec2;
@@ -58,6 +62,8 @@ interface Gesture {
   drop: Drop | null;
 }
 
+const SNAP_RADIUS_PX = 8;
+
 const ARROWS: Record<string, Vec2> = {
   ArrowLeft: { x: -1, y: 0 },
   ArrowRight: { x: 1, y: 0 },
@@ -65,15 +71,21 @@ const ARROWS: Record<string, Vec2> = {
   ArrowDown: { x: 0, y: -1 },
 };
 
-type Selectable = 'node' | 'wall' | 'column' | 'site';
+type Selectable = 'node' | 'wall' | 'column' | 'stair' | 'site';
 /** |normal component| above which a wall counts as moving along that axis (push / pull guides). */
 const AXIS_PARALLEL = 1 - 1e-9;
 
-const SELECTABLE: ReadonlySet<string> = new Set<Selectable>(['node', 'wall', 'column', 'site']);
+const SELECTABLE: ReadonlySet<string> = new Set<Selectable>([
+  'node',
+  'wall',
+  'column',
+  'stair',
+  'site',
+]);
 const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
 
 /**
- * Selects nodes, walls, columns and the site; drags nodes, walls and columns (one undo step per
+ * Selects nodes, walls, columns, stairs and the site; drags nodes, walls, columns and stairs (one undo step per
  * drag), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
  * another node or a wall joins it, double-click on a wall inserts a point, Delete / Backspace
  * removes the selection.
@@ -127,7 +139,13 @@ export class SelectEditTool implements Tool {
       dead: false,
     };
     const kind = e.hit?.kind;
-    return kind === 'node' || kind === 'wall' || kind === 'column' || kind === 'dimension';
+    return (
+      kind === 'node' ||
+      kind === 'wall' ||
+      kind === 'column' ||
+      kind === 'stair' ||
+      kind === 'dimension'
+    );
   }
 
   onPointerMove(e: PlanPointerEvent): void {
@@ -195,9 +213,11 @@ export class SelectEditTool implements Tool {
             ? removeWall(sel.id)
             : sel.kind === 'column'
               ? removeColumn(sel.id)
-              : sel.kind === 'site'
-                ? setSite(null)
-                : null;
+              : sel.kind === 'stair'
+                ? removeStair(sel.id)
+                : sel.kind === 'site'
+                  ? setSite(null)
+                  : null;
       if (!cmd) return false;
       if (this.run(cmd)) ctx.plan.select(null);
       return true;
@@ -216,6 +236,10 @@ export class SelectEditTool implements Tool {
       const c = ctx.doc.floor.columns[sel.id];
       if (!c) return false;
       cmd = moveColumn(sel.id, add(c, d));
+    } else if (sel?.kind === 'stair') {
+      const st = ctx.doc.floor.stairs[sel.id];
+      if (!st) return false;
+      cmd = updateStair(sel.id, { x: st.x + d.x, y: st.y + d.y });
     } else {
       return false;
     }
@@ -243,6 +267,11 @@ export class SelectEditTool implements Tool {
       if (!c) return;
       kind = 'column';
       start = { x: c.x, y: c.y };
+    } else if (t?.kind === 'stair') {
+      const st = floor.stairs[t.id];
+      if (!st) return;
+      kind = 'stair';
+      start = { x: st.x, y: st.y };
     } else if (t?.kind === 'node') {
       if (!floor.nodes[t.id]) return;
       kind = 'node';
@@ -267,6 +296,7 @@ export class SelectEditTool implements Tool {
     const free = (e.native as MouseEvent).altKey;
     if (g.kind === 'node') this.stepNode(g, e.plan, free);
     else if (g.kind === 'column') this.stepColumn(g, e.plan, free);
+    else if (g.kind === 'stair') this.stepStair(g, e.plan, free);
     else if (g.kind === 'push') this.stepPush(g, e.plan, free);
     else this.stepWall(g, e.plan, free);
   }
@@ -301,6 +331,39 @@ export class SelectEditTool implements Tool {
     const same = r.point.x === c.x && r.point.y === c.y;
     const ok = same || this.run(moveColumn(g.id, { x: r.point.x, y: r.point.y }), g.key);
     ctx.showGuides(ok ? r.guides : []);
+  }
+
+  private stepStair(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const s = ctx.doc.floor.stairs[g.id];
+    if (!s) return;
+    // The pointer delta snaps to the grid (so an off-grid stair keeps its offset); outline corners
+    // that come near a room's wall faces snap onto them when alignment is on (the whole stair
+    // moves by that delta).
+    const grid = ctx.plan.snapOptions.grid;
+    const d = sub(p, this.press!.plan);
+    const raw = add(g.start, free ? d : { x: snapScalar(d.x, grid), y: snapScalar(d.y, grid) });
+    const face = free || !ctx.plan.snapOptions.align ? null : this.faceDelta(s, raw);
+    const r = { point: face ? add(raw, face) : raw, guides: [] as SnapGuide[] };
+    const same = r.point.x === s.x && r.point.y === s.y;
+    const ok = same || this.run(updateStair(g.id, { x: r.point.x, y: r.point.y }), g.key);
+    ctx.showGuides(ok ? r.guides : []);
+  }
+
+  /** Move that puts the nearest corner of the stair's outline (at `centre`) on a wall-face vertex. */
+  private faceDelta(s: Stair, centre: Vec2): Vec2 | null {
+    const ctx = this.ctx!;
+    const radius = SNAP_RADIUS_PX / ctx.plan.view.scale;
+    const shift = sub(centre, s);
+    let best: { d: number; delta: Vec2 } | null = null;
+    for (const p of stairOutline(s, ctx.plan.stairRise())) {
+      const corner = add(p, shift);
+      const v = nearestFaceVertex(corner, ctx.doc.floor, radius);
+      if (!v) continue;
+      const d = Math.hypot(v.x - corner.x, v.y - corner.y);
+      if (!best || d < best.d) best = { d, delta: sub(v, corner) };
+    }
+    return best?.delta ?? null;
   }
 
   private stepWall(g: Gesture, p: Vec2, free: boolean): void {

@@ -172,6 +172,34 @@ A free-standing column.
 | `rotation` | number              | no       | `0`               | Radians CCW; square only.                     |
 | `height`   | number              | no       | omitted           | Meters; omitted means the floor `wallHeight`. |
 
+### `<stair>`
+
+A stair that rises from this floor to the floor above. The bay (`x`, `y`, `width`, `depth`,
+`rotation`) is the area the stair is laid out in; the flights, landings and treads are derived
+from it and the rise to the floor above (risers of at most 0.18 m, so the count follows the
+storey height). The stair's outline (the tight rectangle around its steps and landings, the
+diameter square for a spiral) is cut out of the slab above.
+
+| Attribute     | Type                                 | Required | Default   | Notes                                                |
+| ------------- | ------------------------------------ | -------- | --------- | ---------------------------------------------------- |
+| `id`          | string                               | yes      | -         |                                                      |
+| `x`, `y`      | number                               | yes      | -         | Bay center, meters.                                  |
+| `width`       | number                               | yes      | -         | Bay side along local x (> 0).                        |
+| `depth`       | number                               | yes      | -         | Bay side along local y (> 0).                        |
+| `rotation`    | number                               | no       | `0`       | Radians CCW.                                         |
+| `type`        | `straight` \| `L` \| `U` \| `spiral` | yes      | -         | Any other value is a parse error.                    |
+| `turn`        | `landing` \| `winder`                | no       | `landing` | How an L or U stair turns (spiral ignores it).       |
+| `hand`        | `left` \| `right`                    | no       | `right`   | Turn direction for L / U, rotation sense for spiral. |
+| `flightWidth` | number                               | no       | `0.9`     | Width of one flight, meters (> 0).                   |
+
+Parse errors (`element: 'stair'`): a `type`, `turn` or `hand` outside the listed values; a
+non-finite `x`, `y` or `rotation`; a non-positive `width`, `depth` or `flightWidth`; a
+`flightWidth` greater than `width` (greater than `width / 2` for a `U` stair) by more than
+1e-4 m; a spiral needs `flightWidth > 0` but ignores its value. `H3xDocument.fromProject` rejects the same stairs with `invalid-stair`.
+
+Non-blocking warnings (reported by `validateLayout`): `stair-no-floor-above`,
+`stair-does-not-fit` and `stair-overlaps-wall`; see [validation.md](validation.md).
+
 The `Mount` type also lists `opening`; that is a preset mount used by `addOpening`, not a valid
 `<item mount>`.
 

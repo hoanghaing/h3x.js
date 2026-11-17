@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   H3xDocument,
   addColumn,
+  addFloor,
+  addStair,
   addWall,
   moveNode,
   setSite,
+  validateStairs,
   splitWall,
   type Floor,
   type Id,
@@ -659,5 +663,208 @@ describe('SelectEditTool structural gestures', () => {
     expect(dropMarks(plan)).toBe(0);
     fire(plan, 'pointerup', { x: 1, y: 1 });
     expect(plan.doc.floor.nodes.n3).toBeDefined();
+  });
+});
+
+describe('SelectEditTool stairs', () => {
+  it('selects, drags (one undo step) and deletes a stair', () => {
+    const plan = makePlan();
+    const add = addStair({ x: 2, y: 2, width: 2, depth: 3 });
+    plan.doc.execute(add);
+    const st = () => plan.doc.floor.stairs[add.createdId]!;
+    fire(plan, 'pointerdown', { x: 2, y: 2 });
+    fire(plan, 'pointerup', { x: 2, y: 2 });
+    expect(plan.selection).toEqual({ kind: 'stair', id: add.createdId });
+    drag(plan, { x: 2, y: 2 }, { x: 2.5, y: 1 });
+    expect(st().x).toBeCloseTo(2.5, 9);
+    expect(st().y).toBeCloseTo(1, 9);
+    plan.doc.undo();
+    expect({ x: st().x, y: st().y }).toEqual({ x: 2, y: 2 });
+    key(plan, 'Delete');
+    expect(plan.doc.floor.stairs[add.createdId]).toBeUndefined();
+  });
+
+  it('arrows nudge a selected stair', () => {
+    const plan = makePlan();
+    const add = addStair({ x: 2, y: 2, width: 2, depth: 3 });
+    plan.doc.execute(add);
+    plan.select({ kind: 'stair', id: add.createdId });
+    key(plan, 'ArrowRight');
+    key(plan, 'ArrowUp', { shiftKey: true });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(2.01, 9);
+    expect(st.y).toBeCloseTo(2.1, 9);
+    expect(Object.keys(plan.doc.floor.columns)).toHaveLength(0);
+  });
+
+  function twoWells(align: boolean): H3xPlan {
+    const f = oneRoomFloor();
+    f.openings = {};
+    f.nodes = {};
+    f.walls = {};
+    f.rooms = {};
+    [0, 6].forEach((ox, r) => {
+      const pts = [
+        [0, 0],
+        [2.4, 0],
+        [2.4, 4.7],
+        [0, 4.7],
+      ];
+      pts.forEach(([x, y], i) => {
+        f.nodes[`n${r}${i}`] = { id: `n${r}${i}`, x: x! + ox, y: y! };
+      });
+      const wallIds = pts.map((_, i) => {
+        const id = `w${r}${i}`;
+        f.walls[id] = { id, a: `n${r}${i}`, b: `n${r}${(i + 1) % 4}`, thickness: 0.2, height: 3.2 };
+        return id;
+      });
+      f.rooms[`r${r}`] = { id: `r${r}`, walls: wallIds, name: `r${r}` };
+    });
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+    document.body.appendChild(el);
+    const plan = new H3xPlan(el, docOf(f), { snap: { align } });
+    plan.fitToContent();
+    plans.push(plan);
+    return plan;
+  }
+
+  it('dragging a bay onto another stairwell lands on its wall faces', () => {
+    const plan = twoWells(true);
+    const add = addStair({ x: 1.2, y: 2.35, width: 2.2, depth: 4.5 });
+    plan.doc.execute(add);
+    drag(plan, { x: 1.2, y: 2.35 }, { x: 7.23, y: 2.37 });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(7.2, 9);
+    expect(st.y).toBeCloseTo(2.35, 9);
+    expect(validateStairs(plan.doc.floor, undefined).map((w) => w.code)).not.toContain(
+      'stair-overlaps-wall',
+    );
+  });
+
+  it('with align off a dragged bay ignores wall faces (grid-snapped delta only)', () => {
+    const plan = twoWells(false);
+    const add = addStair({ x: 1.2, y: 2.35, width: 2.2, depth: 4.5 });
+    plan.doc.execute(add);
+    drag(plan, { x: 1.2, y: 2.35 }, { x: 7.23, y: 2.37 });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(7.25, 9);
+    expect(st.y).toBeCloseTo(2.35, 9);
+  });
+
+  describe('on the townhouse sample', () => {
+    function townhouse(): H3xPlan {
+      const doc = H3xDocument.fromXML(readFileSync('examples/layouts/townhouse-3f.xml', 'utf8'), {
+        presets: testPresets,
+      });
+      doc.setActiveFloor('f1');
+      const el = document.createElement('div');
+      Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+      document.body.appendChild(el);
+      const plan = new H3xPlan(el, doc);
+      plan.setView({ cx: 1.8, cy: 12.475, scale: 120 });
+      plans.push(plan);
+      return plan;
+    }
+    const bay = (plan: H3xPlan) => {
+      const s = Object.values(plan.doc.floor.stairs)[0]!;
+      return { x: s.x, y: s.y };
+    };
+
+    it('a click without movement selects the stair and does not move it', () => {
+      const plan = townhouse();
+      const before = bay(plan);
+      fire(plan, 'pointermove', { x: 1.8, y: 12.475 });
+      fire(plan, 'pointerdown', { x: 1.8, y: 12.475 });
+      fire(plan, 'pointerup', { x: 1.8, y: 12.475 });
+      expect(plan.selection?.kind).toBe('stair');
+      expect(bay(plan)).toEqual(before);
+      expect(plan.doc.canUndo).toBe(false);
+    });
+
+    it('a lost pointerup does not leave a press that drags the stair on later hover', () => {
+      const plan = townhouse();
+      const before = bay(plan);
+      const hover = (p: Vec2) => {
+        const sp = plan.planToScreen(p);
+        const e = new MouseEvent('pointermove', {
+          clientX: sp.x,
+          clientY: sp.y,
+          button: 0,
+          buttons: 0,
+          bubbles: true,
+        });
+        Object.defineProperty(e, 'pointerId', { value: 1 });
+        Object.defineProperty(e, 'pointerType', { value: 'mouse' });
+        plan.svg.dispatchEvent(e);
+      };
+      fire(plan, 'pointerdown', { x: 1.8, y: 12.475 });
+      // The pointerup never arrives; the mouse then moves over the plan with no button held.
+      hover({ x: 6, y: 10 });
+      hover({ x: 20.65, y: 10 });
+      expect(bay(plan)).toEqual(before);
+      expect(plan.doc.canUndo).toBe(false);
+    });
+
+    it('a small drag moves the stair by exactly the pointer delta', () => {
+      const plan = townhouse();
+      drag(plan, { x: 1.8, y: 12.475 }, { x: 2.1, y: 12.475 });
+      expect(bay(plan).x).toBeCloseTo(2.1, 9);
+      expect(bay(plan).y).toBeCloseTo(12.475, 9);
+      drag(plan, { x: 2.1, y: 12.475 }, { x: 2.1, y: 12.775 });
+      expect(bay(plan).y).toBeCloseTo(12.775, 9);
+    });
+  });
+});
+
+describe('SelectEditTool stair outline', () => {
+  /** One room with 3.4 × 3.4 inner faces (0.2 walls, nodes 0..3.6) and a floor above. */
+  function squareRoom(): H3xPlan {
+    const f = oneRoomFloor();
+    f.openings = {};
+    f.nodes = {
+      n1: { id: 'n1', x: 0, y: 0 },
+      n2: { id: 'n2', x: 3.6, y: 0 },
+      n3: { id: 'n3', x: 3.6, y: 3.6 },
+      n4: { id: 'n4', x: 0, y: 3.6 },
+    };
+    const doc = docOf(f);
+    doc.execute(addFloor({ position: 'above' }));
+    doc.setActiveFloor(f.id);
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+    document.body.appendChild(el);
+    const plan = new H3xPlan(el, doc, { snap: { align: true } });
+    plan.setView({ cx: 4, cy: 2, scale: 80 });
+    plans.push(plan);
+    return plan;
+  }
+
+  it('a spiral dragged into a room snaps its square (not its bay) onto the wall faces', () => {
+    const plan = squareRoom();
+    const add = addStair({ x: 7, y: 1.8, width: 3.4, depth: 4.85, type: 'spiral' });
+    plan.doc.execute(add);
+    // grab inside the square and drop it 3 cm off the centre of the room
+    drag(plan, { x: 7, y: 1.8 }, { x: 1.83, y: 1.82 });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(1.8, 9);
+    expect(st.y).toBeCloseTo(1.8, 9);
+    const above = plan.doc.floorAbove(plan.doc.activeFloorId);
+    expect(validateStairs(plan.doc.floor, above).map((w) => w.code)).toEqual([]);
+  });
+
+  it('a press inside the bay but outside the outline does not grab the stair', () => {
+    const plan = squareRoom();
+    const add = addStair({ x: 7, y: 1.8, width: 3.4, depth: 4.85, type: 'spiral' });
+    plan.doc.execute(add);
+    fire(plan, 'pointerdown', { x: 7, y: 3.9 }); // in the bay, above the 3.4 square
+    fire(plan, 'pointerup', { x: 7, y: 3.9 });
+    expect(plan.selection).toBeNull();
+    fire(plan, 'pointerdown', { x: 7, y: 3.4 });
+    fire(plan, 'pointerup', { x: 7, y: 3.4 });
+    expect(plan.selection).toEqual({ kind: 'stair', id: add.createdId });
   });
 });

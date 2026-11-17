@@ -10,7 +10,14 @@ export {
   zoomAt,
   type View,
 } from './view';
-export { snapPoint, snapScalar, type SnapGuide, type SnapOptions, type SnapResult } from './snap';
+export {
+  snapBayCorner,
+  snapPoint,
+  snapScalar,
+  type SnapGuide,
+  type SnapOptions,
+  type SnapResult,
+} from './snap';
 export {
   itemFootprint,
   junctionPolygons,
@@ -22,6 +29,7 @@ export {
 export { dimensionLabel, wallsShowingDimensions } from './dimensions';
 export { hitTest, type HitScene, type HitTarget } from './hit';
 export { pickAnchor } from './anchor';
+export type { StairLabels } from './stairs';
 export {
   H3xPlan,
   type H3xPlanOptions,
@@ -33,3 +41,4 @@ export { SelectEditTool, type SelectEditToolOptions } from './tools/SelectEditTo
 export { DrawWallTool, type DrawWallToolOptions } from './tools/DrawWallTool';
 export { DrawSiteTool } from './tools/DrawSiteTool';
 export { ColumnTool, type ColumnToolOptions } from './tools/ColumnTool';
+export { StairTool, type StairToolOptions } from './tools/StairTool';
