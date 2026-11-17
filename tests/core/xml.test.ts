@@ -429,6 +429,17 @@ describe('xml: stairs', () => {
     });
   });
 
+  it('rejects a U stair whose flight is wider than half the bay', () => {
+    const u = '<stair id="s1" x="1" y="2" width="2" depth="4" type="U" flightWidth="1.1"/>';
+    expect(err(wrap(u))).toMatchObject({ element: 'stair' });
+  });
+
+  it('rejects a non-finite rotation', () => {
+    expect(err(wrap(full.replace('rotation="1.5708"', 'rotation="NaN"')))).toMatchObject({
+      element: 'stair',
+    });
+  });
+
   it('loads a file without stairs', () => {
     expect(projectFromXML(wrap('')).floors[0]!.stairs).toEqual({});
   });
