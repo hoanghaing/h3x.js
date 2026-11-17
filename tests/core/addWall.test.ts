@@ -30,6 +30,7 @@ const emptyFloor = (): Floor => ({
   rooms: {},
   items: {},
   columns: {},
+  stairs: {},
 });
 
 function codeOf(fn: () => void): string | undefined {

@@ -2,7 +2,7 @@ import type { Command, CommandContext, EntityChange } from '../document/changes'
 import { createId } from '../ids';
 import { detectRooms } from '../rooms/detect';
 import { deriveStack, floorProps } from '../floors/stack';
-import type { Column, Floor, FloorProps, Id, PlanNode, Room, Wall } from '../types';
+import type { Column, Floor, FloorProps, Id, PlanNode, Room, Stair, Wall } from '../types';
 import { fail } from './shared';
 
 type Created = Command & { createdId: Id };
@@ -106,6 +106,11 @@ export function addFloor(opts: {
         const col: Column = { ...c, id };
         add({ kind: 'column', id, after: col });
       }
+      for (const s of Object.values(src.stairs)) {
+        const id = createId();
+        const copy: Stair = { ...s, id };
+        add({ kind: 'stair', id, after: copy });
+      }
       const tmp: Floor = {
         ...newProps,
         nodes,
@@ -114,6 +119,7 @@ export function addFloor(opts: {
         rooms: {},
         items: {},
         columns: {},
+        stairs: {},
       };
       for (const r of detectRooms(tmp)) {
         const id = createId();
@@ -142,7 +148,7 @@ export function removeFloor(floorId: Id): Command {
       }
       const changes: EntityChange[] = [];
       const drop = (
-        kind: 'room' | 'item' | 'opening' | 'column' | 'wall' | 'node',
+        kind: 'room' | 'item' | 'opening' | 'column' | 'stair' | 'wall' | 'node',
         coll: Record<Id, unknown>,
       ): void => {
         for (const [id, before] of Object.entries(coll)) {
@@ -153,6 +159,7 @@ export function removeFloor(floorId: Id): Command {
       drop('item', floor.items);
       drop('opening', floor.openings);
       drop('column', floor.columns);
+      drop('stair', floor.stairs);
       drop('wall', floor.walls);
       drop('node', floor.nodes);
       const { props, ground } = stackOf(ctx);

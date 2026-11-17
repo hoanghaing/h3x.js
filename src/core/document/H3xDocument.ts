@@ -78,6 +78,7 @@ export class H3xDocument {
       rooms: {},
       items: {},
       columns: {},
+      stairs: {},
     };
     return new H3xDocument(
       {
@@ -119,6 +120,7 @@ export class H3xDocument {
     for (const f of project.floors) {
       // Floors from before columns existed (M3) have no `columns` map.
       (f as { columns?: Floor['columns'] }).columns ??= {};
+      (f as { stairs?: Floor['stairs'] }).stairs ??= {};
       (f as { slabThickness?: number }).slabThickness ??= DEFAULT_SLAB_THICKNESS;
       if (!Number.isFinite(f.slabThickness) || f.slabThickness <= 0) {
         throw new H3xValidationError([

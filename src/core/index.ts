@@ -34,6 +34,7 @@ export {
 } from './commands/objects';
 export type { NewItem } from './commands/objects';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
+export { addStair, updateStair, removeStair, validateStairParams } from './commands/stairs';
 export { setWallFinish, setRoomFinish, renameRoom } from './commands/finishes';
 export {
   addFloor,
