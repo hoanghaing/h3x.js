@@ -45,12 +45,12 @@ describe('H3xScene', () => {
     ]);
     for (const id of ['w1', 'w2', 'w3', 'w4']) {
       const m = scene.getWallMesh(id)!;
-      expect(m.userData).toEqual({ h3xKind: 'wall', h3xId: id });
+      expect(m.userData).toEqual({ h3xKind: 'wall', h3xId: id, h3xFloorId: 'f1' });
       expect(m.castShadow && m.receiveShadow).toBe(true);
       expect(m.material).toHaveLength(3);
     }
     const f = scene.getFloorMesh('r1')!;
-    expect(f.userData).toEqual({ h3xKind: 'room', h3xId: 'r1' });
+    expect(f.userData).toEqual({ h3xKind: 'room', h3xId: 'r1', h3xFloorId: 'f1' });
     expect(sub(scene, 'h3x-walls').children).toHaveLength(4);
     expect(sub(scene, 'h3x-floors').children).toHaveLength(1);
   });
@@ -213,7 +213,7 @@ describe('H3xScene with several floors', () => {
       const g = floorGroup(scene, f.id);
       expect(g.userData.h3xFloorId).toBe(f.id);
       const slab = scene.getSlabMesh(f.id)!;
-      expect(slab.userData).toEqual({ h3xKind: 'slab', h3xId: f.id });
+      expect(slab.userData).toEqual({ h3xKind: 'slab', h3xId: f.id, h3xFloorId: f.id });
       expect(slab.parent).toBe(g);
       const box = new Box3().setFromObject(slab);
       expect(box.min.y).toBeCloseTo(f.elevation - f.slabThickness, 6);
@@ -228,6 +228,38 @@ describe('H3xScene with several floors', () => {
     expect(scene.getSlabMesh()).toBe(scene.getSlabMesh('f0'));
     expect(scene.getWallMesh('w1')).toBe(scene.getWallMesh('w1', 'f0'));
     expect(scene.getFloorMesh('r1')).toBe(scene.getFloorMesh('r1', 'f0'));
+  });
+
+  it('tags every floor mesh with userData.h3xFloorId', () => {
+    const doc = threeFloorDoc();
+    const scene = new H3xScene(doc);
+    for (const f of doc.project.floors) {
+      let meshes = 0;
+      floorGroup(scene, f.id).traverse((o) => {
+        if (!(o as { isMesh?: boolean }).isMesh) return;
+        meshes++;
+        expect(o.userData.h3xFloorId).toBe(f.id);
+        expect(o.userData.h3xKind).toBeDefined();
+      });
+      expect(meshes).toBeGreaterThan(5);
+    }
+  });
+
+  it('removing the active floor in active mode never invalidates with every floor hidden', () => {
+    const doc = threeFloorDoc();
+    doc.setActiveFloor('f2');
+    const scene = new H3xScene(doc);
+    scene.setViewMode('active');
+    const hidden: boolean[] = [];
+    scene.onInvalidate(() => {
+      hidden.push(doc.project.floors.every((f) => !floorGroup(scene, f.id).visible));
+    });
+    doc.execute(removeFloor('f2'));
+    expect(doc.activeFloorId).toBe('f1');
+    expect(hidden.length).toBeGreaterThan(0);
+    expect(hidden).not.toContain(true);
+    expect(floorGroup(scene, 'f1').visible).toBe(true);
+    expect(floorGroup(scene, 'f0').visible).toBe(false);
   });
 
   it('keeps meshes of the same id on different floors distinct', () => {

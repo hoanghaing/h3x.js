@@ -66,7 +66,7 @@ describe('H3xScene columns and site', () => {
     const id = add.createdId;
     doc.execute(add);
     const mesh = scene.getColumnMesh(id)!;
-    expect(mesh.userData).toEqual({ h3xKind: 'column', h3xId: id });
+    expect(mesh.userData).toEqual({ h3xKind: 'column', h3xId: id, h3xFloorId: 'f1' });
     doc.execute(moveColumn(id, { x: 2 }));
     expect(scene.getColumnMesh(id)).toBe(mesh);
     doc.execute(removeColumn(id));
