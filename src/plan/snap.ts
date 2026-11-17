@@ -166,11 +166,11 @@ export function nearestFaceVertex(p: Vec2, floor: Readonly<Floor>, radius: numbe
 }
 
 /**
- * Snap for stair bay corners: a room's inner-outline (wall face) vertex within `alignRadius`
- * wins; otherwise the point rounds to the grid.
+ * Snap for stair bay corners: with `align`, a room's inner-outline (wall face) vertex within
+ * `alignRadius` wins; otherwise the point rounds to the grid.
  */
 export function snapBayCorner(p: Vec2, floor: Readonly<Floor>, opts: SnapOptions): SnapResult {
-  const best = nearestFaceVertex(p, floor, opts.alignRadius);
+  const best = opts.align ? nearestFaceVertex(p, floor, opts.alignRadius) : null;
   if (best) return { point: { x: best.x, y: best.y }, guides: [] };
   return { point: { x: snapScalar(p.x, opts.grid), y: snapScalar(p.y, opts.grid) }, guides: [] };
 }

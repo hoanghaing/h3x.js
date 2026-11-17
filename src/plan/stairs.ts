@@ -146,23 +146,23 @@ export function stairOwnShapes(stair: Stair, ctx: StairDrawContext): SVGElement[
 }
 
 /**
- * A stair of the floor below seen from the floor above: the slab opening, every step and landing
- * as thin lines and the down label near the top. Nothing when the stair has no valid layout
- * (there is no opening then).
+ * A stair of the floor below seen from the floor above: the slab opening (the stair bay, cut for
+ * every stair as in 3D) and, when the layout is valid, every step and landing as thin lines and
+ * the down label near the top.
  */
-export function stairFromAbove(stair: Stair, ctx: StairDrawContext): SVGGElement | undefined {
-  const l = Number.isFinite(ctx.rise) ? layoutStair(stair, ctx.rise) : undefined;
-  if (!l?.ok || l.walkLine.length < 2) return undefined;
+export function stairFromAbove(stair: Stair, ctx: StairDrawContext): SVGGElement {
   const { prefix } = ctx;
   const g = svgEl('g', { class: `${prefix}-stair-below`, 'data-h3x-stair': stair.id });
   g.append(
     svgEl('polygon', {
       class: `${prefix}-stair-opening`,
-      points: pointsAttr(l.opening),
+      points: pointsAttr(stairBay(stair)),
       ...NON_SCALING,
     }),
-    ...[...l.steps, ...l.landings].map((p) => piecePolygon(p, `${prefix}-stair-step`)),
   );
+  const l = Number.isFinite(ctx.rise) ? layoutStair(stair, ctx.rise) : undefined;
+  if (!l?.ok || l.walkLine.length < 2) return g;
+  g.append(...[...l.steps, ...l.landings].map((p) => piecePolygon(p, `${prefix}-stair-step`)));
   const end = l.walkLine[l.walkLine.length - 1]!;
   const back = unit(end, l.walkLine[l.walkLine.length - 2]!);
   g.append(label(ctx.labels.down, add(end, back, 1.5 * l.treadDepth), ctx));

@@ -696,7 +696,7 @@ describe('SelectEditTool stairs', () => {
     expect(Object.keys(plan.doc.floor.columns)).toHaveLength(0);
   });
 
-  it('dragging a bay onto another stairwell lands on its wall faces', () => {
+  function twoWells(align: boolean): H3xPlan {
     const f = oneRoomFloor();
     f.openings = {};
     f.nodes = {};
@@ -723,9 +723,14 @@ describe('SelectEditTool stairs', () => {
     Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
     Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
     document.body.appendChild(el);
-    const plan = new H3xPlan(el, docOf(f));
+    const plan = new H3xPlan(el, docOf(f), { snap: { align } });
     plan.fitToContent();
     plans.push(plan);
+    return plan;
+  }
+
+  it('dragging a bay onto another stairwell lands on its wall faces', () => {
+    const plan = twoWells(true);
     const add = addStair({ x: 1.2, y: 2.35, width: 2.2, depth: 4.5 });
     plan.doc.execute(add);
     drag(plan, { x: 1.2, y: 2.35 }, { x: 7.23, y: 2.37 });
@@ -735,6 +740,16 @@ describe('SelectEditTool stairs', () => {
     expect(validateStairs(plan.doc.floor, undefined).map((w) => w.code)).not.toContain(
       'stair-overlaps-wall',
     );
+  });
+
+  it('with align off a dragged bay ignores wall faces (grid-snapped delta only)', () => {
+    const plan = twoWells(false);
+    const add = addStair({ x: 1.2, y: 2.35, width: 2.2, depth: 4.5 });
+    plan.doc.execute(add);
+    drag(plan, { x: 1.2, y: 2.35 }, { x: 7.23, y: 2.37 });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(7.25, 9);
+    expect(st.y).toBeCloseTo(2.35, 9);
   });
 
   describe('on the townhouse sample', () => {
