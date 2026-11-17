@@ -377,3 +377,59 @@ describe('floor slabThickness and floor ids', () => {
     expect(projectFromXML(two).floors).toHaveLength(2);
   });
 });
+
+describe('xml: stairs', () => {
+  const wrap = (body: string): string => `<h3x version="1" unit="m">
+  <meta name="x" created=""/>
+  <floor id="f1" level="0" elevation="0" wallHeight="3.2">${body}</floor>
+</h3x>`;
+  const full =
+    '<stair id="s1" x="1" y="2" width="2.2" depth="4.5" rotation="1.5708" type="L" turn="winder" hand="left" flightWidth="1"/>';
+  const err = (xml: string): H3xParseError => {
+    try {
+      projectFromXML(xml);
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xParseError);
+      return e as H3xParseError;
+    }
+    throw new Error('expected throw');
+  };
+
+  it('round-trips a stair', () => {
+    const p = projectFromXML(wrap(full));
+    expect(p.floors[0]!.stairs.s1).toEqual({
+      id: 's1',
+      x: 1,
+      y: 2,
+      width: 2.2,
+      depth: 4.5,
+      rotation: 1.5708,
+      type: 'L',
+      turn: 'winder',
+      hand: 'left',
+      flightWidth: 1,
+    });
+    expect(projectFromXML(projectToXML(p))).toEqual(p);
+  });
+
+  it('applies defaults', () => {
+    const p = projectFromXML(wrap('<stair id="s1" x="1" y="2" width="2.2" depth="4.5" type="U"/>'));
+    expect(p.floors[0]!.stairs.s1).toMatchObject({
+      rotation: 0,
+      turn: 'landing',
+      hand: 'right',
+      flightWidth: 0.9,
+    });
+  });
+
+  it('rejects bad type and non-positive width', () => {
+    expect(err(wrap(full.replace('type="L"', 'type="X"')))).toMatchObject({ element: 'stair' });
+    expect(err(wrap(full.replace('width="2.2"', 'width="0"')))).toMatchObject({
+      element: 'stair',
+    });
+  });
+
+  it('loads a file without stairs', () => {
+    expect(projectFromXML(wrap('')).floors[0]!.stairs).toEqual({});
+  });
+});

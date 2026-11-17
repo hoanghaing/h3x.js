@@ -43,6 +43,7 @@ export function oneRoomFloor(): Floor {
     rooms: byId([{ id: 'r1', walls: ['w1', 'w2', 'w3', 'w4'], name: 'Phòng khách' }]),
     items: {},
     columns: {},
+    stairs: {},
   };
 }
 
@@ -77,6 +78,7 @@ export function twoRoomFloor(): Floor {
     ]),
     items: {},
     columns: {},
+    stairs: {},
   };
 }
 

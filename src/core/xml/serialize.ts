@@ -1,6 +1,6 @@
 import { FORMAT_VERSION, XML_DECIMALS } from '../constants';
 import { H3xValidationError } from '../errors';
-import type { Column, Floor, Item, Project, Site } from '../types';
+import type { Column, Floor, Item, Project, Site, Stair } from '../types';
 
 export function fmt(n: number): string {
   const v = Number(n.toFixed(XML_DECIMALS));
@@ -81,6 +81,21 @@ function columnEl(c: Column): string {
   ]);
 }
 
+function stairEl(s: Stair): string {
+  return el('stair', [
+    ['id', s.id],
+    ['x', s.x],
+    ['y', s.y],
+    ['width', s.width],
+    ['depth', s.depth],
+    ['rotation', s.rotation],
+    ['type', s.type],
+    ['turn', s.turn],
+    ['hand', s.hand],
+    ['flightWidth', s.flightWidth],
+  ]);
+}
+
 function siteEl(s: Site): string {
   for (const p of s.points) {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
@@ -139,6 +154,7 @@ function floorEl(f: Floor): string {
     ),
     ...byId(f.items).map(itemEl),
     ...byId(f.columns).map(columnEl),
+    ...byId(f.stairs).map(stairEl),
   ];
   return el(
     'floor',

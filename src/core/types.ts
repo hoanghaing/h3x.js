@@ -80,6 +80,25 @@ export interface Column {
   /** Defaults to the floor wallHeight. */
   height?: number;
 }
+export type StairType = 'straight' | 'L' | 'U' | 'spiral';
+export interface Stair {
+  id: Id;
+  /** Centre of the footprint rectangle. */
+  x: number;
+  y: number;
+  /** Footprint size along local x / y. */
+  width: number;
+  depth: number;
+  /** Radians CCW. */
+  rotation: number;
+  type: StairType;
+  /** Turn style for L and U stairs. */
+  turn: 'landing' | 'winder';
+  /** Turn direction for L / U, rotation sense for spiral. */
+  hand: 'left' | 'right';
+  /** Width of each flight; ignored for spiral. */
+  flightWidth: number;
+}
 export interface Site {
   id: 'site';
   /** Counter-clockwise ground outline. */
@@ -98,6 +117,7 @@ export interface Floor {
   rooms: Record<Id, Room>;
   items: Record<Id, Item>;
   columns: Record<Id, Column>;
+  stairs: Record<Id, Stair>;
 }
 export type FloorProps = Pick<Floor, 'id' | 'level' | 'elevation' | 'wallHeight' | 'slabThickness'>;
 export interface ProjectMeta {
@@ -119,7 +139,7 @@ export interface PresetInfo {
 }
 export type PresetResolver = (presetId: string) => PresetInfo | undefined;
 export type EntityKind =
-  'node' | 'wall' | 'opening' | 'room' | 'item' | 'column' | 'site' | 'floor';
+  'node' | 'wall' | 'opening' | 'room' | 'item' | 'column' | 'stair' | 'site' | 'floor';
 export interface Issue {
   code: string;
   ids: Id[];

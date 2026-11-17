@@ -174,6 +174,7 @@ describe('pushPullWall', () => {
       rooms: {},
       items: {},
       columns: {},
+      stairs: {},
     });
     oneStep(doc, () => doc.execute(pushPullWall('w', 0.5)));
     expect(count(doc.floor.walls)).toBe(3);
@@ -235,6 +236,7 @@ describe('pushPullWall', () => {
       rooms: {},
       items: {},
       columns: {},
+      stairs: {},
     });
     doc.execute(pushPullWall('w', 0.5));
     expect(count(doc.floor.walls)).toBe(1);

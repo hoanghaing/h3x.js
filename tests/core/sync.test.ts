@@ -24,6 +24,7 @@ function floor(
     rooms: Object.fromEntries(rooms.map((r) => [r.id, r])),
     items: {},
     columns: {},
+    stairs: {},
   };
 }
 

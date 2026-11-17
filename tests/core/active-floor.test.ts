@@ -141,7 +141,13 @@ describe('active floor', () => {
     };
     applyChanges(project, [change], 'forward');
     expect(project.floors.map((f) => f.id)).toEqual(['b1', 'f0', 'f1']);
-    expect(project.floors[0]).toMatchObject({ ...props, nodes: {}, walls: {}, columns: {} });
+    expect(project.floors[0]).toMatchObject({
+      ...props,
+      nodes: {},
+      walls: {},
+      columns: {},
+      stairs: {},
+    });
     applyChanges(project, [change], 'backward');
     expect(project.floors).toEqual(start.floors);
   });

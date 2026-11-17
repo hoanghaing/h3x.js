@@ -44,6 +44,7 @@ function project(): Project {
     rooms: {},
     items: {},
     columns: {},
+    stairs: {},
   });
   return {
     version: 1,
