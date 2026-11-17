@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+Milestone 5: multi-floor.
+
+- Core: `Floor.slabThickness` (XML `slabThickness`, default 0.15); floors are normalised on load
+  (sorted by level, contiguous levels, derived elevations; see `docs/xml-format.md`).
+- Active floor: `doc.activeFloorId`, `doc.setActiveFloor(id)`, `floorById` / `floorBelow` /
+  `floorAbove` and the `'activefloor'` event. Commands, validation, `doc.floor` and the plan work
+  on the active floor; `EntityChange` carries `floorId` and a new `'floor'` kind.
+- Commands: `addFloor`, `removeFloor`, `setFloorHeight`, `setSlabThickness`, `setGroundElevation`;
+  new codes `unknown-floor`, `floor-protected`, `invalid-floor-dimension` and the
+  `column-unsupported` layout warning.
+- 3D: one group per floor, slab meshes with thickness and
+  `scene.setViewMode('active' | 'cutaway' | 'all')`; `getWallMesh(id, floorId?)` and
+  `getSlabMesh(floorId?)`.
+- Plan: the floor below is drawn faded underneath; switching floors clears the selection and
+  cancels a gesture.
+- Example page: floor picker, add / remove floor, height, slab and ground elevation inputs, view
+  mode select and a sample three-storey townhouse with a basement
+  (`examples/layouts/townhouse-3f.xml`).
+
 Milestone 4: structure drawing.
 
 - Core commands: `addWall`, `removeWall`, `splitWall`, `removeNode`, `mergeNodes`, `dropNode`,
