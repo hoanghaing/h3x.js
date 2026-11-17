@@ -390,3 +390,64 @@ describe('layoutStair — rotation and errors', () => {
     expect(layoutStair(stair({}), -1)).toEqual({ ok: false, reason: 'no-rise' });
   });
 });
+
+describe('layoutStair property sweep', () => {
+  it('ok layouts are finite, inside the bay, CCW, evenly risen and within the step rule', () => {
+    const okCount: Record<string, number> = {};
+    const problems: string[] = [];
+    const cx = 3;
+    const cy = -2;
+    const finite = (q: Vec2): boolean => Number.isFinite(q.x) && Number.isFinite(q.y);
+    for (const type of ['straight', 'L', 'U', 'spiral'] as const)
+      for (const turn of ['landing', 'winder'] as const)
+        for (const hand of ['left', 'right'] as const)
+          for (const rotation of [0, Math.PI / 2, Math.PI / 6])
+            for (const rise of [2.8, 3.35, 4.2])
+              for (const width of [1.8, 2.4, 3.5])
+                for (const depth of [2.5, 3.5, 5])
+                  for (const flightWidth of [0.8, 1.0]) {
+                    const s: Stair = {
+                      id: 's',
+                      x: cx,
+                      y: cy,
+                      width,
+                      depth,
+                      rotation,
+                      type,
+                      turn,
+                      hand,
+                      flightWidth,
+                    };
+                    const l = layoutStair(s, rise);
+                    if (!l.ok) continue;
+                    okCount[type] = (okCount[type] ?? 0) + 1;
+                    const bad = (what: string): void => {
+                      problems.push(`${what}: ${JSON.stringify({ ...s, rise })}`);
+                    };
+                    const rh = l.riserHeight;
+                    if (l.treadDepth < 0.6 - 2 * rh - 1e-9 || l.treadDepth > 0.62 - 2 * rh + 1e-9) {
+                      bad(`treadDepth ${l.treadDepth}`);
+                    }
+                    if (!l.walkLine.every(finite)) bad('walkLine NaN');
+                    const c = Math.cos(rotation);
+                    const sn = Math.sin(rotation);
+                    const pieces = [...l.steps, ...l.landings].sort((a, b) => a.top - b.top);
+                    pieces.forEach((p, i) => {
+                      if (Math.abs(p.top - (i + 1) * rh) > 1e-9) bad(`piece ${i} top ${p.top}`);
+                      if (!p.outline.every(finite)) bad(`piece ${i} NaN`);
+                      else if (!(signedArea(p.outline) > 0)) bad(`piece ${i} not CCW`);
+                      const outside = p.outline.some((q) => {
+                        const dx = q.x - cx;
+                        const dy = q.y - cy;
+                        const lx = dx * c + dy * sn;
+                        const ly = -dx * sn + dy * c;
+                        return Math.abs(lx) > width / 2 + 1e-9 || Math.abs(ly) > depth / 2 + 1e-9;
+                      });
+                      if (outside) bad(`piece ${i} outside the bay`);
+                    });
+                  }
+    expect(problems.slice(0, 10)).toEqual([]);
+    for (const type of ['straight', 'L', 'U', 'spiral'])
+      expect(okCount[type] ?? 0).toBeGreaterThan(0);
+  });
+});
