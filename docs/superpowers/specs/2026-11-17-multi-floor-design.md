@@ -34,6 +34,7 @@ can be typed because storeys differ.
 
    (`elevation` is the top of that floor's slab; the slab occupies `[elev − slabThickness, elev]`.)
    Changing any height moves every floor above (or below, for basements) at once.
+
 5. **Slabs in 3D.** Each floor gets a slab: the outer outline of its walls (the union of its rooms
    plus the wall thickness), extruded by `slabThickness` below its elevation. Room floor finishes
    stay as they are, drawn on top.

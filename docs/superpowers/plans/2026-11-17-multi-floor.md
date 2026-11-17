@@ -34,6 +34,7 @@
 ### Task 1: Floor model, stack derivation, XML and load normalisation
 
 **Files:**
+
 - Modify: `src/core/types.ts` (Floor, EntityKind, new FloorProps)
 - Create: `src/core/floors/stack.ts`
 - Modify: `src/core/xml/parse.ts`, `src/core/xml/serialize.ts`, `src/core/document/H3xDocument.ts` (create, constructor)
@@ -41,6 +42,7 @@
 - Test: `tests/core/floors-stack.test.ts`, `tests/core/xml.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `Floor.slabThickness: number`
   - `type FloorProps = Pick<Floor, 'id' | 'level' | 'elevation' | 'wallHeight' | 'slabThickness'>`
@@ -62,10 +64,12 @@
 ### Task 2: Floor-aware changes, history and active floor
 
 **Files:**
+
 - Modify: `src/core/document/changes.ts`, `src/core/document/history.ts`, `src/core/document/H3xDocument.ts`
 - Test: `tests/core/active-floor.test.ts`
 
 **Interfaces:**
+
 - Consumes: `FloorProps`, `floorProps` (Task 1).
 - Produces:
   - `EntityChange` members gain `floorId?: Id` (required in practice after `execute`: present on every change except `kind: 'site'`; for `kind: 'floor'`, `floorId === id`). `EntityByKind.floor = FloorProps`.
@@ -89,11 +93,13 @@
 ### Task 3: Floor commands
 
 **Files:**
+
 - Create: `src/core/commands/floors.ts`
 - Modify: `src/core/index.ts` (exports)
 - Test: `tests/core/floors-commands.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CommandContext.project`, `deriveStack`, `floorProps`, `detectRooms` (`src/core/rooms/detect.ts`), `createId`.
 - Produces (all `Command`):
   - `addFloor(opts: { position: 'above' | 'below'; wallHeight?: number; slabThickness?: number }): Command & { createdId: Id }` — source = top floor (`above`) or lowest (`below`). Changes, in order: the new `'floor'` insert; nodes, walls, columns copied with fresh ids (wall `a`/`b` remapped; finishes, thickness, height kept); rooms from `detectRooms` on the copy with fresh ids and no `name` / `floorFinish`; then `'floor'` updates for every other floor whose derived level / elevation changed. Openings and items not copied. Defaults copy the source floor's `wallHeight` / `slabThickness`.
@@ -116,11 +122,13 @@
 ### Task 4: Column support warning
 
 **Files:**
+
 - Create: `src/core/validate/floors.ts`
 - Modify: `src/core/document/H3xDocument.ts` (`validateLayout()` appends it)
 - Test: `tests/core/column-support.test.ts`
 
 **Interfaces:**
+
 - Consumes: `doc.floorBelow`.
 - Produces: `validateColumnSupport(floor: Floor, below: Floor | undefined): Issue[]` — one issue per column of `floor` with no column in `below` whose centre is within 0.01 m; `code: 'column-unsupported'`, `ids: [columnId]`. Returns `[]` when `below` is undefined. Not part of the blocking validators.
 
@@ -131,12 +139,14 @@
 ### Task 5: 3D — all floors, slabs, view modes
 
 **Files:**
+
 - Modify: `src/three/scene.ts`
 - Create: `src/three/slab.ts`
 - Modify: `src/three/index.ts` (exports: `H3xViewMode`, `buildSlabGeometry`)
 - Test: `tests/three/scene.test.ts`, `tests/three/slab.test.ts`
 
 **Interfaces:**
+
 - Consumes: `doc.project.floors`, `doc.activeFloorId`, `'activefloor'` event, `EntityChange.floorId`.
 - Produces:
   - `type H3xViewMode = 'active' | 'cutaway' | 'all'`
@@ -157,11 +167,13 @@
 ### Task 6: 2D — active floor switching and faded floor below
 
 **Files:**
+
 - Modify: `src/plan/H3xPlan.ts`, `src/plan/render.ts` (underlay layer), `src/plan/style.ts`
 - Create: `src/plan/underlay.ts`
 - Test: `tests/plan/H3xPlan.floors.test.ts`
 
 **Interfaces:**
+
 - Consumes: `doc.floorBelow`, `'activefloor'` event, `EntityChange.floorId`.
 - Produces:
   - `renderUnderlay(below: Floor | undefined, layer: SVGGElement, ctx: { view; corners }): void` in `underlay.ts` — replaces the layer's children with wall polygons and column shapes (reuse `shapes.ts`), class `${prefix}-underlay`; empty when `below` is undefined.
@@ -180,6 +192,7 @@
 ### Task 7: Example, sample layout and docs
 
 **Files:**
+
 - Create: `examples/layouts/townhouse-3f.xml` (basement + ground + 2 floors, ground elevation 0.45, mixed heights)
 - Modify: `examples/main.ts`, `examples/index.html`
 - Modify: `docs/xml-format.md`, `README.md`, `CHANGELOG.md`, `docs/roadmap.md` (M4 Done, M5 Done)
