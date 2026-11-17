@@ -8,7 +8,10 @@ import { buildJoinGeometry } from './walls/joinGeometry';
 import { computeJoins } from './walls/joins';
 import { buildWallGeometry } from './walls/wallGeometry';
 
-/** userData.h3xKind of the meshes an H3xScene creates. */
+/**
+ * userData.h3xKind of the meshes an H3xScene creates. Every mesh also carries
+ * `userData.h3xId` (entity id, unique only within its floor) and `userData.h3xFloorId`.
+ */
 export type H3xKind = 'wall' | 'room' | 'join' | 'column' | 'slab';
 
 interface Built {
@@ -94,11 +97,11 @@ export class FloorView {
     const slab = buildSlabGeometry(f);
     if (slab) slabs.set(this.floorId, { geom: slab, material: this.materials.trim() });
 
-    sync(this.wallMeshes, this.wallsGroup, 'wall', walls);
-    sync(this.floorMeshes, this.floorsGroup, 'room', floors);
-    sync(this.joinMeshes, this.joinsGroup, 'join', joins);
-    sync(this.columnMeshes, this.columnsGroup, 'column', columns);
-    sync(this.slabMeshes, this.group, 'slab', slabs);
+    sync(this.wallMeshes, this.wallsGroup, 'wall', this.floorId, walls);
+    sync(this.floorMeshes, this.floorsGroup, 'room', this.floorId, floors);
+    sync(this.joinMeshes, this.joinsGroup, 'join', this.floorId, joins);
+    sync(this.columnMeshes, this.columnsGroup, 'column', this.floorId, columns);
+    sync(this.slabMeshes, this.group, 'slab', this.floorId, slabs);
     if (this.slabMesh) this.slabMesh.name = 'h3x-slab';
   }
 
@@ -121,7 +124,13 @@ export class FloorView {
   }
 }
 
-function sync(meshes: Map<Id, Mesh>, group: Group, kind: H3xKind, built: Map<Id, Built>): void {
+function sync(
+  meshes: Map<Id, Mesh>,
+  group: Group,
+  kind: H3xKind,
+  floorId: Id,
+  built: Map<Id, Built>,
+): void {
   for (const [id, mesh] of meshes) {
     if (built.has(id)) continue;
     mesh.geometry.dispose();
@@ -140,7 +149,7 @@ function sync(meshes: Map<Id, Mesh>, group: Group, kind: H3xKind, built: Map<Id,
     const created = new Mesh(geom, material);
     created.castShadow = true;
     created.receiveShadow = true;
-    created.userData = { h3xKind: kind, h3xId: id };
+    created.userData = { h3xKind: kind, h3xId: id, h3xFloorId: floorId };
     group.add(created);
     meshes.set(id, created);
   }

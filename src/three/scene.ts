@@ -116,16 +116,19 @@ export class H3xScene {
       else if (FLOOR_GEOMETRY_KINDS.has(c.kind) && c.floorId !== undefined) touched.add(c.floorId);
     }
     if (touched.size === 0 && !site) return;
-    if (touched.size > 0) this.syncFloors(e.reason === 'load' ? null : touched);
+    // The active floor was removed: the 'activefloor' event that follows sets visibility
+    // and notifies, so no frame is drawn with every floor hidden.
+    const activeGone = !this.doc.floorById(this.doc.activeFloorId);
+    if (touched.size > 0) this.syncFloors(e.reason === 'load' ? null : touched, !activeGone);
     if (site) this.syncSite();
-    this.notify();
+    if (!activeGone) this.notify();
   }
 
   /**
    * Adds / removes floor views to match the document, rebuilds the touched floors
    * (all when `touched` is null) plus any new ones, and restores level order and visibility.
    */
-  private syncFloors(touched: Set<Id> | null): void {
+  private syncFloors(touched: Set<Id> | null, visibility = true): void {
     const floors = this.doc.project.floors;
     const ids = new Set(floors.map((f) => f.id));
     for (const [id, view] of this.views) {
@@ -148,7 +151,7 @@ export class H3xScene {
     for (const g of groups) g.removeFromParent();
     for (const o of others) o.removeFromParent();
     this.root.add(...groups, ...others);
-    this.applyVisibility();
+    if (visibility) this.applyVisibility();
   }
 
   private applyVisibility(): void {
