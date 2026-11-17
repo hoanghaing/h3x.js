@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
-import { Raycaster, Vector3 } from 'three';
+import { Box3, Raycaster, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core';
 import { H3xScene } from '../../src/three';
@@ -27,8 +27,17 @@ describe('sample tube-house layout', () => {
     const scene = new H3xScene(doc);
     for (const id of Object.keys(doc.floor.walls)) expect(scene.getWallMesh(id)).toBeDefined();
     for (const r of Object.values(doc.floor.rooms)) expect(scene.getFloorMesh(r.id)).toBeDefined();
-    expect(scene.root.children[0]!.children).toHaveLength(Object.keys(doc.floor.walls).length);
-    expect(scene.root.children[1]!.children).toHaveLength(4);
+    const group = scene.root.getObjectByName('h3x-floor-' + doc.activeFloorId)!;
+    const walls = group.getObjectByName('h3x-walls')!;
+    expect(walls.children).toHaveLength(Object.keys(doc.floor.walls).length);
+    expect(group.getObjectByName('h3x-floors')!.children).toHaveLength(4);
+    // the slab footprint reaches the outer wall faces
+    const slab = new Box3().setFromObject(scene.getSlabMesh()!);
+    const wallBox = new Box3().setFromObject(walls);
+    for (const k of ['x', 'z'] as const) {
+      expect(slab.min[k]).toBeCloseTo(wallBox.min[k], 6);
+      expect(slab.max[k]).toBeCloseTo(wallBox.max[k], 6);
+    }
   });
 
   it('has no see-through holes in wall tops at junctions', () => {
