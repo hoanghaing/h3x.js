@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   H3xDocument,
   addColumn,
+  addStair,
   addWall,
   moveNode,
   setSite,
@@ -659,5 +660,24 @@ describe('SelectEditTool structural gestures', () => {
     expect(dropMarks(plan)).toBe(0);
     fire(plan, 'pointerup', { x: 1, y: 1 });
     expect(plan.doc.floor.nodes.n3).toBeDefined();
+  });
+});
+
+describe('SelectEditTool stairs', () => {
+  it('selects, drags (one undo step) and deletes a stair', () => {
+    const plan = makePlan();
+    const add = addStair({ x: 2, y: 2, width: 2, depth: 3 });
+    plan.doc.execute(add);
+    const st = () => plan.doc.floor.stairs[add.createdId]!;
+    fire(plan, 'pointerdown', { x: 2, y: 2 });
+    fire(plan, 'pointerup', { x: 2, y: 2 });
+    expect(plan.selection).toEqual({ kind: 'stair', id: add.createdId });
+    drag(plan, { x: 2, y: 2 }, { x: 2.5, y: 1 });
+    expect(st().x).toBeCloseTo(2.5, 9);
+    expect(st().y).toBeCloseTo(1, 9);
+    plan.doc.undo();
+    expect({ x: st().x, y: st().y }).toEqual({ x: 2, y: 2 });
+    key(plan, 'Delete');
+    expect(plan.doc.floor.stairs[add.createdId]).toBeUndefined();
   });
 });

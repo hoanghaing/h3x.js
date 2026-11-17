@@ -7,9 +7,11 @@ import {
   pushPullWall,
   removeColumn,
   removeNode,
+  removeStair,
   removeWall,
   setSite,
   splitWall,
+  updateStair,
   type Command,
   type Id,
   type Issue,
@@ -46,7 +48,7 @@ type Drop = { node: Id; at: Vec2 } | { wall: Id; at: Vec2 };
 interface Gesture {
   key: string;
   /** 'push' is a Shift + wall drag (push / pull). */
-  kind: 'node' | 'wall' | 'push' | 'column';
+  kind: 'node' | 'wall' | 'push' | 'column' | 'stair';
   id: Id;
   /** Wall drags: unit left normal at gesture start. */
   normal: Vec2;
@@ -65,15 +67,15 @@ const ARROWS: Record<string, Vec2> = {
   ArrowDown: { x: 0, y: -1 },
 };
 
-type Selectable = 'node' | 'wall' | 'column' | 'site';
+type Selectable = 'node' | 'wall' | 'column' | 'stair' | 'site';
 /** |normal component| above which a wall counts as moving along that axis (push / pull guides). */
 const AXIS_PARALLEL = 1 - 1e-9;
 
-const SELECTABLE: ReadonlySet<string> = new Set<Selectable>(['node', 'wall', 'column', 'site']);
+const SELECTABLE: ReadonlySet<string> = new Set<Selectable>(['node', 'wall', 'column', 'stair', 'site']);
 const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
 
 /**
- * Selects nodes, walls, columns and the site; drags nodes, walls and columns (one undo step per
+ * Selects nodes, walls, columns, stairs and the site; drags nodes, walls, columns and stairs (one undo step per
  * drag), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
  * another node or a wall joins it, double-click on a wall inserts a point, Delete / Backspace
  * removes the selection.
@@ -127,7 +129,7 @@ export class SelectEditTool implements Tool {
       dead: false,
     };
     const kind = e.hit?.kind;
-    return kind === 'node' || kind === 'wall' || kind === 'column' || kind === 'dimension';
+    return kind === 'node' || kind === 'wall' || kind === 'column' || kind === 'stair' || kind === 'dimension';
   }
 
   onPointerMove(e: PlanPointerEvent): void {
@@ -195,9 +197,11 @@ export class SelectEditTool implements Tool {
             ? removeWall(sel.id)
             : sel.kind === 'column'
               ? removeColumn(sel.id)
-              : sel.kind === 'site'
-                ? setSite(null)
-                : null;
+              : sel.kind === 'stair'
+                ? removeStair(sel.id)
+                : sel.kind === 'site'
+                  ? setSite(null)
+                  : null;
       if (!cmd) return false;
       if (this.run(cmd)) ctx.plan.select(null);
       return true;
@@ -243,6 +247,11 @@ export class SelectEditTool implements Tool {
       if (!c) return;
       kind = 'column';
       start = { x: c.x, y: c.y };
+    } else if (t?.kind === 'stair') {
+      const st = floor.stairs[t.id];
+      if (!st) return;
+      kind = 'stair';
+      start = { x: st.x, y: st.y };
     } else if (t?.kind === 'node') {
       if (!floor.nodes[t.id]) return;
       kind = 'node';
@@ -267,6 +276,7 @@ export class SelectEditTool implements Tool {
     const free = (e.native as MouseEvent).altKey;
     if (g.kind === 'node') this.stepNode(g, e.plan, free);
     else if (g.kind === 'column') this.stepColumn(g, e.plan, free);
+    else if (g.kind === 'stair') this.stepStair(g, e.plan, free);
     else if (g.kind === 'push') this.stepPush(g, e.plan, free);
     else this.stepWall(g, e.plan, free);
   }
@@ -300,6 +310,18 @@ export class SelectEditTool implements Tool {
     const r = ctx.snapDraw(add(g.start, sub(p, this.press!.plan)), undefined, free);
     const same = r.point.x === c.x && r.point.y === c.y;
     const ok = same || this.run(moveColumn(g.id, { x: r.point.x, y: r.point.y }), g.key);
+    ctx.showGuides(ok ? r.guides : []);
+  }
+
+  private stepStair(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const s = ctx.doc.floor.stairs[g.id];
+    if (!s) return;
+    const r = ctx.snapDraw(add(g.start, sub(p, this.press!.plan)), undefined, free, undefined, {
+      structure: false,
+    });
+    const same = r.point.x === s.x && r.point.y === s.y;
+    const ok = same || this.run(updateStair(g.id, { x: r.point.x, y: r.point.y }), g.key);
     ctx.showGuides(ok ? r.guides : []);
   }
 

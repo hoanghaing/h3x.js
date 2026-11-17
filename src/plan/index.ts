@@ -10,7 +10,7 @@ export {
   zoomAt,
   type View,
 } from './view';
-export { snapPoint, snapScalar, type SnapGuide, type SnapOptions, type SnapResult } from './snap';
+export { snapBayCorner, snapPoint, snapScalar, type SnapGuide, type SnapOptions, type SnapResult } from './snap';
 export {
   itemFootprint,
   junctionPolygons,
@@ -34,3 +34,4 @@ export { SelectEditTool, type SelectEditToolOptions } from './tools/SelectEditTo
 export { DrawWallTool, type DrawWallToolOptions } from './tools/DrawWallTool';
 export { DrawSiteTool } from './tools/DrawSiteTool';
 export { ColumnTool, type ColumnToolOptions } from './tools/ColumnTool';
+export { StairTool, type StairToolOptions } from './tools/StairTool';
