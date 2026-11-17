@@ -32,7 +32,10 @@ export class DrawWallTool implements Tool {
   private ctx: ToolContext | null = null;
   private unsubscribe: (() => void) | null = null;
   private readonly chain = new ClickChain();
-  /** Unit direction of the current preview segment, or null before the pointer moved. */
+  /**
+   * Unit direction of the current preview segment (kept after a commit so typed lengths chain),
+   * or null before the pointer moved in this chain.
+   */
   private dir: Vec2 | null = null;
   /** Set while the tool's own document calls run. */
   private own: OwnCall | null = null;
@@ -182,7 +185,7 @@ export class DrawWallTool implements Tool {
     if (ends) {
       this.endChain();
     } else {
-      this.dir = null;
+      // Keep `dir`: a second typed length continues the same way until the pointer moves.
       ctx.plan.showPreview(null);
       this.startSegment();
     }

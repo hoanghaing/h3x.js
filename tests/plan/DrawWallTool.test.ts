@@ -238,6 +238,21 @@ describe('DrawWallTool', () => {
     expect(previewFrom(plan)).toEqual({ x: 13, y: 0 });
   });
 
+  it('two typed lengths in a row continue along the same direction until the pointer moves', () => {
+    const plan = makePlan();
+    const requests: SegmentLengthRequest[] = [];
+    plan.on('segmentLengthRequest', (e) => void requests.push(e));
+    click(plan, { x: 10, y: 0 });
+    fire(plan, 'pointermove', { x: 11.3, y: 0 });
+    expect(plan.setPendingSegmentLength(3)).toBe(true);
+    expect(requests.at(-1)!.direction).toEqual({ x: 1, y: 0 });
+    expect(plan.setPendingSegmentLength(2)).toBe(true);
+    expect(hasWallBetween(plan, { x: 13, y: 0 }, { x: 15, y: 0 })).toBe(true);
+    fire(plan, 'pointermove', { x: 15, y: 4 });
+    expect(plan.setPendingSegmentLength(1)).toBe(true);
+    expect(hasWallBetween(plan, { x: 15, y: 0 }, { x: 15, y: 1 })).toBe(true);
+  });
+
   it('setPendingSegmentLength ignores a non-finite or non-positive length', () => {
     const plan = makePlan();
     click(plan, { x: 10, y: 0 });
