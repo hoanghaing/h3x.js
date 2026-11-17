@@ -10,6 +10,7 @@ export function DEFAULT_CSS(prefix: string): string {
 ${p} { background: #fafaf9; user-select: none; touch-action: none; font-family: system-ui, sans-serif; }
 ${p} .${prefix}-grid-minor { stroke: #e7e5e4; stroke-width: 1; fill: none; }
 ${p} .${prefix}-grid-major { stroke: #d6d3d1; stroke-width: 1; fill: none; }
+${p} .${prefix}-underlay polygon, ${p} .${prefix}-underlay circle { fill: none; stroke: #a8a29e; stroke-width: 1; opacity: 0.6; pointer-events: none; }
 ${p} .${prefix}-room path { fill: #f5f5f4; stroke: none; }
 ${p} .${prefix}-room text { fill: #57534e; font-size: 13px; text-anchor: middle; }
 ${p} .${prefix}-room .${prefix}-room-area { font-size: 11px; fill: #78716c; }

@@ -147,6 +147,7 @@ function floorEl(f: Floor): string {
       ['level', f.level],
       ['elevation', f.elevation],
       ['wallHeight', f.wallHeight],
+      ['slabThickness', f.slabThickness],
     ],
     kids.length ? kids : undefined,
   );

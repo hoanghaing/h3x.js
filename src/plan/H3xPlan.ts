@@ -1,4 +1,12 @@
-import type { ChangeEvent, H3xDocument, Id, Issue, PresetResolver, Vec2 } from '../core';
+import type {
+  ChangeEvent,
+  EntityChange,
+  H3xDocument,
+  Id,
+  Issue,
+  PresetResolver,
+  Vec2,
+} from '../core';
 import { Emitter } from '../core/document/emitter';
 import { setWallLength } from '../core';
 import { pickAnchor } from './anchor';
@@ -28,6 +36,7 @@ import { KINDS, LAYERS, entitiesOf, type LayerName, type PlanDom } from './kinds
 import { dirtyEntities, syncEntity, syncJoins } from './reconcile';
 import { wallOutline } from './shapes';
 import { DEFAULT_CSS } from './style';
+import { createUnderlayLayer, renderUnderlay } from './underlay';
 import type { PlanIssues, PlanKind, Rect, ScreenPoint, Selection } from './types';
 import {
   DEFAULT_SCALE,
@@ -83,6 +92,9 @@ export interface SegmentLengthRequest {
   length: number;
 }
 
+/** The floor a change is on; undefined for the (project-level) site. */
+const floorOf = (c: EntityChange): Id | undefined => (c.kind === 'site' ? undefined : c.floorId);
+
 const issueKey = (list: Issue[]): string =>
   list.map((i) => `${i.code}:${[...i.ids].join(',')}`).join('|');
 
@@ -97,11 +109,14 @@ export class H3xPlan {
   private readonly root: SVGGElement;
   private readonly dom: PlanDom;
   private readonly grid: { major: SVGPathElement; minor: SVGPathElement } | undefined;
+  /** Faded walls and columns of the floor below the active one. */
+  private readonly underlay: SVGGElement;
   /** Which dimensions show; editing state is supplied here by later tools. */
   private readonly dimensionState: DimensionState = { selection: null, draggingNode: null };
   private joins: Joins = { corners: {}, junctions: {} };
   private _view: View;
   private readonly unsubscribe: () => void;
+  private readonly unsubscribeActive: () => void;
   private readonly resizeObserver: ResizeObserver | undefined;
   private readonly onWindowResize = (): void => this.resize();
   private disposed = false;
@@ -162,11 +177,15 @@ export class H3xPlan {
       };
       this.dom.layers.grid.append(this.grid.minor, this.grid.major);
     }
+    this.underlay = createUnderlayLayer(this.prefix);
+    this.dom.layers.grid.after(this.underlay);
 
     this.standing = this.computeStanding();
     this.reconcileAll();
+    this.refreshUnderlay();
     container.appendChild(this.svg);
     this.unsubscribe = doc.on('change', (e) => this.onChange(e));
+    this.unsubscribeActive = doc.on('activefloor', () => this.onActiveFloor());
 
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -410,6 +429,7 @@ export class H3xPlan {
     this._tool?.deactivate();
     this._tool = null;
     this.unsubscribe();
+    this.unsubscribeActive();
     clearTimeout(this.rejectedTimer);
     this.resizeObserver?.disconnect();
     if (typeof window !== 'undefined') window.removeEventListener('resize', this.onWindowResize);
@@ -453,17 +473,46 @@ export class H3xPlan {
 
   private onChange(e: ChangeEvent): void {
     if (this.disposed) return;
-    this.refreshStanding();
-    if (e.reason === 'load' || e.changes.length > FULL_RECONCILE_THRESHOLD) {
+    this.refreshStanding(); // issues may depend on other floors (column support)
+    const active = this.doc.activeFloorId;
+    // The change removed the active floor: 'activefloor' follows and rebuilds.
+    if (!this.doc.floorById(active)) return;
+    const below = this.doc.floorBelow(active)?.id;
+    const own = e.changes.filter((c) => c.kind === 'site' || floorOf(c) === active);
+    if (e.reason === 'load' || own.length > FULL_RECONCILE_THRESHOLD) {
       this.reconcileAll();
+      this.refreshUnderlay();
+      return;
+    }
+    if (e.changes.some((c) => c.kind === 'floor' || (below && floorOf(c) === below))) {
+      this.refreshUnderlay();
+    }
+    if (own.length === 0) {
+      this.refreshMarks();
       return;
     }
     this.joins = computeJoins(this.doc.floor);
-    const dirty = dirtyEntities(this.doc.floor, e.changes);
+    const dirty = dirtyEntities(this.doc.floor, own);
     for (const kind of KINDS) for (const id of dirty[kind]) this.syncEntity(kind, id);
     this.syncJoins();
     this.refreshDimensions();
     this.refreshMarks();
+  }
+
+  /** Another floor became active: drop the selection and any gesture, then rebuild. */
+  private onActiveFloor(): void {
+    if (this.disposed) return;
+    this.setTool(this._tool); // re-activating cancels the tool's gesture
+    this.select(null);
+    this.refreshStanding();
+    this.reconcileAll();
+    this.refreshUnderlay();
+  }
+
+  private refreshUnderlay(): void {
+    const below = this.doc.floorBelow(this.doc.activeFloorId);
+    const corners = below ? computeJoins(below).corners : {};
+    renderUnderlay(below, this.underlay, { view: this._view, corners });
   }
 
   private reconcileAll(): void {

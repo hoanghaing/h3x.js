@@ -13,6 +13,7 @@ function isolatedFloor(): Floor {
     level: 0,
     elevation: 0,
     wallHeight: 3.2,
+    slabThickness: 0.15,
     nodes: { a: { id: 'a', x: 0, y: 0 }, b: { id: 'b', x: 4, y: 0 } },
     walls: { w: { id: 'w', a: 'a', b: 'b', thickness: 0.2, height: 3.2 } },
     openings: {},

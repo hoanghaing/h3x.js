@@ -5,6 +5,7 @@ export * from './errors';
 
 export { H3xDocument } from './document/H3xDocument';
 export type {
+  ActiveFloorEvent,
   ChangeEvent,
   Command,
   CommandContext,
@@ -34,6 +35,13 @@ export {
 export type { NewItem } from './commands/objects';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
 export { setWallFinish, setRoomFinish, renameRoom } from './commands/finishes';
+export {
+  addFloor,
+  removeFloor,
+  setFloorHeight,
+  setSlabThickness,
+  setGroundElevation,
+} from './commands/floors';
 
 export { validateLayout } from './validate/layout';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';

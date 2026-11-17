@@ -1,8 +1,16 @@
 /// <reference types="vite/client" />
-import { H3xDocument } from 'h3x/core';
+import {
+  H3xDocument,
+  addFloor,
+  removeFloor,
+  setFloorHeight,
+  setGroundElevation,
+  setSlabThickness,
+} from 'h3x/core';
 import { ColumnTool, DrawSiteTool, DrawWallTool, H3xPlan, SelectEditTool } from 'h3x/plan';
-import { H3xScene, H3xViewer } from 'h3x/three';
+import { H3xScene, H3xViewer, type H3xViewMode } from 'h3x/three';
 import layoutXml from './layouts/nha-ong-4x16.h3x?raw';
+import townhouseXml from './layouts/townhouse-3f.xml?raw';
 import { attachLengthInput, attachSegmentLengthInput } from './lengthInput';
 import { nextProjection, projectionLabel } from './projection';
 import { widenHouse } from './widen';
@@ -22,12 +30,15 @@ function mount(next: H3xDocument): void {
   doc = next;
   scene = new H3xScene(doc);
   viewer = new H3xViewer(appHost, scene);
+  scene.setViewMode(viewSelect.value as H3xViewMode);
   viewer.fitToContent();
   plan = new H3xPlan(planHost, doc);
   plan.fitToContent();
   teardown = [
     attachLengthInput(plan, planHost),
     attachSegmentLengthInput(plan, planHost),
+    doc.on('change', refreshFloorControls),
+    doc.on('activefloor', refreshFloorControls),
     plan.on('issues', ({ standing }) => {
       if (standing.length > 0) say(`${standing.length} vấn đề tồn tại`, true);
       else say('');
@@ -36,6 +47,7 @@ function mount(next: H3xDocument): void {
     () => viewer.dispose(),
     () => scene.dispose(),
   ];
+  refreshFloorControls();
 }
 
 const status = document.getElementById('status')!;
@@ -46,7 +58,55 @@ const say = (text: string, error = false): void => {
 const on = (id: string, fn: () => void): void =>
   document.getElementById(id)!.addEventListener('click', fn);
 
-mount(H3xDocument.fromXML(layoutXml));
+const floorSelect = document.getElementById('sel-floor') as HTMLSelectElement;
+const wallHeightInput = document.getElementById('in-wall-height') as HTMLInputElement;
+const slabInput = document.getElementById('in-slab') as HTMLInputElement;
+const groundInput = document.getElementById('in-ground') as HTMLInputElement;
+
+/** Syncs the floor picker and number inputs with the document. */
+function refreshFloorControls(): void {
+  const floors = [...doc.project.floors].reverse();
+  floorSelect.replaceChildren(
+    ...floors.map((f) => {
+      const o = document.createElement('option');
+      o.value = f.id;
+      o.textContent = `Tầng ${f.level}`;
+      return o;
+    }),
+  );
+  floorSelect.value = doc.activeFloorId;
+  const f = doc.floor;
+  wallHeightInput.value = String(f.wallHeight);
+  slabInput.value = String(f.slabThickness);
+  groundInput.value = String(doc.project.floors.find((x) => x.level === 0)?.elevation ?? 0);
+}
+
+/** Runs a command, reporting a rejection in the status line. */
+function run(cmd: Parameters<H3xDocument['tryExecute']>[0], ok: string): void {
+  const r = doc.tryExecute(cmd);
+  if (r.ok) say(ok);
+  else say(`Không hợp lệ: ${r.issues.map((i) => i.message).join('; ')}`, true);
+  refreshFloorControls();
+}
+
+const viewSelect = document.getElementById('sel-view') as HTMLSelectElement;
+
+mount(H3xDocument.fromXML(townhouseXml));
+
+floorSelect.addEventListener('change', () => doc.setActiveFloor(floorSelect.value));
+on('btn-floor-above', () => run(addFloor({ position: 'above' }), 'Đã thêm tầng trên'));
+on('btn-floor-below', () => run(addFloor({ position: 'below' }), 'Đã thêm tầng dưới'));
+on('btn-floor-remove', () => run(removeFloor(doc.activeFloorId), 'Đã xóa tầng'));
+wallHeightInput.addEventListener('change', () =>
+  run(setFloorHeight(doc.activeFloorId, Number(wallHeightInput.value)), 'Đã đổi chiều cao tường'),
+);
+slabInput.addEventListener('change', () =>
+  run(setSlabThickness(doc.activeFloorId, Number(slabInput.value)), 'Đã đổi độ dày sàn'),
+);
+groundInput.addEventListener('change', () =>
+  run(setGroundElevation(Number(groundInput.value)), 'Đã đổi cao độ nền'),
+);
+viewSelect.addEventListener('change', () => scene.setViewMode(viewSelect.value as H3xViewMode));
 
 on('btn-select', () => {
   plan.setTool(new SelectEditTool());
@@ -74,7 +134,11 @@ on('btn-clear', () => {
 });
 on('btn-load', () => {
   mount(H3xDocument.fromXML(layoutXml));
-  say('Đã nạp nhà mẫu');
+  say('Đã nạp nhà ống');
+});
+on('btn-load-3f', () => {
+  mount(H3xDocument.fromXML(townhouseXml));
+  say('Đã nạp nhà phố 3 tầng');
 });
 
 // Derive from viewer.projection: viewFromAxis also switches to orthographic.

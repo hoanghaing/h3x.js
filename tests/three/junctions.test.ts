@@ -20,6 +20,7 @@ function floorOf(
     level: 0,
     elevation: 0,
     wallHeight: 3,
+    slabThickness: 0.15,
     nodes: Object.fromEntries(Object.entries(nodes).map(([id, [x, y]]) => [id, { id, x, y }])),
     walls: Object.fromEntries(
       walls.map(([id, a, b, thickness]) => [id, { id, a, b, thickness, height: 3 }]),
@@ -105,7 +106,7 @@ describe('H3xScene junction caps', () => {
     const hits = hitsDown(scene.root, { x: 4, y: 0.05 });
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0]!.point.y).toBeCloseTo(3.2, 6);
-    expect(hits[0]!.object.userData).toEqual({ h3xKind: 'join', h3xId: 'n2' });
+    expect(hits[0]!.object.userData).toEqual({ h3xKind: 'join', h3xId: 'n2', h3xFloorId: 'f1' });
   });
 
   it('covers the X junction top', () => {
