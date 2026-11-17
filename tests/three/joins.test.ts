@@ -24,6 +24,7 @@ function floorOf(
     openings: {},
     rooms: {},
     items: {},
+    columns: {},
   };
 }
 
@@ -43,6 +44,23 @@ describe('computeWallCorners', () => {
     near(c.startRight, 0, -0.1);
     near(c.endLeft, 4, 0.1);
     near(c.endRight, 4, -0.1);
+  });
+
+  it('free end of a chain gets a square cap while the shared end is mitred', () => {
+    const m = computeWallCorners(
+      floorOf({ a: [0, 0], b: [4, 0], c: [4, 4] }, [
+        ['w1', 'a', 'b', 0.2],
+        ['w2', 'b', 'c', 0.2],
+      ]),
+    );
+    const w1 = corner(m, 'w1');
+    near(w1.startLeft, 0, 0.1);
+    near(w1.startRight, 0, -0.1);
+    near(w1.endLeft, 3.9, 0.1);
+    near(w1.endRight, 4.1, -0.1);
+    const w2 = corner(m, 'w2');
+    near(w2.endLeft, 3.9, 4);
+    near(w2.endRight, 4.1, 4);
   });
 
   it('square room corners', () => {

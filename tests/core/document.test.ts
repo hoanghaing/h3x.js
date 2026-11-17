@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
 import type { ChangeEvent, Command } from '../../src/core/document/H3xDocument';
 import { mergeChanges } from '../../src/core/document/changes';
@@ -7,9 +7,15 @@ import type { EntityChange } from '../../src/core/document/changes';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Item, Opening, PlanNode, Project, Room, Wall } from '../../src/core/types';
 import { moveNode } from '../../src/core/commands/layout';
-import { moveOpening } from '../../src/core/commands/objects';
+import { addItem, moveOpening } from '../../src/core/commands/objects';
 import { setWallFinish } from '../../src/core/commands/finishes';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
+
+const idOverride = vi.hoisted(() => ({ next: null as string | null }));
+vi.mock('../../src/core/ids', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('../../src/core/ids')>();
+  return { ...orig, createId: () => idOverride.next ?? orig.createId() };
+});
 
 function setX(x: number): Command {
   return {
@@ -193,6 +199,23 @@ describe('H3xDocument', () => {
     let undos = 0;
     while (d.undo()) undos++;
     expect(undos).toBe(200);
+  });
+
+  it('a cancelled or net no-op group at the limit keeps the entry its creation trimmed', () => {
+    const d = docWithNode();
+    for (let i = 1; i <= 200; i++) d.execute(setX(i));
+    // Cancel + re-execute per step, as a live gesture does: nothing old may be lost.
+    for (let step = 0; step < 5; step++) {
+      d.cancelCoalesce('g');
+      d.execute(setX(1000 + step), { coalesceKey: 'g' });
+    }
+    expect(d.cancelCoalesce('g')).toBe(true);
+    d.execute(setX(300), { coalesceKey: 'h' });
+    d.execute(setX(200), { coalesceKey: 'h' }); // back to the start: net no-op
+    let undos = 0;
+    while (d.undo()) undos++;
+    expect(undos).toBe(200);
+    expect(d.floor.nodes.n1!.x).toBe(0);
   });
 
   it('undo event is inverted', () => {
@@ -515,5 +538,74 @@ describe('cancelCoalesce', () => {
     doc.execute(moveNode('n3', { x: 4, y: 5 }));
     expect(doc.cancelCoalesce('g1')).toBe(false);
     expect(n2(doc)).toEqual({ x: 5, y: 0 });
+  });
+});
+
+describe('site and column plumbing', () => {
+  const sitePoints = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+  ];
+
+  it('site changes are undoable', () => {
+    const doc = H3xDocument.create();
+    const events: ChangeEvent[] = [];
+    doc.on('change', (e) => events.push(e));
+    const cmd: Command = {
+      label: 'site',
+      run: () => [
+        { kind: 'site', id: 'site', before: null, after: { id: 'site', points: sitePoints } },
+      ],
+    };
+    doc.execute(cmd);
+    expect(doc.project.site?.points).toEqual(sitePoints);
+    expect(events[0]!.changes[0]).toMatchObject({ kind: 'site', id: 'site' });
+    expect(doc.undo()).toBe(true);
+    expect(doc.project.site).toBeUndefined();
+    expect(events[1]!.changes[0]).toMatchObject({ kind: 'site', after: null });
+    expect(doc.redo()).toBe(true);
+    expect(doc.project.site?.points).toEqual(sitePoints);
+  });
+
+  it('passes the site to commands', () => {
+    const doc = H3xDocument.create();
+    doc.execute({
+      label: 'site',
+      run: () => [
+        { kind: 'site', id: 'site', before: null, after: { id: 'site', points: sitePoints } },
+      ],
+    });
+    let seen: unknown;
+    doc.execute({
+      label: 'peek',
+      run: (ctx) => {
+        seen = ctx.site;
+        return [];
+      },
+    });
+    expect(seen).toEqual({ id: 'site', points: sitePoints });
+  });
+
+  it('columns ids collide with other kinds', () => {
+    const doc = H3xDocument.create({ presets: testPresets });
+    doc.execute({
+      label: 'col',
+      run: () => [
+        {
+          kind: 'column',
+          id: 'c1',
+          before: null,
+          after: { id: 'c1', x: 0, y: 0, shape: 'round', width: 0.3, rotation: 0 },
+        },
+      ],
+    });
+    idOverride.next = 'c1';
+    try {
+      const cmd = addItem({ preset: 'sofa-3s-01', mount: 'floor', x: 1, y: 1, rotation: 0 });
+      expect(() => doc.execute(cmd)).toThrow(H3xValidationError);
+    } finally {
+      idOverride.next = null;
+    }
   });
 });

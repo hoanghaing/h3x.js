@@ -2,6 +2,9 @@ import type { Vec2 } from '../types';
 
 export const EPS = 1e-9;
 
+/** Rounds to 1e-9 m so computed offsets / coordinates do not carry float noise. */
+export const tidy = (n: number): number => Math.round(n * 1e9) / 1e9;
+
 export const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });
 export const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
 export const scale = (a: Vec2, k: number): Vec2 => ({ x: a.x * k, y: a.y * k });

@@ -94,12 +94,40 @@ passed as `presets`.
   `setWallLength(wallId, length, { anchor? })` (`anchor: 'a'` default keeps node `a` fixed and
   moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items stay
   where they are relative to the fixed end (their distance from node `a`, or from node `b` with
-  `anchor: 'b'`), and are re-fitted into range on the resized wall. Topology (adding / removing
-  nodes and walls) is fixed in this release.
+  `anchor: 'b'`), and are re-fitted into range on the resized wall. These do not re-sync rooms.
+- Structure: `addWall({ from, to, thickness, height? })` draws a wall; each end is
+  `{ node: id }` or `{ at: { x, y } }`. An `at` end within `GEOM_TOL` of a node reuses it, one on
+  a wall splits that wall (T-junction); the new wall is cut at every node it passes through and
+  every wall it crosses (that wall is split too); ends already joined by a wall are a no-op. After execute, `createdId` is the
+  wall touching `from` (the existing one on a no-op) and `endNodeId` the node at `to`.
+  Rejections: `invalid-thickness` (thickness, or height when given, not a finite number above
+  0), `wall-too-short`, `walls-overlap` (collinear overlap with a wall), `split-too-short` (a
+  crossing too close to a wall end).
+  `splitWall(wallId, at)` (`at` projected onto the wall; the original id keeps the
+  half from node `a`; `createdId` is the new node), `removeWall(wallId)` (also deletes its
+  openings, wall items and nodes left without walls), `removeNode(nodeId)` (degree 2 merges the
+  two walls into one straight wall, keeping the first wall id; otherwise deletes the node and
+  its walls), `mergeNodes(keep, drop)` (re-attaches the walls of `drop` to `keep`; walls that
+  would loop are deleted; of duplicate walls the one with more openings + wall items survives,
+  then the smaller id), `dropNode(nodeId, { node } | { wall, at })` (moves a node onto a node or
+  a wall point, T-junction, in one step; onto itself or its own wall is `invalid-target`),
+  `pushPullWall(wallId, distance)` (moves a wall along its left normal, `+` = left of `a -> b`;
+  per end a free end moves, a single neighbour along the normal slides, otherwise a connector wall
+  copying thickness / height makes a square bump-out or recess; a connector below
+  `MIN_WALL_LENGTH` is `wall-too-short`; `|distance| < GEOM_TOL` changes nothing).
+  Openings / wall items are re-based and clamped into range. Each is one undo step
+  and re-syncs rooms (rooms keep their id and name where they overlap most). Rejections:
+  `split-too-short`, `split-cuts-opening`, `merge-drops-opening`, `push-pull-cuts-opening`,
+  `invalid-target`.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
   `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
   `removeItem(id)`. `addOpening` / `addItem` expose `createdId`.
+- Columns and site: `addColumn({ x, y, shape, width, depth?, rotation?, height? })` (exposes
+  `createdId`), `moveColumn(id, patch)`, `removeColumn(id)`; columns do not touch rooms; sizes
+  not above 0 or above the limit, or a `height` not above 0, are `column-size`.
+  `setSite(points | null)` sets the ground outline (stored counter-clockwise; fewer than 3 points
+  or a non-finite coordinate is `site-invalid`; `null` clears).
 - Finishes and names: `setWallFinish(wallId, side, finish)`, `setRoomFinish(roomId, finish)`,
   `renameRoom(roomId, name)`.
 
@@ -109,26 +137,37 @@ Validators return `Issue { code, ids, message }`. Layout edits are never blocked
 issues on items or openings that a layout change causes are flagged by `validatePlacements()`
 instead. Only entities touched by a change can block it.
 
-| Code                               | Meaning                                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| `wall-too-short`                   | wall shorter than `MIN_WALL_LENGTH` (0.3 m)                                                 |
-| `walls-cross`                      | two walls that do not share a node intersect                                                |
-| `room-degenerate`                  | room outline not simple, flipped, or inner area below `MIN_ROOM_AREA`                       |
-| `opening-out-of-wall`              | opening does not fit in its wall's usable range                                             |
-| `opening-overlap`                  | two openings on one wall overlap                                                            |
-| `opening-too-tall`                 | sill + height above the wall height                                                         |
-| `wall-item-out-of-range`           | wall item outside its wall's usable range or height                                         |
-| `wall-item-on-opening`             | wall item covers an opening                                                                 |
-| `outside-room`                     | floor / ceiling item not fully inside a room                                                |
-| `hits-wall`                        | floor item overlaps a wall                                                                  |
-| `hits-item`                        | floor item overlaps another floor item (`layer: 'covering'` presets, like rugs, are exempt) |
-| `invalid-number`                   | a command produced NaN or Infinity                                                          |
-| `unknown-preset`, `mount-mismatch` | preset missing or wrong mount for the command                                               |
-| `not-found`                        | referenced id does not exist                                                                |
-| `duplicate-id`                     | a create command was run twice                                                              |
-| `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                     |
-| `room-open`                        | room walls do not form a closed loop (from room geometry helpers)                           |
-| `non-finite-number`                | `projectToXML` was given a non-finite number                                                |
+| Code                               | Meaning                                                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `wall-too-short`                   | wall shorter than `MIN_WALL_LENGTH` (0.3 m)                                                                               |
+| `walls-cross`                      | two walls that do not share a node intersect                                                                              |
+| `room-degenerate`                  | room outline not simple, flipped, a hole crossing it or overlapping another hole, or net inner area below `MIN_ROOM_AREA` |
+| `column-size`                      | column width or depth not above 0 or above 2 m, or height (when set) not above 0                                          |
+| `columns-overlap`                  | two columns overlap (reported only)                                                                                       |
+| `site-not-simple`                  | site outline self-intersects (reported only)                                                                              |
+| `opening-out-of-wall`              | opening does not fit in its wall's usable range                                                                           |
+| `opening-overlap`                  | two openings on one wall overlap                                                                                          |
+| `opening-too-tall`                 | sill + height above the wall height                                                                                       |
+| `wall-item-out-of-range`           | wall item outside its wall's usable range or height                                                                       |
+| `wall-item-on-opening`             | wall item covers an opening                                                                                               |
+| `outside-room`                     | floor / ceiling item not fully inside a room                                                                              |
+| `hits-wall`                        | floor item overlaps a wall                                                                                                |
+| `hits-item`                        | floor item overlaps another floor item (`layer: 'covering'` presets, like rugs, are exempt)                               |
+| `invalid-number`                   | a command produced NaN or Infinity                                                                                        |
+| `unknown-preset`, `mount-mismatch` | preset missing or wrong mount for the command                                                                             |
+| `not-found`                        | referenced id does not exist                                                                                              |
+| `duplicate-id`                     | a create command was run twice                                                                                            |
+| `walls-overlap`                    | `addWall` would overlap an existing wall collinearly                                                                      |
+| `invalid-thickness`                | `addWall` thickness, or height when given, not a finite number above 0                                                    |
+| `invalid-target`                   | `mergeNodes` / `dropNode` onto the node itself or one of its own walls                                                    |
+| `site-invalid`                     | `setSite` with fewer than 3 points or a non-finite coordinate                                                             |
+| `split-too-short`                  | a split would leave a wall part below `MIN_WALL_LENGTH`                                                                   |
+| `push-pull-cuts-opening`           | a slid neighbour wall gets too short for an opening / wall item on it                                                     |
+| `split-cuts-opening`               | a split cuts an opening / wall item that cannot fit in the half holding its center                                        |
+| `merge-drops-opening`              | removing a node would merge walls into one too short for its openings / wall items                                        |
+| `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                                                   |
+| `room-open`                        | room walls do not form a closed loop (from room geometry helpers)                                                         |
+| `non-finite-number`                | `projectToXML` was given a non-finite number                                                                              |
 
 The usable range along a wall is shortened at each end by half the thickness of the thickest
 other wall meeting there (and, for openings, at least `OPENING_END_MARGIN`), so nothing sits
@@ -138,9 +177,20 @@ inside a corner. Standalone checks: `validateLayout(floor)`,
 
 ### Rooms
 
-`detectRooms(floor)` finds closed wall loops (used when a file has no `<room>` elements);
-`roomPolygon(floor, room, 'center' | 'inner')` and `roomArea(floor, room, kind)` give room
-outlines and areas. Rooms are stored in counter-clockwise wall order.
+`detectRooms(floor)` finds the faces of the wall graph as `DetectedRoom { walls, nodes, holes }`
+(used when a file has no `<room>` elements). A room is stored as its outer wall loop in
+counter-clockwise order plus optional `holes` (wall loops, clockwise) for free-standing wall
+boxes inside it, such as a light well. `roomPolygon(floor, room, 'center' | 'inner')` gives the
+outer outline, `roomShape(floor, room, kind)` the outline and the hole outlines
+(`{ outer, holes }`), and `roomArea(floor, room, kind)` the outer area minus the holes.
+`polygonOverlapArea(a, b)` is the area two simple polygons share.
+
+Structural commands re-sync rooms with the faces of the wall graph, keeping identity by overlap:
+when a room is split, the bigger part keeps its id, name and finish and the smaller part gets a
+new id, an empty name and the same floor finish; when rooms merge, the bigger one is kept and
+the others are deleted. This runs over all rooms of the floor, so on the first structural edit
+a room loaded from a file that is not a face of the wall graph is replaced: it is re-fitted to
+the face it overlaps most, or deleted when it overlaps none.
 
 ### XML
 
@@ -209,8 +259,9 @@ pnpm dev   # http://localhost:5173
 ## h3x/plan
 
 `h3x/plan` draws an `H3xDocument` as an SVG plan you can pan, zoom, select in and edit: drag
-nodes and walls, nudge with the keyboard, and ask for a typed wall length. It does not need
-`three`, only a DOM (`h3x/core` and the package root stay DOM-free).
+nodes and walls, nudge with the keyboard, draw walls, site outlines and columns, and ask for a
+typed wall length. It does not need `three`, only a DOM (`h3x/core` and the package root stay
+DOM-free).
 
 ```ts
 import { H3xDocument } from 'h3x/core';
@@ -235,15 +286,17 @@ both views.
   around the cursor, and two fingers pinch and pan. The view follows its container's size. The
   svg sets `touch-action: none` so touch gestures reach the plan instead of scrolling the page.
 - **Selection.** `plan.selection` is `{ kind, id } | null` (`kind`: `'node'`, `'wall'`,
-  `'room'`, `'opening'` or `'item'`); `plan.select(sel)` sets it (an unknown id selects
-  nothing). Clicking selects nodes and walls. `plan.getElement(kind, id)` returns the entity's
-  `<g>`.
+  `'room'`, `'opening'`, `'item'`, `'column'` or `'site'`); `plan.select(sel)` sets it (an
+  unknown id selects nothing). Clicking selects nodes, walls, columns and the site outline.
+  `plan.getElement(kind, id)` returns the entity's `<g>`.
 - **Events.** `plan.on(type, fn)` returns an unsubscribe function.
   - `selectionchange` receives the new `Selection | null`, only when it changes.
   - `lengthEditRequest` receives `{ wallId, length, anchor, anchorRect }` when the user
     double-clicks a wall's dimension label. `length` is in meters, `anchor` is the end the
     plan suggests keeping fixed, and `anchorRect` is the label's rect in px, so you can place
     an input over it.
+  - `segmentLengthRequest` receives `{ from, direction, length }` when a drawing tool starts a
+    wall segment (see the tools below).
   - `issues` receives `{ rejected, standing }`. `rejected` holds the issues of the last
     rejected edit (flashed for 600 ms, then cleared with another event). `standing` holds the
     layout and placement issues of the document as it is now.
@@ -261,14 +314,38 @@ both views.
   leaves a plan that only pans and zooms. A `Tool` implements `activate(ctx)`, `deactivate()`
   and optionally `onPointerDown / Move / Up`, `onDoubleClick` and `onKeyDown`, which receive
   plan and screen coordinates and the hit target. `SelectEditTool` supports:
-  - click a node or wall to select it, click empty space to clear;
+  - click a node, wall, column or the site outline to select it, click empty space to clear;
   - drag a node, or a wall (it moves along its normal). A drag snaps to a 5 cm grid and to
     alignment with other nodes (guide lines are drawn); hold **Alt** to disable snapping. The
     whole drag is one undo step;
   - **Esc** during a drag cancels it with no undo or redo trace (`doc.cancelCoalesce`); with no
     drag it clears the selection;
   - arrow keys nudge the selected node or wall by 1 cm, **Shift** + arrow by 10 cm (up is +y);
-  - double-click a dimension label to request a length edit.
+  - double-click a dimension label to request a length edit;
+  - double-click a wall to insert a point (`splitWall`); a node dropped onto a node or wall joins
+    it (`mergeNodes` / `dropNode`);
+  - **Delete** / **Backspace** removes the selected node (`removeNode`), wall (`removeWall`),
+    column (`removeColumn`) or site outline (`setSite(null)`);
+  - **Shift** + drag a wall pushes / pulls it (`pushPullWall`), growing a bump-out or recess;
+  - drag a column to move it (`moveColumn`).
+
+  Drawing tools, activated with `plan.setTool(...)`:
+
+  - `new DrawWallTool({ thickness?, height? })` (defaults 0.2 m and the floor's wall height):
+    click to set the start, every further click commits a wall (`addWall`, one undo step) and
+    continues from its end. A click on the chain's start, a node or a wall ends the chain, as do
+    double-click and **Enter**; **Esc** drops the preview (committed walls stay); **Backspace**
+    undoes the last click; **Alt** disables snapping.
+  - `new DrawSiteTool()`: click the vertices of the site outline; a click on the first vertex,
+    **Enter** or double-click closes it (`setSite`); **Esc** cancels.
+  - `new ColumnTool({ shape?, width?, depth? })` (`'square'` 0.3 m by default): one click places a
+    column (`addColumn`) and selects it.
+
+  `DrawWallTool` fires `segmentLengthRequest` (`{ from, direction, length }`) whenever a new
+  segment starts. The editor shows its own input, then calls
+  `plan.setPendingSegmentLength(length)`, which commits a wall of exactly that length along the
+  preview direction and returns `false` when nothing is pending or `length` is not a finite
+  number above 0.
 
   Length labels show on the selected wall, on the walls of a selected or dragged node, and,
   with nothing selected, on walls that border fewer than two rooms.
@@ -283,8 +360,8 @@ presets?, tool? })`. Defaults: grid shown, `snap` 0.05 m with alignment on, pref
   `h3x-plan`, `presets` taken from the document.
 - **Styling.** The plan injects a stylesheet scoped under the root class (`h3x-plan`, or your
   `classPrefix`); override it with more specific rules. Every entity is a `<g>` with class
-  `h3x-plan-<kind>` (`node`, `wall`, `room`, `opening`, `item`) and attributes `data-h3x-kind`
-  and `data-h3x-id`. Junction fills carry `data-h3x-node` (class `h3x-plan-join`) and dimension
+  `h3x-plan-<kind>` (`node`, `wall`, `room`, `opening`, `item`, `column`, `site`) and
+  attributes `data-h3x-kind` and `data-h3x-id`. Junction fills carry `data-h3x-node` (class `h3x-plan-join`) and dimension
   labels `data-h3x-wall` (class `h3x-plan-dimension`). State classes on entity elements:
   `h3x-plan-selected`, `h3x-plan-invalid` (the entity is in a standing issue) and
   `h3x-plan-rejected` (flashed after a rejected edit).
@@ -292,8 +369,13 @@ presets?, tool? })`. Defaults: grid shown, `snap` 0.05 m with alignment on, pref
   on `dispose()`, which also drops the document subscription and listeners and can be called
   more than once. It does not dispose the document.
 
-The example page shows the plan and the 3D view side by side on one document, with a demo input
-wired to `lengthEditRequest` (`pnpm dev`).
+In 3D, columns, the site outline (a line loop on the ground around the house) and floors with
+holes (inner light wells) are rendered too. Columns and `<site>` are stored as their own XML
+elements; see [docs/xml-format.md](docs/xml-format.md).
+
+The example page shows the plan and the 3D view side by side on one document, with a throwaway
+toolbar (select, draw wall, draw site, columns, clear, sample house) and demo inputs wired to
+`lengthEditRequest` and `segmentLengthRequest` (`pnpm dev`).
 
 ## Tolerance
 

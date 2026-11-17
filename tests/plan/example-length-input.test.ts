@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { H3xDocument, type Project } from '../../src/core';
 import { H3xPlan } from '../../src/plan/H3xPlan';
-import { attachLengthInput } from '../../examples/lengthInput';
+import { attachLengthInput, attachSegmentLengthInput } from '../../examples/lengthInput';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
 
 let plan: H3xPlan | undefined;
@@ -65,6 +65,36 @@ describe('attachLengthInput', () => {
     const { plan: p, host } = setup();
     const detach = attachLengthInput(p, host);
     p.emitLengthEditRequest('w1');
+    detach();
+    expect(host.querySelector('input')).toBeNull();
+  });
+});
+
+describe('attachSegmentLengthInput', () => {
+  const request = { from: { x: 0, y: 0 }, direction: { x: 1, y: 0 }, length: 0 };
+
+  it('calls setPendingSegmentLength on Enter and closes on Esc', () => {
+    const { plan: p, host } = setup();
+    const spy = vi.spyOn(p, 'setPendingSegmentLength').mockReturnValue(true);
+    attachSegmentLengthInput(p, host);
+
+    p.emitSegmentLengthRequest(request);
+    const input = host.querySelector('input') as HTMLInputElement;
+    input.value = '2.5';
+    key(input, 'Enter');
+    expect(spy).toHaveBeenCalledWith(2.5);
+
+    key(input, 'Escape');
+    expect(host.querySelector('input')).toBeNull();
+  });
+
+  it('ignores an empty value and removes the input on detach', () => {
+    const { plan: p, host } = setup();
+    const spy = vi.spyOn(p, 'setPendingSegmentLength').mockReturnValue(true);
+    const detach = attachSegmentLengthInput(p, host);
+    p.emitSegmentLengthRequest(request);
+    key(host.querySelector('input') as HTMLInputElement, 'Enter');
+    expect(spy).not.toHaveBeenCalled();
     detach();
     expect(host.querySelector('input')).toBeNull();
   });

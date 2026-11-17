@@ -27,6 +27,7 @@ function floorOf(
     openings: {},
     rooms: {},
     items: {},
+    columns: {},
   };
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFloorGeometry } from '../../src/three/floors';
-import { oneRoomFloor } from '../fixtures/floors';
+import { holedRoomFloor, oneRoomFloor } from '../fixtures/floors';
 import { groupArea, groupFaceNormals, groupNormals } from './helpers';
 
 describe('buildFloorGeometry', () => {
@@ -25,5 +25,13 @@ describe('buildFloorGeometry', () => {
     const f = oneRoomFloor();
     f.nodes.n3 = { id: 'n3', x: -1, y: -1 };
     expect(buildFloorGeometry(f, f.rooms.r1!)).toBeNull();
+  });
+
+  it('subtracts hole area from the floor', () => {
+    const f = holedRoomFloor();
+    const g = buildFloorGeometry(f, f.rooms.r1!)!;
+    g.addGroup(0, g.getAttribute('position').count, 0);
+    // inner outer 9.8^2 minus hole outset to 2.2^2
+    expect(groupArea(g, 0)).toBeCloseTo(9.8 * 9.8 - 2.2 * 2.2, 4);
   });
 });

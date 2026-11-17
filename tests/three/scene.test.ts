@@ -19,6 +19,7 @@ describe('H3xScene', () => {
       'h3x-walls',
       'h3x-floors',
       'h3x-joins',
+      'h3x-columns',
     ]);
     for (const id of ['w1', 'w2', 'w3', 'w4']) {
       const m = scene.getWallMesh(id)!;

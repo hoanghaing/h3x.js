@@ -1,12 +1,6 @@
 import type { Command } from '../document/changes';
-import { H3xValidationError } from '../errors';
 import type { Id } from '../types';
-
-function notFound(what: string, id: Id): H3xValidationError {
-  return new H3xValidationError([
-    { code: 'not-found', ids: [id], message: `${what} ${id} does not exist` },
-  ]);
-}
+import { notFound } from './shared';
 
 export function setWallFinish(
   wallId: Id,

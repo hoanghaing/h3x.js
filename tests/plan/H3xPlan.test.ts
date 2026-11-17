@@ -1,16 +1,26 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { H3xDocument, moveNode, type Floor, type Project } from '../../src/core';
+import {
+  H3xDocument,
+  addColumn,
+  moveColumn,
+  moveNode,
+  setSite,
+  type Floor,
+  type Project,
+} from '../../src/core';
 import { computeJoins } from '../../src/shared/walls/joins';
 import { H3xPlan } from '../../src/plan/H3xPlan';
 import { DEFAULT_CSS } from '../../src/plan/style';
-import { oneRoomFloor, testPresets } from '../fixtures/floors';
+import { holedRoomFloor, oneRoomFloor, testPresets } from '../fixtures/floors';
 
 const LAYERS = [
   'grid',
+  'site',
   'rooms',
   'walls',
   'joins',
+  'columns',
   'openings',
   'items',
   'dimensions',
@@ -181,13 +191,11 @@ describe('H3xPlan document sync', () => {
   it('undo restores the original points', () => {
     const plan = makePlan();
     const original = ['w1', 'w2', 'w3', 'w4'].map((id) => points(plan, id));
-    const room = plan.getElement('room', 'r1')!.querySelector('polygon')!.getAttribute('points');
+    const room = plan.getElement('room', 'r1')!.querySelector('path')!.getAttribute('d');
     plan.doc.execute(moveNode('n2', { x: 5, y: 0 }));
     plan.doc.undo();
     expect(['w1', 'w2', 'w3', 'w4'].map((id) => points(plan, id))).toEqual(original);
-    expect(plan.getElement('room', 'r1')!.querySelector('polygon')!.getAttribute('points')).toBe(
-      room,
-    );
+    expect(plan.getElement('room', 'r1')!.querySelector('path')!.getAttribute('d')).toBe(room);
   });
 
   it('updates the dimension text after a move', () => {
@@ -295,5 +303,52 @@ describe('H3xPlan dispose', () => {
     expect(w1.querySelector('polygon')!.getAttribute('points')).toBe(pts);
     expect(() => window.dispatchEvent(new Event('resize'))).not.toThrow();
     expect(() => plan.dispose()).not.toThrow();
+  });
+});
+
+describe('H3xPlan columns, site and holes', () => {
+  it('adds, keeps, and removes a column element', () => {
+    const plan = makePlan();
+    const cmd = addColumn({ x: 2, y: 2, shape: 'round', width: 0.4 });
+    plan.doc.execute(cmd);
+    const el = plan.getElement('column', cmd.createdId);
+    expect(el).toBeDefined();
+    expect(el!.parentElement!.getAttribute('class')).toBe('h3x-plan-layer-columns');
+    expect(el!.querySelector('circle')!.getAttribute('r')).toBe('0.2');
+    plan.doc.execute(moveColumn(cmd.createdId, { x: 3 }));
+    expect(plan.getElement('column', cmd.createdId)).toBe(el);
+    expect(el!.querySelector('circle')!.getAttribute('cx')).toBe('3');
+    plan.doc.undo();
+    plan.doc.undo();
+    expect(plan.getElement('column', cmd.createdId)).toBeUndefined();
+    expect(el!.isConnected).toBe(false);
+  });
+
+  it('renders the site as one dashed polygon under the rooms, removed on undo', () => {
+    const plan = makePlan();
+    plan.doc.execute(
+      setSite([
+        { x: -2, y: -2 },
+        { x: 8, y: -2 },
+        { x: 8, y: 8 },
+        { x: -2, y: 8 },
+      ]),
+    );
+    const el = plan.getElement('site', 'site');
+    expect(el!.parentElement!.getAttribute('class')).toBe('h3x-plan-layer-site');
+    expect(el!.querySelector('polygon')!.getAttribute('points')).toBe('-2,-2 8,-2 8,8 -2,8');
+    plan.doc.undo();
+    expect(plan.getElement('site', 'site')).toBeUndefined();
+  });
+
+  it('draws a holed room as an even-odd path and re-renders it when a hole wall moves', () => {
+    const plan = makePlan(holedRoomFloor());
+    const path = plan.getElement('room', 'r1')!.querySelector('path')!;
+    expect(path.getAttribute('fill-rule')).toBe('evenodd');
+    expect(path.getAttribute('d')!.match(/M/g)).toHaveLength(2);
+    const before = path.getAttribute('d');
+    plan.doc.execute(moveNode('hn0', { x: 3, y: 4 }));
+    expect(plan.getElement('room', 'r1')!.querySelector('path')).toBe(path);
+    expect(path.getAttribute('d')).not.toBe(before);
   });
 });
