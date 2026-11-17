@@ -51,7 +51,7 @@ Constants: `MIN_WALL_LENGTH` = 0.3 m, `MIN_ROOM_AREA` = 1.0 m2.
 | `column-unsupported`   | column on an upper floor with no column below whose centre is within 0.01 m (`validateLayout` only)                                                                                                               | `validateLayout` only: reported, never blocks       | the column          |
 | `stair-no-floor-above` | stair on the top floor, nothing to reach (`validateLayout` only)                                                                                                                                                  | `validateLayout` only: reported, never blocks       | the stair           |
 | `stair-does-not-fit`   | stair flights do not fit the bay for the current rise (e.g. after `setFloorHeight`; `validateLayout` only)                                                                                                        | `validateLayout` only: reported, never blocks       | the stair           |
-| `stair-overlaps-wall`  | stair bay overlaps a wall outline by more than 1e-4 m2 (touching is fine; `validateLayout` only)                                                                                                                  | `validateLayout` only: reported, never blocks       | the stair, the wall |
+| `stair-overlaps-wall`  | stair outline (`stairOutline`) overlaps a drawn wall outline by more than 1e-4 m2 (touching is fine; `validateLayout` only)                                                                                       | `validateLayout` only: reported, never blocks       | the stair, the wall |
 | `site-not-simple`      | site outline self-intersects (`validateLayout` checks `project.site`)                                                                                                                                             | `validateLayout` only: reported                     | `site`              |
 | `opening-out-of-wall`  | opening outside its wall's usable range (see Placement)                                                                                                                                                           | in `validateLayout`: reported only                  | the opening         |
 
@@ -67,8 +67,8 @@ command moved a node (then reported only, via `validatePlacements`).
 | `opening-too-tall`       | `sill + height` above the wall height                                                      | opening, wall |
 | `wall-item-out-of-range` | wall item outside the usable range, or elevation outside `0 .. wall height - item height`  | item, wall    |
 | `wall-item-on-opening`   | wall item's rectangle covers an opening                                                    | item, opening |
-| `outside-room`           | floor or ceiling item footprint not fully inside a room's inner polygon                    | item          |
-| `hits-wall`              | floor item footprint overlaps a wall                                                       | item, wall    |
+| `outside-room`           | floor or ceiling item footprint not fully inside a room's inner polygon, or over a hole    | item          |
+| `hits-wall`              | floor item footprint overlaps a drawn (mitred) wall outline by more than `GEOM_TOL`        | item, wall    |
 | `hits-item`              | floor item overlaps another floor item; presets with `layer: 'covering'` (rugs) are exempt | both items    |
 | `unknown-preset`         | preset unknown to the `PresetResolver`                                                     | item          |
 

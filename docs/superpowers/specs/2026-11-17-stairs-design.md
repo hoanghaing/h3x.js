@@ -48,9 +48,12 @@ height changes, the steps recompute.
        edge for L, the −y edge for U).
      - `L` / `U` with winders: the slack goes to the bottom of the first flight, as for straight.
      - `spiral`: the open corners of the square opening are accepted.
-4. **Slab opening.** The floor directly above gets an opening equal to the stair bay (my call: the
-   whole bay — simple, always gives headroom). The slab and the room floors of that floor are cut
-   by it in 3D; in 2D the upper floor shows the opening.
+4. **Slab opening.** The floor directly above gets an opening equal to the stair outline
+   (`stairOutline`: the tight rectangle around the steps and landings in the stair's frame; the
+   diameter square for a spiral; the bay when the layout is not ok). This replaces the first
+   choice of the whole bay (user-approved follow-up): every plan object has one exact outline,
+   used for drawing, selection, hit-testing, validation, snapping and the opening. The slab and
+   the room floors of that floor are cut by it in 3D; in 2D the upper floor shows the opening.
 5. **Editing.** Commands `addStair`, `updateStair(id, patch)`, `removeStair` (each one undo step).
    A `StairTool` in the plan drags a bay (two corners, snapped like drawing) and adds a stair with
    default parameters. `SelectEditTool` selects, drags (moves) and deletes stairs. Changing type,
@@ -62,9 +65,11 @@ height changes, the steps recompute.
 7. **Validation (non-blocking warnings, so a storey-height change is never blocked):**
    - `stair-does-not-fit` — flights / winders / spiral headroom cannot fit the bay.
    - `stair-no-floor-above` — the stair is on the top floor.
-   - `stair-overlaps-wall` — a wall outline overlaps the bay interior by more than 1 cm² (touching
-     a wall face, the normal case for a bay inside a stairwell, does not count).
-     A stair with one of the first two warnings is drawn as its bay outline only.
+   - `stair-overlaps-wall` — a wall outline (as drawn, mitred at joins) overlaps the stair outline
+     by more than 1 cm² (touching a wall face, the normal case for a stair inside a stairwell, does
+     not count). A spiral whose square fits a room is fine even when its bay overhangs the walls.
+     A stair with one of the first two warnings is drawn as its outline only, which is then the
+     bay.
 8. **2D drawing** (on the stair's floor): steps as lines, the walking line with an arrow from the
    first riser, the label "UP" (overridable, see below), and a diagonal break line across the first
    flight at about 1.2 m height; steps beyond the break are drawn dashed. On the floor above: the
@@ -156,7 +161,8 @@ type StairLayout =
       steps: { outline: Vec2[]; top: number }[]; // plan polygons, world coords; top above floor
       landings: { outline: Vec2[]; top: number }[];
       walkLine: Vec2[]; // from first riser to last
-      opening: Vec2[]; // bay rectangle, world coords
+      opening: Vec2[]; // stair outline (stairOutline), world coords
+      bay: Vec2[]; // bay rectangle (stairBay), world coords
     };
 ```
 
@@ -187,8 +193,8 @@ there is no floor above. Pure, deterministic, unit-tested per type and turn styl
 - `buildStairGeometry(layout, floor)` → BufferGeometry (steps + waist + landings / winders /
   spiral + centre column) and a handrail geometry; meshes `h3xKind: 'stair'`, `h3xId`,
   `h3xFloorId`, in the stair floor's `FloorView`.
-- The slab and room floors of the floor above get holes for every opening of the stairs on the
-  floor below (clip the opening polygon out; builder picks the clipping approach, e.g. treating the
+- The slab and room floors of the floor above get holes for the outline (`stairOutline`, not the
+  bay) of every stair on the floor below (clip the opening polygon out; builder picks the clipping approach, e.g. treating the
   opening as an extra hole where it lies inside, clipping where it crosses).
 - Rebuild rules: a stair change rebuilds its floor and the floor above (opening); a `'floor'`
   change already rebuilds affected floors.
@@ -196,13 +202,15 @@ there is no floor above. Pure, deterministic, unit-tested per type and turn styl
 ### 2D (`h3x/plan`)
 
 - New plan kind `stair` rendered from `layoutStair` (steps, walking line + arrow, label, break
-  line, dashed steps beyond); bay outline only when the layout is not ok; `invalid` styling from
+  line, dashed steps beyond) inside one frame, the stair outline (class `-stair-outline`; the bay
+  when the layout is not ok); `invalid` styling from
   the warnings as for other kinds.
 - The floor above shows a non-interactive layer with the openings and the stairs seen from above,
   labelled "DN" (reuse / extend the M5 underlay layer).
 - `StairTool` (drag a bay; Esc cancels), selection / move / delete in `SelectEditTool`;
-  hit-testing on the bay rectangle. Bay corners snap to the corners of room inner outlines (wall
-  faces) first, then to the grid, so a bay dragged inside a stairwell room sits on the wall faces
+  hit-testing on the stair outline. While drawing, bay corners snap to the corners of room inner
+  outlines (wall faces) first, then to the grid; when a stair is dragged, its outline corners snap
+  the same way, so a bay dragged inside a stairwell room sits on the wall faces
   and does not trigger `stair-overlaps-wall` (my call: nodes are wall centrelines and would overlap
   half of each wall).
 - Plan option `stairLabels`.
