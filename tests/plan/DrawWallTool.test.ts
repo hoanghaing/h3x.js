@@ -135,6 +135,15 @@ describe('DrawWallTool', () => {
     expect(previewLines(plan)).toHaveLength(0);
   });
 
+  it('clicking a wall 0.2 m from a corner ends the chain on the corner node', () => {
+    const plan = makePlan();
+    click(plan, { x: 7, y: 0.2 });
+    click(plan, { x: 4, y: 0.2 });
+    expect(plan.issues.rejected).toEqual([]);
+    expect(wallCount(plan)).toBe(5);
+    expect(hasWallBetween(plan, { x: 7, y: 0.2 }, { x: 4, y: 0 })).toBe(true);
+  });
+
   it('clicking an existing node ends the chain', () => {
     const plan = makePlan();
     click(plan, { x: 7, y: 4 });
@@ -227,6 +236,18 @@ describe('DrawWallTool', () => {
     expect(requests[1]!.from).toEqual({ x: 13, y: 0 });
     fire(plan, 'pointermove', { x: 13, y: 2 });
     expect(previewFrom(plan)).toEqual({ x: 13, y: 0 });
+  });
+
+  it('setPendingSegmentLength ignores a non-finite or non-positive length', () => {
+    const plan = makePlan();
+    click(plan, { x: 10, y: 0 });
+    fire(plan, 'pointermove', { x: 11.3, y: 0 });
+    for (const len of [0, -2, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(plan.setPendingSegmentLength(len)).toBe(false);
+    }
+    expect(wallCount(plan)).toBe(4);
+    expect(plan.issues.rejected).toEqual([]);
+    expect(previewFrom(plan)).toEqual({ x: 10, y: 0 });
   });
 
   it('a rejected click flashes the issue and leaves the chain unchanged', () => {

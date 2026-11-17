@@ -554,10 +554,24 @@ describe('SelectEditTool structural gestures', () => {
     expect(plan.issues.rejected).toEqual([]);
     fire(plan, 'pointermove', { x: 5, y: 1.5 }, { shiftKey: true });
     expect(node(plan, plan.doc.floor.walls[mid]!.a).x).toBe(5);
-    // Back below the minimum: stays at the last good state.
+    // Back below the minimum: the earlier bump-out is dropped, the document is unchanged.
     fire(plan, 'pointermove', { x: 4.1, y: 1.5 }, { shiftKey: true });
-    expect(node(plan, plan.doc.floor.walls[mid]!.a).x).toBe(5);
+    expect(plan.doc.floor).toEqual(before);
+    expect(plan.issues.rejected).toEqual([]);
     key(plan, 'Escape');
+    expect(plan.doc.floor).toEqual(before);
+    fire(plan, 'pointerup', { x: 4.1, y: 1.5 }, { shiftKey: true });
+    expect(plan.doc.floor).toEqual(before);
+    plan.doc.undo();
+    expect(Object.keys(plan.doc.floor.nodes)).toHaveLength(5); // the second split was undone
+  });
+
+  it('push / pull out and back below the minimum, released: a no-op', () => {
+    const plan = makePlan();
+    middleSegment(plan);
+    const before = structuredClone(plan.doc.floor);
+    drag(plan, { x: 4, y: 1.5 }, { x: 5, y: 1.5 }, 3, { shiftKey: true }, true);
+    fire(plan, 'pointermove', { x: 4.1, y: 1.5 }, { shiftKey: true });
     expect(plan.doc.floor).toEqual(before);
     fire(plan, 'pointerup', { x: 4.1, y: 1.5 }, { shiftKey: true });
     expect(plan.doc.floor).toEqual(before);
@@ -617,6 +631,24 @@ describe('SelectEditTool structural gestures', () => {
     expect(wallBetween(plan, t!, nodeAt(plan, { x: 2, y: 1 })!)).toBeDefined();
     plan.doc.undo();
     expect(plan.doc.floor).toEqual(before);
+  });
+
+  it('a node dropped onto a wall 0.2 m from its corner joins the corner node', () => {
+    const plan = makePlan();
+    const add = addWall({
+      from: { at: { x: 2, y: 1 } },
+      to: { at: { x: 2, y: 3 } },
+      thickness: 0.2,
+    });
+    plan.doc.execute(add);
+    const free = add.endNodeId;
+    drag(plan, { x: 2, y: 3 }, { x: 3.8, y: 4.02 }, 5, {}, true);
+    expect(dropMarks(plan)).toBe(1);
+    fire(plan, 'pointerup', { x: 3.8, y: 4.02 });
+    expect(plan.issues.rejected).toEqual([]);
+    expect(plan.doc.floor.nodes[free]).toBeUndefined();
+    expect(wallBetween(plan, 'n3', nodeAt(plan, { x: 2, y: 1 })!)).toBeDefined();
+    expect(plan.selection).toEqual({ kind: 'node', id: 'n3' });
   });
 
   it('dragging off the target again moves the node and clears the mark', () => {

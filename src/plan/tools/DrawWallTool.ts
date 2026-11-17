@@ -101,10 +101,14 @@ export class DrawWallTool implements Tool {
     return false;
   }
 
-  /** Commits the current segment at `length` along the preview direction; false without one. */
+  /**
+   * Commits the current segment at `length` along the preview direction; false without one or
+   * when `length` is not a finite positive number.
+   */
   setPendingSegmentLength(length: number): boolean {
     const last = this.chain.last;
     if (!this.ctx || !last || !this.dir) return false;
+    if (!(Number.isFinite(length) && length > 0)) return false;
     return this.commit(add(last.at, scale(this.dir, length)), { kind: 'free' });
   }
 
