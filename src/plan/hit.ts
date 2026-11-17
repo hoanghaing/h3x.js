@@ -1,5 +1,5 @@
 import type { Floor, Id, PresetResolver, Room, Site } from '../core';
-import { H3xValidationError, roomShape, stairBay } from '../core';
+import { H3xValidationError, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { WallCorners } from '../shared/walls/joins';
@@ -17,6 +17,8 @@ export interface HitScene {
   dimensions: Array<{ wallId: Id; rect: Rect }>;
   presets?: PresetResolver;
   site?: Readonly<Site>;
+  /** Rise of `floor`'s stairs to the floor above (`stairRise`); NaN / absent: stairs hit on their bay. */
+  stairRise?: number;
 }
 
 const NODE_TOLERANCE_PX = 8;
@@ -82,8 +84,9 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     if (fp && pointInPolygon(p, fp)) return { kind: 'item', id: item.id };
   }
 
+  const rise = scene.stairRise ?? NaN;
   for (const stair of Object.values(floor.stairs)) {
-    if (pointInPolygon(p, stairBay(stair))) return { kind: 'stair', id: stair.id };
+    if (pointInPolygon(p, stairOutline(stair, rise))) return { kind: 'stair', id: stair.id };
   }
 
   for (const room of Object.values(floor.rooms)) {

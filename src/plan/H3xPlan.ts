@@ -263,6 +263,7 @@ export class H3xPlan {
       dimensions: [...this.dom.dimensionRects].map(([wallId, rect]) => ({ wallId, rect })),
       presets: this.presets,
       site: this.doc.project.site,
+      stairRise: this.stairRise(),
     };
     return hitTest(scene, s);
   }
@@ -586,11 +587,16 @@ export class H3xPlan {
       presets: this.presets,
       site: this.doc.project.site,
       stairs: {
-        rise: stairRise(this.doc.floor, this.doc.floorAbove(this.doc.activeFloorId)),
+        rise: this.stairRise(),
         labels: this.stairLabels,
         prefix: this.prefix,
       },
     };
+  }
+
+  /** @internal Rise of the active floor's stairs to the floor above (NaN on the top floor). */
+  stairRise(): number {
+    return stairRise(this.doc.floor, this.doc.floorAbove(this.doc.activeFloorId));
   }
 
   private refreshDimensions(): void {

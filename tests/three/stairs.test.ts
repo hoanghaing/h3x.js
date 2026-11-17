@@ -309,6 +309,25 @@ describe('H3xScene stairs', () => {
     }
   });
 
+  it('the hole is the stair outline, not the bay (spiral square in a 3.4 × 4.85 bay)', () => {
+    const { doc, upper } = twoStorey();
+    doc.execute(addStair({ x: 4, y: 3, width: 3.4, depth: 4.85, type: 'spiral' }));
+    const scene = new H3xScene(doc);
+    const slab = scene.getSlabMesh(upper.id)!.geometry;
+    expect(hasTriangleAt(slab, 4, 4.5)).toBe(false); // inside the 3.4 square (y 1.3 … 4.7)
+    expect(hasTriangleAt(slab, 4, 5.1)).toBe(true); // inside the bay only
+    expect(hasTriangleAt(slab, 4, 0.9)).toBe(true);
+  });
+
+  it('a straight flight narrower than its bay cuts only the flight side', () => {
+    const { doc, upper } = twoStorey();
+    doc.execute(addStair({ ...STRAIGHT, width: 2, flightWidth: 1 }));
+    const scene = new H3xScene(doc);
+    const slab = scene.getSlabMesh(upper.id)!.geometry;
+    expect(hasTriangleAt(slab, 4.5, 3)).toBe(false); // the flight (hand right: x 4 … 5)
+    expect(hasTriangleAt(slab, 3.5, 3)).toBe(true); // the empty half of the bay
+  });
+
   it('removeStair then undo brings the hole and the stair mesh back', () => {
     const { doc, upper } = twoStorey();
     const cmd = addStair(STRAIGHT);

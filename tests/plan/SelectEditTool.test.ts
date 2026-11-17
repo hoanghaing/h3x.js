@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   H3xDocument,
   addColumn,
+  addFloor,
   addStair,
   addWall,
   moveNode,
@@ -815,5 +816,55 @@ describe('SelectEditTool stairs', () => {
       drag(plan, { x: 2.1, y: 12.475 }, { x: 2.1, y: 12.775 });
       expect(bay(plan).y).toBeCloseTo(12.775, 9);
     });
+  });
+});
+
+describe('SelectEditTool stair outline', () => {
+  /** One room with 3.4 × 3.4 inner faces (0.2 walls, nodes 0..3.6) and a floor above. */
+  function squareRoom(): H3xPlan {
+    const f = oneRoomFloor();
+    f.openings = {};
+    f.nodes = {
+      n1: { id: 'n1', x: 0, y: 0 },
+      n2: { id: 'n2', x: 3.6, y: 0 },
+      n3: { id: 'n3', x: 3.6, y: 3.6 },
+      n4: { id: 'n4', x: 0, y: 3.6 },
+    };
+    const doc = docOf(f);
+    doc.execute(addFloor({ position: 'above' }));
+    doc.setActiveFloor(f.id);
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+    document.body.appendChild(el);
+    const plan = new H3xPlan(el, doc, { snap: { align: true } });
+    plan.setView({ cx: 4, cy: 2, scale: 80 });
+    plans.push(plan);
+    return plan;
+  }
+
+  it('a spiral dragged into a room snaps its square (not its bay) onto the wall faces', () => {
+    const plan = squareRoom();
+    const add = addStair({ x: 7, y: 1.8, width: 3.4, depth: 4.85, type: 'spiral' });
+    plan.doc.execute(add);
+    // grab inside the square and drop it 3 cm off the centre of the room
+    drag(plan, { x: 7, y: 1.8 }, { x: 1.83, y: 1.82 });
+    const st = plan.doc.floor.stairs[add.createdId]!;
+    expect(st.x).toBeCloseTo(1.8, 9);
+    expect(st.y).toBeCloseTo(1.8, 9);
+    const above = plan.doc.floorAbove(plan.doc.activeFloorId);
+    expect(validateStairs(plan.doc.floor, above).map((w) => w.code)).toEqual([]);
+  });
+
+  it('a press inside the bay but outside the outline does not grab the stair', () => {
+    const plan = squareRoom();
+    const add = addStair({ x: 7, y: 1.8, width: 3.4, depth: 4.85, type: 'spiral' });
+    plan.doc.execute(add);
+    fire(plan, 'pointerdown', { x: 7, y: 3.9 }); // in the bay, above the 3.4 square
+    fire(plan, 'pointerup', { x: 7, y: 3.9 });
+    expect(plan.selection).toBeNull();
+    fire(plan, 'pointerdown', { x: 7, y: 3.4 });
+    fire(plan, 'pointerup', { x: 7, y: 3.4 });
+    expect(plan.selection).toEqual({ kind: 'stair', id: add.createdId });
   });
 });
