@@ -11,6 +11,7 @@ import {
 } from '../../src/core';
 import { H3xPlan, type H3xPlanOptions } from '../../src/plan/H3xPlan';
 import { DEFAULT_CSS } from '../../src/plan/style';
+import { firstAboveCut } from '../../src/plan/stairs';
 
 /** A U stair with a landing, 2.2 × 4.5 m, centred at (5, 5). */
 const uStair = (over: Partial<Stair> = {}): Stair => ({
@@ -176,5 +177,34 @@ describe('plan stairs: floor above', () => {
     plan.doc.undo(); // a stair change on the floor below the active one
     expect(plan.doc.activeFloorId).toBe('u');
     expect(below(plan).querySelectorAll(`.${P}-stair-opening`)).toHaveLength(1);
+  });
+});
+
+describe('plan stairs: marks and cut', () => {
+  it('invalid and selected strokes win over the stair colours', () => {
+    const css = DEFAULT_CSS(P);
+    const after = (selector: string): void => {
+      const at = css.indexOf(selector);
+      expect(at).toBeGreaterThan(css.indexOf(`.${P}-stair .${P}-stair-break`));
+    };
+    // Same specificity as the stair rules plus an element, and later in the sheet.
+    after(`.${P}-stair.${P}-invalid polygon`);
+    after(`.${P}-stair.${P}-invalid path`);
+    after(`.${P}-stair.${P}-rejected polygon`);
+    after(`.${P}-stair.${P}-selected polygon`);
+    after(`.${P}-stair.${P}-selected path`);
+  });
+
+  it('the break line goes at the lowest piece above the cut, landings included', () => {
+    const sq = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+    ];
+    const steps = [0.5, 1.0, 1.5].map((top) => ({ outline: sq, top }));
+    const landing = { outline: sq, top: 1.3 };
+    expect(firstAboveCut(steps, [landing])).toBe(landing);
+    expect(firstAboveCut(steps, [])).toBe(steps[2]);
+    expect(firstAboveCut(steps.slice(0, 2), [])).toBeUndefined();
   });
 });
