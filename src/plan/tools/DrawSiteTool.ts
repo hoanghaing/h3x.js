@@ -75,7 +75,7 @@ export class DrawSiteTool implements Tool {
       this.points[this.points.length - 1],
       (e.native as MouseEvent).altKey,
       this.points,
-      { structure: false },
+      { structure: false, site: false },
     );
   }
 

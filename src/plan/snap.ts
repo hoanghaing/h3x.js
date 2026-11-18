@@ -96,7 +96,7 @@ export function snapDraw(
     extra?: Vec2[];
     structure?: boolean;
     exclude?: Id[];
-    /** Site outline; its corners and edges are snap targets (not affected by `structure`). */
+    /** Site outline; its corners and edges are snap targets (ignores `structure` and `exclude`; callers omit it to turn site snapping off). */
     site?: readonly Vec2[];
   },
 ): DrawSnapResult {

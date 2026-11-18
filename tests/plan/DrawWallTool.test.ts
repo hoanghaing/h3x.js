@@ -329,4 +329,26 @@ describe('DrawWallTool', () => {
     click(plan, { x: 19.96, y: 10.03 });
     expect(hasWallBetween(plan, { x: 10, y: 10 }, { x: 20, y: 10 })).toBe(true);
   });
+
+  it('Alt disables site snapping', () => {
+    const plan = makePlan();
+    plan.doc.execute(
+      setSite([
+        { x: 10, y: 10 },
+        { x: 20, y: 10 },
+        { x: 20, y: 18 },
+        { x: 10, y: 18 },
+      ]),
+    );
+    const alt = { altKey: true };
+    const a = { x: 10.05, y: 10.04 };
+    const b = { x: 12.31, y: 10.77 };
+    fire(plan, 'pointermove', a, alt);
+    fire(plan, 'pointerdown', a, alt);
+    fire(plan, 'pointerup', a, alt);
+    fire(plan, 'pointermove', b, alt);
+    fire(plan, 'pointerdown', b, alt);
+    fire(plan, 'pointerup', b, alt);
+    expect(hasWallBetween(plan, a, b)).toBe(true);
+  });
 });
