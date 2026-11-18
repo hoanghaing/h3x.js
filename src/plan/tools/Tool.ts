@@ -21,7 +21,7 @@ export interface ToolContext {
    * Drawing snap (node > wall > site corner > site edge > alignment > 45-degree lock from `from` > grid); reach is 8 screen px.
    * `extra` adds alignment points; `structure: false` ignores node / wall targets; `exclude` nodes are
    * neither targets nor alignment points and their walls are not targets. Site corners and edges (the existing site outline) are targets
-   * regardless of `structure` / `exclude`; `site: false` turns them off. `disabled` returns `p` as a free target.
+   * regardless of `structure` / `exclude`, for drawing and for node / column / roof-vertex drags alike; `site: false` turns them off. `disabled` returns `p` as a free target.
    */
   snapDraw(
     p: Vec2,

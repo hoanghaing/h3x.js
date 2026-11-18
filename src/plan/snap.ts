@@ -86,6 +86,9 @@ const ANGLE_TOLERANCE = (5 * Math.PI) / 180;
  * wall targets are skipped (nodes still serve as alignment points). `exclude` nodes are neither
  * targets nor alignment points, and walls touching them are not targets. A wall hit closer than
  * `MIN_WALL_LENGTH` to an end of the wall (where a split would fail) snaps to that end node.
+ * Through `ToolContext.snapDraw` the plan passes the project site whenever there is one, so site
+ * corners and edges are targets for every tool using it: drawing (walls, columns, roofs) and
+ * node, column and roof-vertex drags in the select tool alike; `site: false` turns them off.
  */
 export function snapDraw(
   p: Vec2,
