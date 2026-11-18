@@ -47,6 +47,9 @@ export {
   setGroundElevation,
 } from './commands/floors';
 
+export { floorOutline } from './floors/outline';
+export type { OutlineRing } from './floors/outline';
+
 export { validateLayout } from './validate/layout';
 export { validateStairs, stairRise } from './validate/stairs';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';

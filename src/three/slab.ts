@@ -1,73 +1,10 @@
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from 'three';
-import { H3xValidationError, type Floor, type Id, type Vec2 } from '../core';
-import { MITER_LIMIT } from '../core/constants';
-import { roomNodeLoop } from '../core/rooms/detect';
-import { growPolygon, pointInPolygon, signedArea } from '../core/geometry/polygon';
+import type { Floor, Vec2 } from '../core';
+import { floorOutline } from '../core/floors/outline';
+import { pointInPolygon } from '../core/geometry/polygon';
 import { toWorld } from './coords';
 import { ccw, cutConvex, emitConvex, insideRing, keptPieces, triangulate2D } from './openings';
 import { TriangleSink } from './triangulate';
-
-interface Edge {
-  from: Id;
-  to: Id;
-  wall: Id;
-}
-
-/**
- * Directed boundary edges of the union of the floor's rooms (outer loops only), wound so
- * the union lies on the left. A wall shared by two rooms is traversed in both directions
- * and drops out.
- */
-function boundaryEdges(floor: Floor): Edge[] {
-  const byWall = new Map<Id, Edge[]>();
-  for (const room of Object.values(floor.rooms)) {
-    let loop: Id[];
-    try {
-      loop = roomNodeLoop(floor, room);
-    } catch (e) {
-      if (e instanceof H3xValidationError) continue;
-      throw e;
-    }
-    const pts = loop.map((id) => floor.nodes[id] as Vec2);
-    if (signedArea(pts) <= 0) continue; // flipped / degenerate: same rule as room floors
-    room.walls.forEach((wall, i) => {
-      const edge = { from: loop[i]!, to: loop[(i + 1) % loop.length]!, wall };
-      byWall.set(wall, [...(byWall.get(wall) ?? []), edge]);
-    });
-  }
-  return [...byWall.values()].filter((list) => list.length === 1).map((list) => list[0]!);
-}
-
-const turn = (floor: Floor, a: Edge, b: Edge): number => {
-  const p = floor.nodes[a.from]!;
-  const q = floor.nodes[a.to]!;
-  const r = floor.nodes[b.to]!;
-  const d1 = { x: q.x - p.x, y: q.y - p.y };
-  const d2 = { x: r.x - q.x, y: r.y - q.y };
-  return Math.atan2(d1.x * d2.y - d1.y * d2.x, d1.x * d2.x + d1.y * d2.y);
-};
-
-/** Chains boundary edges into closed loops, taking the most-left turn at shared nodes. */
-function chainLoops(floor: Floor, edges: Edge[]): Edge[][] {
-  const out = new Map<Id, Edge[]>();
-  for (const e of edges) out.set(e.from, [...(out.get(e.from) ?? []), e]);
-  const used = new Set<Edge>();
-  const loops: Edge[][] = [];
-  for (const start of edges) {
-    if (used.has(start)) continue;
-    const loop: Edge[] = [];
-    let cur: Edge | undefined = start;
-    while (cur && !used.has(cur)) {
-      used.add(cur);
-      loop.push(cur);
-      const prev: Edge = cur;
-      const next: Edge[] = (out.get(cur.to) ?? []).filter((e) => !used.has(e) || e === start);
-      cur = next.sort((x, y) => turn(floor, prev, y) - turn(floor, prev, x))[0];
-    }
-    if (cur === start && loop.length >= 3) loops.push(loop);
-  }
-  return loops;
-}
 
 /**
  * Floor slab: the outline of the floor's rooms grown to the outer wall faces (each
@@ -78,18 +15,10 @@ function chainLoops(floor: Floor, edges: Edge[]): Edge[][] {
  * null when the floor has no valid room.
  */
 export function buildSlabGeometry(floor: Floor, openings: Vec2[][] = []): BufferGeometry | null {
-  const rings = chainLoops(floor, boundaryEdges(floor)).map((loop) => {
-    const centre = loop.map((e) => floor.nodes[e.from] as Vec2);
-    const grown = growPolygon(
-      centre,
-      loop.map((e) => (floor.walls[e.wall]?.thickness ?? 0) / 2),
-      MITER_LIMIT,
-    ).points;
-    return { pts: grown, area: signedArea(centre) };
-  });
-  const outers = rings.filter((r) => r.area > 0);
+  const rings = floorOutline(floor).map((r) => ({ pts: r.points, hole: r.hole }));
+  const outers = rings.filter((r) => !r.hole);
   if (outers.length === 0) return null;
-  const holes = rings.filter((r) => r.area < 0);
+  const holes = rings.filter((r) => r.hole);
   const cuts = openings.filter((o) => o.length >= 3).map(ccw);
 
   const top = floor.elevation;
