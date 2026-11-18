@@ -1,6 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, Vector2, Vector3 } from 'three';
 import type { Floor, Roof, Vec2 } from '../core';
-import { roofGeometry, type RoofBody, type Vec3 } from '../core/roofs/geometry';
+import { roofGeometry, type RoofBody, type RoofGeometry, type Vec3 } from '../core/roofs/geometry';
 import { toWorld } from './coords';
 import { TriangleSink, triangulateInto } from './triangulate';
 
@@ -316,14 +316,19 @@ export interface RoofParts {
 }
 
 /**
- * Every body of a roof (`roofGeometry`) merged into one body, frame and posts geometry.
- * Failed roofs give their flat fallback; never throws (an unexpected error gives no parts).
+ * Every body of a roof (`roofGeometry`, or `geometry` when already built) merged into one
+ * body, frame and posts geometry. Failed roofs give their flat fallback; never throws (an
+ * unexpected error gives no parts).
  */
-export function buildRoofParts(roof: Roof, floor: Readonly<Floor>): RoofParts {
+export function buildRoofParts(
+  roof: Roof,
+  floor: Readonly<Floor>,
+  geometry?: RoofGeometry,
+): RoofParts {
   const none: RoofParts = { body: null, frame: null, posts: null };
   let bodies: RoofBody[];
   try {
-    bodies = roofGeometry(roof, floor).bodies;
+    bodies = (geometry ?? roofGeometry(roof, floor)).bodies;
   } catch {
     return none;
   }

@@ -1,5 +1,6 @@
 import { Group, Mesh, type BufferGeometry } from 'three';
-import { gableProfile, layoutStair, stairRise, type Floor, type Id, type Vec2 } from '../core';
+import { layoutStair, stairRise, type Floor, type Id, type Vec2 } from '../core';
+import { buildRoof, gableProfileFrom, type RoofGeometry, type Vec3 } from '../core/roofs/geometry';
 import { buildColumnGeometry } from './columns';
 import { buildFloorGeometry } from './floors';
 import type { MaterialLibrary } from './materials';
@@ -99,14 +100,24 @@ export class FloorView {
     const openings = ctx.openings ?? [];
     const { corners, junctions, risers } = computeJoins(f);
 
-    // Gable walls rise to pitched roofs; skip the profile search on floors without one.
-    const pitched = Object.values(f.roofs).some((r) => r.kind === 'pitched');
+    // Each roof is built once: its bodies feed the roof meshes, its gable faces the walls.
+    const built = new Map<Id, RoofGeometry>();
+    const gables: Vec3[][] = [];
+    for (const roof of Object.values(f.roofs)) {
+      try {
+        const b = buildRoof(roof, f);
+        built.set(roof.id, b.geometry);
+        if (roof.kind === 'pitched') gables.push(...b.gables);
+      } catch {
+        // buildRoofParts draws nothing for this roof; its walls keep their height
+      }
+    }
     const walls = new Map<Id, Built>();
     for (const wall of Object.values(f.walls)) {
       const wallCorners = corners[wall.id];
       if (!wallCorners) continue;
       walls.set(wall.id, {
-        geom: buildWallGeometry(f, wall.id, wallCorners, pitched ? profileOf(f, wall.id) : null),
+        geom: buildWallGeometry(f, wall.id, wallCorners, profileOf(f, wall.id, gables)),
         material: [
           this.materials.wall(wall.finishLeft),
           this.materials.wall(wall.finishRight),
@@ -153,7 +164,9 @@ export class FloorView {
     const frames = new Map<Id, Built>();
     const posts = new Map<Id, Built>();
     for (const roof of Object.values(f.roofs)) {
-      const parts = buildRoofParts(roof, f);
+      const geo = built.get(roof.id);
+      if (!geo) continue;
+      const parts = buildRoofParts(roof, f, geo);
       if (parts.body)
         roofs.set(roof.id, { geom: parts.body, material: this.materials.roof(roof.material) });
       if (parts.frame) frames.set(roof.id, { geom: parts.frame, material: this.materials.steel() });
@@ -208,9 +221,9 @@ export class FloorView {
 }
 
 /** The gable profile of a wall; a failure leaves the wall at its own height. */
-function profileOf(floor: Floor, wallId: Id): Vec2[] | null {
+function profileOf(floor: Floor, wallId: Id, gables: Vec3[][]): Vec2[] | null {
   try {
-    return gableProfile(floor, wallId);
+    return gableProfileFrom(floor, wallId, gables);
   } catch {
     return null;
   }

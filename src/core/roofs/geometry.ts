@@ -863,6 +863,26 @@ export function roofGeometry(roof: Roof, floor: Readonly<Floor>): RoofGeometry {
  * edge lies on the wall.
  */
 export function gableProfile(floor: Readonly<Floor>, wallId: Id): Vec2[] | null {
+  return gableProfileFrom(floor, wallId, floorGables(floor));
+}
+
+/** Gable vertical faces of every pitched roof on the floor (one build per roof). */
+function floorGables(floor: Readonly<Floor>): Vec3[][] {
+  return Object.values(floor.roofs).flatMap((roof) =>
+    roof.kind === 'pitched' ? buildRoof(roof, floor).gables : [],
+  );
+}
+
+/**
+ * `gableProfile` from already built gable faces (`buildRoof(...).gables` of the floor's
+ * pitched roofs), so a caller drawing every wall builds each roof once. Internal.
+ */
+export function gableProfileFrom(
+  floor: Readonly<Floor>,
+  wallId: Id,
+  gables: readonly Vec3[][],
+): Vec2[] | null {
+  if (gables.length === 0) return null;
   const w = floor.walls[wallId];
   const na = w && floor.nodes[w.a];
   const nb = w && floor.nodes[w.b];
@@ -872,21 +892,16 @@ export function gableProfile(floor: Readonly<Floor>, wallId: Id): Vec2[] | null 
   const dir = { x: (nb.x - na.x) / len, y: (nb.y - na.y) / len };
   const half = w.thickness / 2;
   const polys: Vec2[][] = [];
-  for (const roof of Object.values(floor.roofs)) {
-    if (roof.kind !== 'pitched') continue;
-    for (const g of buildRoof(roof, floor).gables) {
-      const offs = g.map((q) => (q.x - na.x) * dir.y - (q.y - na.y) * dir.x);
-      const side = Math.sign(offs[0]!);
-      if (
-        !offs.every((o) => Math.abs(Math.abs(o) - half) <= GABLE_WALL_TOL && Math.sign(o) === side)
-      )
-        continue;
-      const sz = g.map((q) => ({ x: (q.x - na.x) * dir.x + (q.y - na.y) * dir.y, y: q.z }));
-      const lo = Math.min(...sz.map((q) => q.x));
-      const hi = Math.max(...sz.map((q) => q.x));
-      if (Math.min(hi, len) - Math.max(lo, 0) <= GEOM_TOL) continue;
-      polys.push(sz);
-    }
+  for (const g of gables) {
+    const offs = g.map((q) => (q.x - na.x) * dir.y - (q.y - na.y) * dir.x);
+    const side = Math.sign(offs[0]!);
+    if (!offs.every((o) => Math.abs(Math.abs(o) - half) <= GABLE_WALL_TOL && Math.sign(o) === side))
+      continue;
+    const sz = g.map((q) => ({ x: (q.x - na.x) * dir.x + (q.y - na.y) * dir.y, y: q.z }));
+    const lo = Math.min(...sz.map((q) => q.x));
+    const hi = Math.max(...sz.map((q) => q.x));
+    if (Math.min(hi, len) - Math.max(lo, 0) <= GEOM_TOL) continue;
+    polys.push(sz);
   }
   if (polys.length === 0) return null;
   const xs = [...new Set(polys.flat().map((q) => q.x))].sort((a, b) => a - b);
