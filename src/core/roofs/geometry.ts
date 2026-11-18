@@ -349,6 +349,44 @@ function makePosts(
   return out;
 }
 
+/**
+ * Splits a region (outer ring, then holes; non-crossing) into vertical trapezoids: one strip
+ * between each pair of consecutive vertex x values, cut where the boundary crosses it (even-odd
+ * rule). Every piece is convex, so the pieces cover the region exactly with the holes left open.
+ */
+function trapezoids(rings: Vec2[][]): Vec2[][] {
+  const edges = rings.flatMap((ring) =>
+    ring
+      .map((a, i) => [a, at(ring, i + 1)] as const)
+      .filter(([a, b]) => Math.abs(b.x - a.x) > TINY),
+  );
+  const xs = [...new Set(rings.flat().map((p) => p.x))].sort((a, b) => a - b);
+  const out: Vec2[][] = [];
+  for (let k = 0; k + 1 < xs.length; k++) {
+    const x0 = xs[k]!;
+    const x1 = xs[k + 1]!;
+    if (x1 - x0 <= TINY) continue;
+    const xm = (x0 + x1) / 2;
+    const yAt = (a: Vec2, b: Vec2, x: number): number =>
+      a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x);
+    const cuts = edges
+      .filter(([a, b]) => Math.min(a.x, b.x) < xm && Math.max(a.x, b.x) > xm)
+      .map(([a, b]) => ({ y0: yAt(a, b, x0), y1: yAt(a, b, x1), ym: yAt(a, b, xm) }))
+      .sort((u, v) => u.ym - v.ym);
+    for (let c = 0; c + 1 < cuts.length; c += 2) {
+      const lo = cuts[c]!;
+      const hi = cuts[c + 1]!;
+      out.push([
+        { x: x0, y: lo.y0 },
+        { x: x1, y: lo.y1 },
+        { x: x1, y: hi.y1 },
+        { x: x0, y: hi.y0 },
+      ]);
+    }
+  }
+  return out;
+}
+
 /** Flat slab (also the fallback): horizontal faces at the eaves, optional parapet. */
 function flatBody(
   roof: Roof,
@@ -373,25 +411,15 @@ function flatBody(
   });
   let faces: RoofFace[] = [flatFace(grown[0]!.points.map((p) => v3(p, eaves)))];
   if (rings.length > 1 && opts.grow) {
-    // Holes: split the slab into one simple piece per edge (an all-equal skeleton, flattened).
-    const res = weightedSkeleton({ rings, speed: rings.map((r) => r.map(() => 1)) });
-    if (res.ok) {
-      faces = res.patches.flatMap((p) => {
-        const poly = clean(p.polygon.map((q) => ({ x: q.x, y: q.y, z: eaves })));
-        return poly && !isVertical(poly) ? [flatFace(poly)] : [];
-      });
-      rings.forEach((ring, r) => {
-        faces.push(
-          ...stripFaces(
-            ring,
-            grown[r]!.per,
-            eaves,
-            () => () => eaves,
-            (_, poly) => flatFace(poly),
-          ),
-        );
-      });
-    }
+    // Holes: cut the slab into convex pieces around them. The holes grow into the well by the
+    // overhang; if that leaves invalid rings (a well narrower than two overhangs), the slab
+    // keeps to the outline around the holes.
+    const grownRings = grown.map((g) => g.points);
+    const region = validRings(grownRings) ? grownRings : [grownRings[0]!, ...rings.slice(1)];
+    faces = trapezoids(region).flatMap((q) => {
+      const poly = clean(q.map((p) => v3(p, eaves)));
+      return poly ? [flatFace(poly)] : [];
+    });
   }
   const parapet = opts.parapet ? (roof.parapet ?? 0) : 0;
   const bottom = eaves + roof.thickness;
@@ -775,8 +803,37 @@ function pitchOf(poly: Vec3[]): number {
   return deg(Math.acos(Math.min(1, Math.abs(n.z) / Math.hypot(n.x, n.y, n.z))));
 }
 
-/** Geometry plus the warning (if any) and gable faces; shared by `roofGeometry`, `validateRoofs`, `gableProfile`. */
+/**
+ * Geometry plus the warning (if any) and gable faces; shared by `roofGeometry`, `validateRoofs`,
+ * `gableProfile`. Never throws: an unexpected error gives a flat fallback of the independent
+ * outline (no body for a follow roof) and `roof-build-failed`.
+ */
 export function buildRoof(roof: Roof, floor: Readonly<Floor>): Built {
+  try {
+    return buildRoofUnchecked(roof, floor);
+  } catch {
+    const eaves = floor.elevation + floor.wallHeight + roof.base;
+    let bodies: RoofBody[] = [];
+    const raw = [roof.points ?? [], ...(roof.holes ?? [])];
+    if (!roof.follow && raw[0]!.length >= 3) {
+      try {
+        bodies = [flatBody(roof, floor, raw, eaves, { grow: false, parapet: false })];
+      } catch {
+        bodies = [];
+      }
+    }
+    return {
+      geometry: { ok: false, bodies },
+      issue: {
+        code: 'roof-build-failed',
+        message: `Roof ${roof.id} could not be built; drawn flat instead`,
+      },
+      gables: [],
+    };
+  }
+}
+
+function buildRoofUnchecked(roof: Roof, floor: Readonly<Floor>): Built {
   const eaves = floor.elevation + floor.wallHeight + roof.base;
   let plans: Plan[];
   if (roof.follow) {
@@ -823,7 +880,7 @@ export function buildRoof(roof: Roof, floor: Readonly<Floor>): Built {
     try {
       built = pitchedBody(roof, floor, p, eaves);
     } catch {
-      built = null;
+      built = null; // this body falls back to flat; the others still build
     }
     if (built) {
       bodies.push(built.body);
