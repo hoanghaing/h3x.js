@@ -3,7 +3,7 @@ import { weightedSkeleton } from '../../src/core/roofs/skeleton';
 import type { SkeletonPatch, SkeletonResult } from '../../src/core/roofs/skeleton';
 import { signedArea, isSimple } from '../../src/core/geometry/polygon';
 import { floorOutline } from '../../src/core/floors/outline';
-import { acuteFloor, trapezoidFloor } from '../fixtures/irregular';
+import { acuteFloor, skewLFloor, trapezoidFloor } from '../fixtures/irregular';
 import type { Vec2 } from '../../src/core/types';
 
 type P3 = { x: number; y: number; z: number };
@@ -234,7 +234,25 @@ describe('weightedSkeleton', () => {
       weightedSkeleton({ rings: [ring], speed: [[0, 0, 0, 1, 1, 0]] }),
       signedArea(ring),
     );
-    expect(patches.some((p) => pitchOf(p.polygon) < 1e-6)).toBe(true);
+    const caps = patches.filter((p) => p.cap);
+    expect(caps.length).toBeGreaterThanOrEqual(1);
+    caps.forEach((p) => expect(pitchOf(p.polygon)).toBeLessThan(1e-6));
+    patches.filter((p) => !p.cap).forEach((p) => expect(p.cap).toBeUndefined());
+  });
+
+  it('flags the flat caps of a shed over the skewed L outline', () => {
+    const ring = floorOutline(skewLFloor())[0]!.points;
+    const { patches } = checkAll(
+      weightedSkeleton({ rings: [ring], speed: [ring.map((_, i) => (i === 1 ? 1 : 0))] }),
+      signedArea(ring),
+    );
+    const caps = patches.filter((p) => p.cap === true);
+    expect(caps.length).toBeGreaterThanOrEqual(1);
+    caps.forEach((p) => {
+      expect(pitchOf(p.polygon)).toBeLessThan(1e-6);
+      const z = p.polygon[0]!.z;
+      p.polygon.forEach((q) => expect(q.z).toBeCloseTo(z, 9));
+    });
   });
 
   it('rejects self-intersecting input and all-gable input', () => {

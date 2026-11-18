@@ -12,12 +12,28 @@ export interface SkeletonInput {
   breakAt?: { at: number; upper: number[][] };
 }
 
+/**
+ * One planar piece of the roof surface. One input edge can yield several
+ * patches (its sloped face, vertical connector steps where it meets a
+ * collinear edge of another pitch, its upper-stage face after a break, or raw
+ * strips when merging falls back), so consumers group patches by
+ * `(ring, edge)`.
+ */
 export interface SkeletonPatch {
-  /** Source edge: ring index and edge index in the input. */
+  /**
+   * Source edge: ring index and edge index in the input. Meaningless on a
+   * `cap` patch — do not use it there.
+   */
   ring: number;
   edge: number;
   /** Planar polygon in 3D plan coords (x, y, z = height above eaves). */
   polygon: { x: number; y: number; z: number }[];
+  /**
+   * Set on horizontal caps closing a region walled in by gables / vertical
+   * steps that no slope sweeps (e.g. a shed over an L). Its ring/edge are
+   * arbitrary.
+   */
+  cap?: true;
 }
 
 export type SkeletonResult =
@@ -72,6 +88,10 @@ const at = <T>(arr: T[], i: number): T => arr[((i % arr.length) + arr.length) % 
  * vertex linearly to the next event height, emits the swept strip of every
  * wavefront edge, then rebuilds the wavefront (merging coincident vertices,
  * splitting / joining rings, cancelling overlapping opposite edges).
+ *
+ * Patches are grouped per input edge only loosely: an edge may yield several
+ * patches (see `SkeletonPatch`), and horizontal `cap` patches carry an
+ * arbitrary ring/edge that must not be used to look up edge properties.
  */
 export function weightedSkeleton(input: SkeletonInput): SkeletonResult {
   if (!validInput(input)) return { ok: false, reason: 'invalid-input' };
@@ -122,7 +142,12 @@ export function weightedSkeleton(input: SkeletonInput): SkeletonResult {
       }
       for (const r of rings) {
         const src = faces[r.edges[0]!.face]!;
-        caps.push({ ring: src.ring, edge: src.edge, polygon: r.pts.map((p) => ({ ...p, z: h })) });
+        caps.push({
+          ring: src.ring,
+          edge: src.edge,
+          polygon: r.pts.map((p) => ({ ...p, z: h })),
+          cap: true,
+        });
       }
       break;
     }
