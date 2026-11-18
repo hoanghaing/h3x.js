@@ -297,6 +297,76 @@ describe('roof commands', () => {
     expect(codeOf(() => d.execute(updateRoof('nope', { pitch: 40 })))).toBe('not-found');
   });
 
+  it('updateRoof clears optional fields given as null; one undo restores', () => {
+    const d = doc();
+    const c = addRoof({ preset: 'mansard', rooms: ['r1'], supports: 'posts', postSpacing: 2 });
+    d.execute(c);
+    const before = structuredClone(d.floor.roofs[c.createdId]!);
+    expect(before).toMatchObject({ breakHeight: 1.5, upperPitch: 30, supports: 'posts' });
+    d.execute(
+      updateRoof(c.createdId, {
+        supports: null,
+        postSpacing: null,
+        breakHeight: null,
+        upperPitch: null,
+        preset: null,
+      }),
+    );
+    const r = d.floor.roofs[c.createdId]!;
+    for (const k of ['supports', 'postSpacing', 'breakHeight', 'upperPitch', 'preset']) {
+      expect(k in r, k).toBe(false);
+    }
+    d.undo();
+    expect(d.floor.roofs[c.createdId]).toEqual(before);
+  });
+
+  it('updateRoof rejects a follow change (use detachRoof / fitRoofToWalls)', () => {
+    const d = doc();
+    const c = addRoof({ rooms: ['r1'] });
+    d.execute(c);
+    let err: unknown;
+    try {
+      d.execute(updateRoof(c.createdId, { follow: false }));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(H3xValidationError);
+    expect((err as H3xValidationError).issues[0]!.code).toBe('invalid-roof');
+    expect((err as H3xValidationError).message).toMatch(/detachRoof|fitRoofToWalls/);
+    expect(d.floor.roofs[c.createdId]!.follow).toBe(true);
+    // the same value is not a change
+    expect(() => d.execute(updateRoof(c.createdId, { follow: true }))).not.toThrow();
+  });
+
+  it('a break height needs an upper pitch and the reverse', () => {
+    const d = doc();
+    const c = addRoof({ rooms: ['r1'] });
+    d.execute(c);
+    expect(codeOf(() => d.execute(updateRoof(c.createdId, { breakHeight: 1.5 })))).toBe(
+      'invalid-roof',
+    );
+    expect(codeOf(() => d.execute(updateRoof(c.createdId, { upperPitch: 20 })))).toBe(
+      'invalid-roof',
+    );
+    expect(
+      codeOf(() =>
+        d.execute(
+          setRoofEdge(c.createdId, { wallId: 'w1' }, { kind: 'slope', pitch: 40, breakHeight: 1 }),
+        ),
+      ),
+    ).toBe('invalid-roof');
+    expect(
+      codeOf(() =>
+        d.execute(
+          setRoofEdge(c.createdId, { wallId: 'w1' }, { kind: 'slope', pitch: 40, upperPitch: 20 }),
+        ),
+      ),
+    ).toBe('invalid-roof');
+    expect(
+      codeOf(() => d.execute(updateRoof(c.createdId, { breakHeight: 1, upperPitch: 20 }))),
+    ).toBe(undefined);
+  });
+
   it('removeRoof removes and undo restores', () => {
     const d = doc();
     const c = addRoof({ rooms: ['r1'] });

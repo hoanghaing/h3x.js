@@ -45,7 +45,7 @@ export {
   removeRoof,
   validateRoofParams,
 } from './commands/roofs';
-export type { NewRoof } from './commands/roofs';
+export type { NewRoof, RoofPatch } from './commands/roofs';
 export { ROOF_PRESETS, presetEdges, presetWallEdges } from './roofs/presets';
 export type { RoofPresetId, RoofPreset } from './roofs/presets';
 export { parseRoofEdge, formatRoofEdge } from './roofs/edges';

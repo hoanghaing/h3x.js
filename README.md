@@ -195,9 +195,10 @@ steel posts under a light roof. See [docs/xml-format.md](docs/xml-format.md) for
   stays editable. `presetEdges(id, ring)` and `presetWallEdges(id, ring)` return the edge specs a
   preset gives to an outline.
 - Commands: `addRoof({ preset?, rooms?, points?, ...fields })` (`createdId`; follow mode unless
-  `points` are given), `updateRoof(id, patch)` (alias `setRoofParams`), `setRoofEdge(id, { index,
-hole? } | { wallId }, edge)`, `detachRoof(id)` (turns a follow roof independent; extra
-  disjoint outlines become new roofs, listed in the command's `newIds`),
+  `points` are given), `updateRoof(id, patch)` (alias `setRoofParams`; `null` removes an optional
+  field such as `supports`; `follow` cannot change there),
+  `setRoofEdge(id, { index, hole? } | { wallId }, edge)`, `detachRoof(id)` (turns a follow roof
+  independent; extra disjoint outlines become new roofs, listed in the command's `newIds`),
   `fitRoofToWalls(id, rooms?)` and `removeRoof(id)`. Bad input is `invalid-roof`
   (`validateRoofParams`); `fromProject` and `fromXML` reject such a roof too.
 - Geometry: `roofGeometry(roof, floor)` returns `{ ok, bodies }` with every face (polygons in 3D),

@@ -27,6 +27,9 @@ function validEdge(e: RoofEdge | undefined): string | undefined {
     return 'breakHeight must be finite and > 0';
   }
   if (e.upperPitch !== undefined && !angle(e.upperPitch)) return 'upperPitch must be in (0, 90)';
+  if ((e.breakHeight === undefined) !== (e.upperPitch === undefined)) {
+    return 'needs both breakHeight and upperPitch, or neither';
+  }
   return undefined;
 }
 
@@ -35,7 +38,8 @@ function validEdge(e: RoofEdge | undefined): string | undefined {
  * (0, 90), non-finite or negative sizes, a follow roof without `rooms` (empty is fine), an
  * independent roof with fewer than 3 points, a pitched one whose `edges` do not match the points
  * one to one (a flat one may leave `edges` out), holes with fewer than 3 points, `holeEdges`
- * not matching their hole, or a malformed edge spec.
+ * not matching their hole, a malformed edge spec, or a break height without an upper pitch (or
+ * the reverse) on the roof or on an edge.
  */
 export function validateRoofParams(r: Roof): Issue[] {
   const out: Issue[] = [];
@@ -54,6 +58,9 @@ export function validateRoofParams(r: Roof): Issue[] {
     bad('Roof breakHeight must be finite and > 0');
   }
   if (r.upperPitch !== undefined && !angle(r.upperPitch)) bad('Roof upperPitch must be in (0, 90)');
+  if ((r.breakHeight === undefined) !== (r.upperPitch === undefined)) {
+    bad('Roof needs both breakHeight and upperPitch, or neither');
+  }
   if (!finite(r.base)) bad('Roof base must be finite');
   for (const k of ['overhang', 'gableOverhang'] as const) {
     if (!finite(r[k]) || r[k] < 0) bad(`Roof ${k} must be finite and >= 0`);
@@ -201,16 +208,42 @@ function getRoof(floor: Readonly<Floor>, id: Id): Roof {
   return r;
 }
 
-/** Applies the given (not undefined) fields of `patch`; no change returns []. */
-export function updateRoof(id: Id, patch: Partial<Omit<Roof, 'id'>>): Command {
+type OptionalRoofKey = {
+  [K in keyof Roof]-?: undefined extends Roof[K] ? K : never;
+}[keyof Roof];
+
+/**
+ * A patch for `updateRoof`: a value sets the field, `undefined` (or leaving it out) keeps it,
+ * and `null` removes an optional field.
+ */
+export type RoofPatch = {
+  [K in Exclude<keyof Roof, 'id'>]?: K extends OptionalRoofKey ? Roof[K] | null : Roof[K];
+};
+
+/**
+ * Applies the given fields of `patch`: a value sets the field, `undefined` keeps it, `null`
+ * removes an optional one (e.g. `{ supports: null }`, or `{ breakHeight: null, upperPitch: null }`
+ * to drop a roof-wide break). Changing `follow` is rejected (`invalid-roof`): use `detachRoof` /
+ * `fitRoofToWalls`, which convert the outline. No change returns [].
+ */
+export function updateRoof(id: Id, patch: RoofPatch): Command {
   return {
     label: 'updateRoof',
     run: (ctx) => {
       const r = getRoof(ctx.floor, id);
+      if (patch.follow !== undefined && patch.follow !== r.follow) {
+        throw fail(
+          'invalid-roof',
+          [id],
+          'updateRoof cannot change follow: use detachRoof or fitRoofToWalls',
+        );
+      }
       const after = structuredClone(r);
+      const rec = after as unknown as Record<string, unknown>;
       for (const k of ROOF_KEYS) {
         const v = patch[k];
-        if (v !== undefined) (after as unknown as Record<string, unknown>)[k] = structuredClone(v);
+        if (v === null) delete rec[k];
+        else if (v !== undefined) rec[k] = structuredClone(v);
       }
       if (deepEqual(r, after)) return [];
       check(after);
