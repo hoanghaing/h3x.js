@@ -49,6 +49,8 @@ export type { NewRoof } from './commands/roofs';
 export { ROOF_PRESETS, presetEdges, presetWallEdges } from './roofs/presets';
 export type { RoofPresetId, RoofPreset } from './roofs/presets';
 export { parseRoofEdge, formatRoofEdge } from './roofs/edges';
+export { roofGeometry, roofFaceArea, gableProfile } from './roofs/geometry';
+export type { Vec3, RoofFace, RoofBody, RoofGeometry, RoofLineKind } from './roofs/geometry';
 export { layoutStair, stairBay, stairOutline, stairParams } from './stairs/layout';
 export type { StairLayout, StairParam, StairPiece } from './stairs/layout';
 export * from './stairs/constants';
@@ -66,6 +68,7 @@ export type { OutlineRing } from './floors/outline';
 
 export { validateLayout } from './validate/layout';
 export { validateStairs, stairRise } from './validate/stairs';
+export { validateRoofs } from './validate/roofs';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';
 export { detectRooms, roomPolygon, roomShape, roomArea } from './rooms/detect';
 export type { DetectedRoom } from './rooms/detect';
