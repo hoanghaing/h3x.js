@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as core from '../../src/core';
 import { H3xDocument, addRoof, moveNode, type Floor } from '../../src/core';
 import { H3xPlan } from '../../src/plan/H3xPlan';
 import { planToScreen } from '../../src/plan/view';
@@ -96,5 +97,27 @@ describe('plan roofs', () => {
     expect(plan.hitAt(at(plan, -2, 0.6))).toBeNull();
     plan.setRoofsVisible(false);
     expect(plan.hitAt(at(plan, 2, 1))).toEqual({ kind: 'room', id: 'r1' });
+  });
+
+  it('the light hatch fill is inline so the stylesheet fill:none cannot override it', () => {
+    const { doc, plan } = setup();
+    doc.execute(addRoof({ preset: 'hip', rooms: ['r1'], follow: true, material: 'glass' }));
+    const light = roofG(plan).querySelector<SVGElement>(`.${P}-roof-light`)!;
+    expect(light.getAttribute('style')).toMatch(/fill:\s*url\(#/);
+  });
+
+  it('hit testing reuses the geometry cached at render time and tracks wall moves', () => {
+    const { doc, plan } = setup();
+    const c = addRoof({ preset: 'hip', rooms: ['r1'], follow: true });
+    doc.execute(c);
+    const spy = vi.spyOn(core, 'roofGeometry');
+    expect(plan.hitAt(at(plan, 2, 1))).toEqual({ kind: 'roof', id: c.createdId });
+    expect(plan.hitAt(at(plan, -2, 0.6))).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    doc.execute(moveNode('n3', { x: 8, y: 4 }));
+    spy.mockClear();
+    expect(plan.hitAt(at(plan, 5, 3))).toEqual({ kind: 'roof', id: c.createdId });
+    expect(spy.mock.calls.length).toBeLessThanOrEqual(1); // recomputed once, at re-sync
+    spy.mockRestore();
   });
 });

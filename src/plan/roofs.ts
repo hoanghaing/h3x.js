@@ -1,4 +1,11 @@
-import { roofGeometry, type Floor, type Roof, type RoofFace, type Vec2 } from '../core';
+import {
+  roofGeometry,
+  type RoofGeometry,
+  type Floor,
+  type Roof,
+  type RoofFace,
+  type Vec2,
+} from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import { NON_SCALING, pointsAttr, screenSpaceTransform, svgEl } from './render';
@@ -86,9 +93,9 @@ export function roofOwnShapes(
   floor: Readonly<Floor>,
   view: View,
   prefix: string,
+  geo: RoofGeometry = roofGeometry(roof, floor),
 ): SVGElement[] {
   const out: SVGElement[] = [];
-  const geo = roofGeometry(roof, floor);
   const light = roof.material === 'glass' || roof.material === 'polycarbonate';
   const hatchId = `${prefix}-roof-hatch-${roof.id}`;
   if (light) {
@@ -113,7 +120,8 @@ export function roofOwnShapes(
           class: `${prefix}-roof-light`,
           d: ringsPath(body.overhangOutline),
           'fill-rule': 'evenodd',
-          fill: `url(#${hatchId})`,
+          // Inline style: the stylesheet's `fill: none` for roof paths would override an attribute.
+          style: `fill:url(#${hatchId})`,
           ...NON_SCALING,
         }),
       );
@@ -186,8 +194,25 @@ export function roofOwnShapes(
  * Whether plan point `p` hits a roof: within `reach` (m) of an outline edge or a ridge / hip /
  * valley line, or inside the overhang outline (holes excluded).
  */
-export function roofHit(roof: Roof, floor: Readonly<Floor>, p: Vec2, reach: number): boolean {
-  for (const body of roofGeometry(roof, floor).bodies) {
+export function roofHit(
+  roof: Roof,
+  floor: Readonly<Floor>,
+  p: Vec2,
+  reach: number,
+  geo: RoofGeometry = roofGeometry(roof, floor),
+): boolean {
+  for (const body of geo.bodies) {
+    const ring0 = body.overhangOutline[0] ?? [];
+    const xs = ring0.map((q) => q.x);
+    const ys = ring0.map((q) => q.y);
+    if (
+      p.x < Math.min(...xs) - reach ||
+      p.x > Math.max(...xs) + reach ||
+      p.y < Math.min(...ys) - reach ||
+      p.y > Math.max(...ys) + reach
+    ) {
+      continue;
+    }
     const near = (a: Vec2, b: Vec2): boolean => {
       const cp = closestPointOnSegment(p, a, b).point;
       return Math.hypot(cp.x - p.x, cp.y - p.y) <= reach;

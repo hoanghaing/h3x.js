@@ -153,6 +153,7 @@ export class H3xPlan {
       joins: new Map(),
       dimensions: new Map(),
       dimensionRects: new Map(),
+      roofGeometry: new Map(),
     };
     this.presets = opts.presets ?? doc.presets;
     this.stairLabels = { ...DEFAULT_STAIR_LABELS, ...opts.stairLabels };
@@ -267,6 +268,7 @@ export class H3xPlan {
       site: this.doc.project.site,
       stairRise: this.stairRise(),
       roofsVisible: this._roofsVisible,
+      roofGeometry: this.dom.roofGeometry,
     };
     return hitTest(scene, s);
   }
@@ -600,6 +602,7 @@ export class H3xPlan {
       presets: this.presets,
       site: this.doc.project.site,
       prefix: this.prefix,
+      roofGeometry: this.dom.roofGeometry,
       stairs: {
         rise: this.stairRise(),
         labels: this.stairLabels,

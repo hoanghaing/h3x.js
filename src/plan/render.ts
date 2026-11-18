@@ -9,11 +9,12 @@ import type {
   Room,
   Site,
   Roof,
+  RoofGeometry,
   Stair,
   Vec2,
   Wall,
 } from '../core';
-import { roomShape } from '../core';
+import { roofGeometry, roomShape } from '../core';
 import type { WallCorners } from '../shared/walls/joins';
 import {
   columnShape,
@@ -143,6 +144,8 @@ export interface RenderContext {
   /** Stairs of `floor`: rise to the floor above (NaN when none), labels and class prefix. */
   /** Class prefix, for kinds drawn with their own classes (roofs). */
   prefix?: string;
+  /** Where roof geometry is cached for hit testing (written when a roof is drawn). */
+  roofGeometry?: Map<Id, RoofGeometry>;
   stairs?: { rise: number; labels: StairLabels; prefix: string };
 }
 
@@ -253,9 +256,12 @@ export function updateEntityElement(g: SVGGElement, e: KindEntity, ctx: RenderCo
       if (!s) return;
       return g.replaceChildren(...stairOwnShapes(e.entity, { ...s, view: ctx.view }));
     }
-    case 'roof':
+    case 'roof': {
       if (!ctx.prefix) return;
-      return g.replaceChildren(...roofOwnShapes(e.entity, ctx.floor, ctx.view, ctx.prefix));
+      const geo = roofGeometry(e.entity, ctx.floor);
+      ctx.roofGeometry?.set(e.entity.id, geo);
+      return g.replaceChildren(...roofOwnShapes(e.entity, ctx.floor, ctx.view, ctx.prefix, geo));
+    }
     case 'site':
       return setAttr(first, 'points', pointsAttr(e.entity.points));
   }

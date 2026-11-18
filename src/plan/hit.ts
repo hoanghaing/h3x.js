@@ -1,4 +1,4 @@
-import type { Floor, Id, PresetResolver, Room, Site } from '../core';
+import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site } from '../core';
 import { H3xValidationError, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
@@ -22,6 +22,8 @@ export interface HitScene {
   stairRise?: number;
   /** false: roofs are hidden and never hit (default true). */
   roofsVisible?: boolean;
+  /** Roof geometry cached at render time by roof id; missing entries are computed. */
+  roofGeometry?: ReadonlyMap<Id, RoofGeometry>;
 }
 
 const NODE_TOLERANCE_PX = 8;
@@ -97,7 +99,8 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   if (scene.roofsVisible !== false) {
     const roofReach = WALL_TOLERANCE_PX / view.scale;
     for (const roof of Object.values(floor.roofs)) {
-      if (roofHit(roof, floor, p, roofReach)) return { kind: 'roof', id: roof.id };
+      if (roofHit(roof, floor, p, roofReach, scene.roofGeometry?.get(roof.id)))
+        return { kind: 'roof', id: roof.id };
     }
   }
 

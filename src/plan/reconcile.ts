@@ -80,6 +80,7 @@ export function syncEntity(kind: PlanKind, id: Id, dom: PlanDom, ctx: RenderCont
   if (!entity) {
     g?.remove();
     els.delete(id);
+    if (kind === 'roof') dom.roofGeometry.delete(id);
     return;
   }
   if (!g) {
