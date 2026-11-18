@@ -152,3 +152,51 @@ describe('H3xScene junction caps', () => {
     expect(hits[0]!.point.x).toBeLessThanOrEqual(1e-9);
   });
 });
+
+describe('junction fill with mixed wall heights', () => {
+  /** T junction at the origin: through wall along x with `through` height, stem down -y with `stem` height. */
+  function tFloor(through: number, stem: number): Floor {
+    const f = floorOf({ a: [-4, 0], n: [0, 0], b: [4, 0], s: [0, -4] }, [
+      ['w1', 'a', 'n', 0.2],
+      ['w2', 'n', 'b', 0.2],
+      ['w3', 'n', 's', 0.2],
+    ]);
+    f.walls.w1!.height = through;
+    f.walls.w2!.height = through;
+    f.walls.w3!.height = stem;
+    return f;
+  }
+
+  function joinVertices(floor: Floor): { x: number; y: number; z: number }[] {
+    const scene = sceneOf(floor);
+    const out: { x: number; y: number; z: number }[] = [];
+    scene.root.getObjectByName('h3x-joins')!.traverse((o) => {
+      const pos = (o as Mesh).geometry?.getAttribute('position');
+      if (!pos) return;
+      for (let i = 0; i < pos.count; i++)
+        out.push({ x: pos.getX(i), y: pos.getY(i), z: pos.getZ(i) });
+    });
+    return out;
+  }
+
+  it('keeps a low parapet junction from rising to a taller butting wall', () => {
+    const verts = joinVertices(tFloor(1.1, 3));
+    expect(verts.length).toBeGreaterThan(0);
+    // The 3 m stem outline in plan: x in [-0.1, 0.1], y <= -0.1. Nothing above 1.1 may lie outside it.
+    for (const v of verts) {
+      if (v.y <= 1.1 + 1e-6) continue;
+      const planY = -v.z;
+      expect(Math.abs(v.x) <= 0.1 + 1e-6 && planY <= -0.1 + 1e-6).toBe(true);
+    }
+  });
+
+  it('caps the junction at the tall through wall height', () => {
+    const hits = hitsDown(sceneOf(tFloor(3, 1.1)).root, { x: 0, y: 0.05 });
+    expect(hits[0]!.point.y).toBeCloseTo(3, 6);
+  });
+
+  it('caps the junction at the low through wall height', () => {
+    const hits = hitsDown(sceneOf(tFloor(1.1, 3)).root, { x: 0, y: 0.05 });
+    expect(hits[0]!.point.y).toBeCloseTo(1.1, 6);
+  });
+});

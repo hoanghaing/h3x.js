@@ -1,6 +1,6 @@
 import type { Floor, Id, Vec2 } from '../types';
 import { GEOM_TOL, MITER_LIMIT } from '../constants';
-import { EPS, cross, distance, leftNormal, normalize, sub } from '../geometry/vec';
+import { EPS, cross, distance, dot, leftNormal, normalize, sub } from '../geometry/vec';
 
 /** Wall outline corners in plan space. start = node a, left = left of a→b. */
 export interface WallCorners {
@@ -23,6 +23,10 @@ export interface Junction {
   bevels: [Vec2, Vec2][];
   /** Tallest incident wall height (the cap sits at elevation + height). */
   height: number;
+  /** Cap height of the fan triangle (node, points[k], points[k + 1]); lower walls cap their corner lower. */
+  heights: number[];
+  /** Face height of each entry of `bevels`. */
+  bevelHeights: number[];
 }
 
 export interface Joins {
@@ -50,6 +54,39 @@ function fanArea2(node: Vec2, pts: Vec2[]): number {
     if (q) s += Math.abs(cross(sub(p, node), sub(q, node)));
   });
   return s;
+}
+
+function sameEdge(p: Vec2, q: Vec2, a: Vec2, b: Vec2): boolean {
+  return (
+    (distance(p, a) <= GEOM_TOL && distance(q, b) <= GEOM_TOL) ||
+    (distance(p, b) <= GEOM_TOL && distance(q, a) <= GEOM_TOL)
+  );
+}
+
+/**
+ * Cap height per fan edge. An edge that is a wall's end edge takes that wall's height, except a
+ * square (butt) end, which meets the through walls and takes their tallest height; a gap edge
+ * between two ends takes the taller of the two.
+ */
+function edgeHeights(list: Incident[], edges: [Vec2, Vec2][]): number[] {
+  const end = (i: Incident): [Vec2, Vec2] => [
+    i.corners[i.atStart ? 'startLeft' : 'endRight'],
+    i.corners[i.atStart ? 'startRight' : 'endLeft'],
+  ];
+  const butt = (i: Incident): boolean => {
+    const [l, r] = end(i);
+    return distance(l, r) > GEOM_TOL && Math.abs(dot(sub(r, l), i.d)) <= GEOM_TOL;
+  };
+  const through = list.filter((i) => !butt(i));
+  const throughMax = through.length ? Math.max(...through.map((i) => i.height)) : undefined;
+  return edges.map(([p, q]) => {
+    const owner = list.find((i) => sameEdge(p, q, ...end(i)));
+    if (owner) return butt(owner) && throughMax !== undefined ? throughMax : owner.height;
+    const touching = list.filter((i) =>
+      end(i).some((c) => distance(c, p) <= GEOM_TOL || distance(c, q) <= GEOM_TOL),
+    );
+    return Math.max(...(touching.length ? touching : list).map((i) => i.height));
+  });
 }
 
 /** Wall corners plus the junction areas left uncovered between wall ends. */
@@ -152,6 +189,11 @@ export function computeJoins(floor: Floor): Joins {
       points,
       bevels,
       height: Math.max(...list.map((i) => i.height)),
+      heights: edgeHeights(
+        list,
+        points.map((p, k): [Vec2, Vec2] => [p, points[(k + 1) % points.length]!]),
+      ),
+      bevelHeights: edgeHeights(list, bevels),
     };
   }
   return { corners, junctions };

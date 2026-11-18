@@ -3,6 +3,9 @@ export const DIMENSION_FONT_PX = 12;
 /** Radius (px) of a node handle. */
 export const NODE_RADIUS_PX = 5;
 
+/** Fill token of walls lower than the storey height (parapets). */
+export const WALL_LOW_FILL = '#a8a29e';
+
 /** Default stylesheet, every rule scoped under the root class `prefix`. */
 export function DEFAULT_CSS(prefix: string): string {
   const p = `.${prefix}`;
@@ -15,6 +18,7 @@ ${p} .${prefix}-room path { fill: #f5f5f4; stroke: none; }
 ${p} .${prefix}-room text { fill: #57534e; font-size: 13px; text-anchor: middle; }
 ${p} .${prefix}-room .${prefix}-room-area { font-size: 11px; fill: #78716c; }
 ${p} .${prefix}-wall polygon, ${p} .${prefix}-join polygon { fill: #44403c; stroke: #292524; stroke-width: 1; }
+${p} .${prefix}-wall-low polygon { fill: ${WALL_LOW_FILL}; }
 ${p} .${prefix}-join polygon { stroke: none; }
 ${p} .${prefix}-opening .${prefix}-opening-gap { fill: #fafaf9; stroke: none; }
 ${p} .${prefix}-opening path { fill: none; stroke: #292524; stroke-width: 1.5; }

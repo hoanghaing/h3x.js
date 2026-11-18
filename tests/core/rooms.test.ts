@@ -463,4 +463,10 @@ describe('roomShape with holes', () => {
     const f = oneRoomFloor();
     expect(roomShape(f, f.rooms.r1!, 'center').holes).toEqual([]);
   });
+
+  it('detects a room closed by four low parapet walls', () => {
+    const f = oneRoomFloor();
+    for (const w of Object.values(f.walls)) w.height = 1.1;
+    expect(detectRooms(f)).toHaveLength(1);
+  });
 });

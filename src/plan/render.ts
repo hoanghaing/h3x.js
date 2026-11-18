@@ -212,6 +212,8 @@ export function updateEntityElement(g: SVGGElement, e: KindEntity, ctx: RenderCo
       return setAttr(first, 'transform', screenSpaceTransform(ctx.view, e.entity));
     case 'wall': {
       const c = ctx.corners[e.entity.id];
+      const low = e.entity.height < ctx.floor.wallHeight - 1e-6;
+      if (ctx.stairs) g.classList.toggle(`${ctx.stairs.prefix}-wall-low`, low);
       return setAttr(first, 'points', c ? pointsAttr(wallOutline(c)) : '');
     }
     case 'room':

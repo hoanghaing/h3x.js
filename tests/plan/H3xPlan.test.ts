@@ -105,6 +105,16 @@ describe('H3xPlan rendering', () => {
     expect(plan.getElement('wall', 'nope')).toBeUndefined();
   });
 
+  it('marks walls lower than the storey height with the low class', () => {
+    const floor = oneRoomFloor();
+    floor.walls.w1!.height = 1.1;
+    const plan = makePlan(floor);
+    expect(plan.getElement('wall', 'w1')!.classList.contains('h3x-plan-wall-low')).toBe(true);
+    expect(plan.getElement('wall', 'w2')!.classList.contains('h3x-plan-wall-low')).toBe(false);
+    expect(plan.getElement('wall', 'w1')!.classList.contains('h3x-plan-wall')).toBe(true);
+    expect(plan.svg.querySelector('style')?.textContent).toContain('wall-low polygon');
+  });
+
   it('honours classPrefix and grid: false', () => {
     const plan = new H3xPlan(container(), docOf(oneRoomFloor()), {
       classPrefix: 'fp',
