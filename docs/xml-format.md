@@ -60,7 +60,7 @@ first). Fewer than 3 points or a malformed pair is a parse error (`element: site
 | `wallHeight`    | number | yes      | -       | Default wall height, meters.                                         |
 | `slabThickness` | number | no       | `0.15`  | Thickness of the slab under this floor, meters; must be above 0.     |
 
-Children: `node`, `wall`, `opening`, `room`, `item`, `column`, in any order. A file may hold
+Children: `node`, `wall`, `opening`, `room`, `item`, `column`, `stair`, `roof`, in any order. A file may hold
 several floors; every floor can be edited by making it the active floor (see the README).
 
 **Stack normalisation.** On load the floors are sorted by `level` (file order breaks ties) and
@@ -200,6 +200,93 @@ non-finite `x`, `y` or `rotation`; a non-positive `width`, `depth` or `flightWid
 Non-blocking warnings (reported by `validateLayout`): `stair-no-floor-above`,
 `stair-does-not-fit` and `stair-overlaps-wall`; see [validation.md](validation.md).
 
+### `<roof>`
+
+A roof on this floor. Its underside passes through the outline (the outer wall faces) at the top of
+the floor's walls plus `base`, so it bears on the wall tops. A floor can hold several roofs; they
+may overlap or touch. A roof does not need walls under it.
+
+A roof is in one of two modes:
+
+- **Follow** (`follow="1"`, the default): the outline is the union of the rooms listed in `rooms`,
+  grown to the outer wall faces. It tracks later wall edits. Edge specs are keyed by wall id in
+  `wallEdges`.
+- **Independent** (`follow="0"`): the outline is `points` (with optional `holes`), edited freely.
+  Edge specs are given per edge in `edges` / `holeEdges`.
+
+| Attribute       | Type                                                          | Required             | Default   | Notes                                                                                  |
+| --------------- | ------------------------------------------------------------- | -------------------- | --------- | -------------------------------------------------------------------------------------- |
+| `id`            | string                                                        | yes                  | -         |                                                                                        |
+| `kind`          | `pitched` \| `flat`                                           | no                   | `pitched` | `flat` is a horizontal slab with an optional parapet.                                  |
+| `preset`        | string                                                        | no                   | omitted   | Informational: the preset the roof was created from (see below).                       |
+| `follow`        | `1` \| `0`                                                    | no                   | `1`       | `0` or `false` selects independent mode.                                               |
+| `rooms`         | id list                                                       | follow               | empty     | Room ids separated by whitespace. A room that no longer exists is dropped.             |
+| `wallEdges`     | list of `wallId:spec`                                         | no                   | omitted   | Follow only. Walls not listed use `pitch`.                                             |
+| `points`        | point list                                                    | independent          | -         | At least 3 `x,y` pairs, CCW, at the outer wall faces.                                  |
+| `holes`         | point lists separated by `;`                                  | no                   | omitted   | Independent only. Each hole has at least 3 points (CW).                                |
+| `edges`         | spec list                                                     | independent, pitched | -         | One spec per outline edge (edge `i` runs `points[i]` to `points[i+1]`).                |
+| `holeEdges`     | spec lists separated by `;`                                   | no                   | omitted   | One list per hole, one spec per hole edge. Missing: slope at `pitch`.                  |
+| `pitch`         | number                                                        | no                   | `30`      | Default slope, degrees, in (0, 90).                                                    |
+| `breakHeight`   | number                                                        | no                   | omitted   | Default break height above the eaves, meters (> 0), for two-pitch slopes (mansard).    |
+| `upperPitch`    | number                                                        | no                   | omitted   | Default upper pitch, degrees, in (0, 90), used above `breakHeight`.                    |
+| `base`          | number                                                        | no                   | `0`       | Meters above floor elevation + `wallHeight`. May be negative.                          |
+| `overhang`      | number                                                        | no                   | `0.5`     | Eaves overhang, meters, horizontal (>= 0).                                             |
+| `gableOverhang` | number                                                        | no                   | `0.3`     | Rake overhang at gable edges, meters (>= 0).                                           |
+| `thickness`     | number                                                        | no                   | `0.1`     | Meters (> 0).                                                                          |
+| `material`      | `tile` \| `metal` \| `concrete` \| `glass` \| `polycarbonate` | no                   | `tile`    | Glass and polycarbonate are translucent; frame bars in 3D, a hatch in 2D.              |
+| `parapet`       | number                                                        | no                   | omitted   | Flat roofs: parapet height, meters (>= 0). Parapets are 0.1 m thick.                   |
+| `supports`      | `posts`                                                       | no                   | omitted   | Adds square steel posts from the floor to the roof underside (not stored as elements). |
+| `postSize`      | number                                                        | no                   | `0.1`     | Post section side, meters (> 0).                                                       |
+| `postSpacing`   | number                                                        | no                   | `3`       | Maximum post spacing along open edges, meters (> 0).                                   |
+
+**Edge spec grammar.** One of:
+
+- `gable`: the edge does not slope; the roof ends in a vertical triangle above it (a wall on that
+  edge is raised to the roof underside).
+- `slope:<pitch>`: a slope of `pitch` degrees (0 < pitch < 90).
+- `slope:<pitch>/<breakHeight>/<upperPitch>`: a two-pitch slope, `pitch` up to `breakHeight`
+  meters above the eaves and `upperPitch` above that.
+
+Specs are separated by whitespace (and by `;` between holes). In `wallEdges` each entry is
+`wallId:spec`, for example `wallEdges="w3:gable w5:slope:45"`; the override applies to every
+outline edge that comes from that wall. Overrides for walls that no longer exist are dropped.
+
+**Presets.** The presets (`ROOF_PRESETS`) give initial values only; every value stays editable per
+roof and per edge, and `preset` just records where a roof started.
+
+| Preset        | Shape | Pitch       | Overhang | Thickness | Material      | Extra              |
+| ------------- | ----- | ----------- | -------- | --------- | ------------- | ------------------ |
+| `thai`        | hip   | 35          | 0.8      | 0.10      | tile          |                    |
+| `japanese`    | hip   | 22          | 0.9      | 0.10      | tile          |                    |
+| `metal`       | shed  | 12          | 0.4      | 0.05      | metal         |                    |
+| `traditional` | gable | 30          | 1.2      | 0.12      | tile          |                    |
+| `gable`       | gable | 30          | 0.5      | 0.10      | tile          |                    |
+| `hip`         | hip   | 30          | 0.5      | 0.10      | tile          |                    |
+| `shed`        | shed  | 30          | 0.5      | 0.10      | tile          |                    |
+| `mansard`     | hip   | 70, then 30 | 0.3      | 0.10      | tile          | break at 1.5 m     |
+| `gambrel`     | gable | 60, then 30 | 0.3      | 0.10      | tile          | break at 1.5 m     |
+| `flat`        | flat  | -           | 0        | 0.12      | concrete      | parapet 1.1 m      |
+| `glass-frame` | shed  | 10          | 0.2      | 0.02      | glass         | `supports="posts"` |
+| `poly-frame`  | shed  | 10          | 0.2      | 0.02      | polycarbonate | `supports="posts"` |
+
+The shape decides which edges slope: `hip` slopes every edge; `shed` slopes the edges of the
+longest side and makes the rest gables; `gable` slopes the longest side and every side whose
+direction is within 30 degrees of it, and makes the others gables.
+
+Defaults are omitted on save. A follow roof stores only the walls whose spec is set in
+`wallEdges`; an independent roof always stores `edges` when pitched.
+
+Parse errors (`element: 'roof'`): a `kind`, `material` or `supports` outside the listed values; a
+`pitch` / `upperPitch` outside (0, 90) or a `breakHeight` not above 0; a non-finite number; a
+negative `overhang`, `gableOverhang` or `parapet`; a `thickness`, `postSize` or `postSpacing` not
+above 0; an independent roof with fewer than 3 points, a malformed `x,y` pair, or (when pitched)
+an `edges` count different from the points count; a hole with fewer than 3 points or a `holeEdges`
+list whose length differs from its hole; a malformed edge spec (`attribute` names the attribute).
+`H3xDocument.fromProject` rejects the same roofs with `invalid-roof`.
+
+Non-blocking warnings (reported by `validateLayout`): `roof-invalid-outline`, `roof-no-walls` and
+`roof-build-failed`; see [validation.md](validation.md).
+
 The `Mount` type also lists `opening`; that is a preset mount used by `addOpening`, not a valid
 `<item mount>`.
 
@@ -210,7 +297,7 @@ The `Mount` type also lists `opening`; that is a preset mount used by `addOpenin
 - `H3xParseError` (`element` and `attribute` say where, when known) for: malformed XML; root not
   `<h3x>`; missing, non-integer or `< 1` `version`; `unit` other than `m`; no `<floor>`; a missing
   required attribute; a non-numeric number (empty, `NaN`, `Infinity`); a bad `side`, `mount` or
-  column `shape`; a bad or missing `<site>` (fewer than 3 points, malformed point, more than one); a
+  column `shape`; a bad `<stair>` or `<roof>` (see their sections); a bad or missing `<site>` (fewer than 3 points, malformed point, more than one); a
   duplicate id within a floor; a duplicate floor id; a `slabThickness` not above 0; a reference to a
   missing node or wall (wall `a` / `b`, opening `wall`, room `walls` / `holes`, wall-item `wall`); a
   room whose walls or hole loops do not form a loop.
