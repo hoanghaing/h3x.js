@@ -650,9 +650,7 @@ export class H3xPlan {
   private refreshRoofHandles(): void {
     const sel = this._selection;
     const roof = sel?.kind === 'roof' ? this.doc.floor.roofs[sel.id] : undefined;
-    const points = roof
-      ? roofHandles(roof, this.doc.floor, this.dom.roofGeometry.get(roof.id)).map((h) => h.at)
-      : [];
+    const points = roof ? roofHandles(roof, this.doc.floor).map((h) => h.at) : [];
     renderRoofHandles(this.dom.layers.overlay, this._view, this.prefix, points);
   }
 

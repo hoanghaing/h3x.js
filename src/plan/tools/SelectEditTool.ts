@@ -444,12 +444,11 @@ export class SelectEditTool implements Tool {
     const roof = sel?.kind === 'roof' ? ctx.doc.floor.roofs[sel.id] : undefined;
     if (!roof || !this.press) return;
     const scale = ctx.plan.view.scale;
-    const geo = ctx.plan.cachedRoofGeometry(roof.id);
     const hit = e.hit?.kind;
     // A handle wins over a wall (a follow roof's corners sit on the wall faces) and over a node it
     // is nearer to, but not over columns or stairs.
     const grabbable = !hit || hit === 'roof' || hit === 'wall' || hit === 'room' || hit === 'site';
-    const handles = roofHandles(roof, ctx.doc.floor, geo);
+    const handles = roofHandles(roof, ctx.doc.floor);
     let h = grabbable ? nearestHandle(handles, e.plan, ROOF_HANDLE_PX / scale) : null;
     if (!h && hit === 'node') {
       // A corner node sits just inside a follow roof's corner: the nearer of the two wins.

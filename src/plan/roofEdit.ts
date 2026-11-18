@@ -8,7 +8,6 @@ import {
   type Id,
   type Roof,
   type RoofEdge,
-  type RoofGeometry,
   type Vec2,
 } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
@@ -38,9 +37,9 @@ const followRing = (roof: Roof, floor: Readonly<Floor>) =>
 
 /**
  * Vertex handles of a roof. An independent roof offers its points and its holes' points; a follow
- * roof the outer ring of its first body (the ring `detachRoof` keeps on the roof).
+ * roof the first outer ring of its outline (the ring `detachRoof` keeps on the roof).
  */
-export function roofHandles(roof: Roof, floor: Readonly<Floor>, _geo?: RoofGeometry): RoofHandle[] {
+export function roofHandles(roof: Roof, floor: Readonly<Floor>): RoofHandle[] {
   if (roof.follow) {
     return (followRing(roof, floor)?.points ?? []).map((at, index) => ({ index, at }));
   }
