@@ -1,7 +1,6 @@
 import {
   detachRoof,
   floorOutline,
-  roofGeometry,
   updateRoof,
   type Command,
   type CommandContext,
@@ -33,17 +32,17 @@ export interface RoofHandle extends RoofVertexRef {
 export const ROOF_HANDLE_PX = 8;
 export const ROOF_EDGE_PX = 6;
 
-const cached = (roof: Roof, floor: Readonly<Floor>, geo?: RoofGeometry): RoofGeometry =>
-  geo ?? roofGeometry(roof, floor);
+/** The outer ring `detachRoof` keeps on a follow roof: the one handles and edge clicks use. */
+const followRing = (roof: Roof, floor: Readonly<Floor>) =>
+  floorOutline(floor, roof.rooms ?? []).find((r) => !r.hole);
 
 /**
  * Vertex handles of a roof. An independent roof offers its points and its holes' points; a follow
  * roof the outer ring of its first body (the ring `detachRoof` keeps on the roof).
  */
-export function roofHandles(roof: Roof, floor: Readonly<Floor>, geo?: RoofGeometry): RoofHandle[] {
+export function roofHandles(roof: Roof, floor: Readonly<Floor>, _geo?: RoofGeometry): RoofHandle[] {
   if (roof.follow) {
-    const ring = cached(roof, floor, geo).bodies[0]?.outline[0] ?? [];
-    return ring.map((at, index) => ({ index, at }));
+    return (followRing(roof, floor)?.points ?? []).map((at, index) => ({ index, at }));
   }
   const out: RoofHandle[] = (roof.points ?? []).map((at, index) => ({ index, at }));
   (roof.holes ?? []).forEach((h, hole) => h.forEach((at, index) => out.push({ hole, index, at })));
@@ -56,7 +55,8 @@ function edgeRings(
   floor: Readonly<Floor>,
 ): { ring: readonly Vec2[]; hole?: number; walls?: readonly Id[] }[] {
   if (roof.follow) {
-    return floorOutline(floor, roof.rooms ?? []).map((r) => ({ ring: r.points, walls: r.walls }));
+    const r = followRing(roof, floor);
+    return r ? [{ ring: r.points, walls: r.walls }] : [];
   }
   const out: { ring: readonly Vec2[]; hole?: number }[] = [];
   if (roof.points) out.push({ ring: roof.points });
@@ -64,7 +64,7 @@ function edgeRings(
   return out;
 }
 
-/** The nearest roof outline edge within `reach` meters of `p`, with the current spec of that edge. */
+/** The nearest roof outline edge (follow roofs: of the first outer ring only) within `reach` meters of `p`, with the current spec of that edge. */
 export function roofEdgeAt(
   roof: Roof,
   floor: Readonly<Floor>,

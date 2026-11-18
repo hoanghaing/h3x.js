@@ -25,9 +25,11 @@ import {
   type LengthEditRequest,
   type RoofEdgeRequest,
 } from '../../src/plan/H3xPlan';
+import { roofHandles } from '../../src/plan/roofEdit';
 import { SelectEditTool } from '../../src/plan/tools/SelectEditTool';
 import { SelectEditTool as Exported } from '../../src/plan';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
+import { acuteFloor, lFloor } from '../fixtures/irregular';
 
 function docOf(floor: Floor): H3xDocument {
   return H3xDocument.fromProject(
@@ -957,7 +959,7 @@ describe('SelectEditTool roofs', () => {
     plan.on('roofEdgeRequest', (e) => asked.push(e));
     const a = corner(plan, id, 0);
     const b = corner(plan, id, 1);
-    const mid = { x: (a.x + b.x) / 2 + 0.7, y: (a.y + b.y) / 2 };
+    const mid = { x: (a.x + b.x) / 2 + 0.7, y: (a.y + b.y) / 2 - 0.03 }; // just outside the wall
     fire(plan, 'pointerdown', mid);
     fire(plan, 'pointerup', mid);
     expect(asked).toHaveLength(1);
@@ -966,6 +968,117 @@ describe('SelectEditTool roofs', () => {
     expect(asked[0]!.wallId).toBe('w1');
     expect(asked[0]!.current).toEqual({ kind: 'slope', pitch: 30 });
     expect(plan.selection).toEqual({ kind: 'roof', id });
+  });
+
+  const planOf = (floor: Floor): H3xPlan => {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+    document.body.appendChild(el);
+    const plan = new H3xPlan(el, docOf(floor), {});
+    plan.fitToContent();
+    plans.push(plan);
+    return plan;
+  };
+  const handles = (plan: H3xPlan): Element[] =>
+    Array.from(plan.svg.querySelectorAll('.h3x-plan-roof-handle'));
+
+  it('with a follow roof selected, clicking an outer wall selects the wall', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    plan.select({ kind: 'roof', id });
+    const asked: RoofEdgeRequest[] = [];
+    plan.on('roofEdgeRequest', (e) => asked.push(e));
+    const p = { x: 2.9, y: -0.1 }; // on the outer face of w1, away from the corners
+    fire(plan, 'pointerdown', p);
+    fire(plan, 'pointerup', p);
+    expect(asked).toEqual([]);
+    expect(plan.selection).toEqual({ kind: 'wall', id: 'w1' });
+  });
+
+  it.each([
+    ['L-shaped', lFloor],
+    ['acute (bevelled corner)', acuteFloor],
+  ])('dragging handle k of a %s follow roof moves detached points[k]', (_n, make) => {
+    const plan = planOf(make());
+    const add = addRoof({ preset: 'hip', follow: true, rooms: ['r1'] });
+    plan.doc.execute(add);
+    const id = add.createdId;
+    plan.select({ kind: 'roof', id });
+    const verts = roofHandles(plan.doc.floor.roofs[id]!, plan.doc.floor).map((h) => h.at);
+    expect(handles(plan)).toHaveLength(verts.length);
+    for (let k = 0; k < verts.length; k++) {
+      const p = plan.doc.floor.roofs[id]!;
+      const before = structuredClone(p);
+      const v = roofHandles(p, plan.doc.floor)[k]!.at;
+      const to = { x: v.x + 0.3, y: v.y - 0.3 };
+      drag(plan, v, to, 5, { altKey: true });
+      const pts = plan.doc.floor.roofs[id]!.points!;
+      expect(pts[k]!.x).toBeCloseTo(to.x, 1);
+      expect(pts[k]!.y).toBeCloseTo(to.y, 1);
+      expect(pts).toHaveLength(verts.length);
+      plan.doc.undo();
+      expect(plan.doc.floor.roofs[id]).toEqual(before);
+    }
+  });
+
+  it('an edge click on a hole of an independent roof reports hole and index', () => {
+    const plan = makePlan();
+    const add = addRoof({
+      preset: 'gable',
+      points: [
+        { x: 6, y: 0 },
+        { x: 12, y: 0 },
+        { x: 12, y: 6 },
+        { x: 6, y: 6 },
+      ],
+      holes: [
+        [
+          { x: 8, y: 2 },
+          { x: 8, y: 4 },
+          { x: 10, y: 4 },
+          { x: 10, y: 2 },
+        ],
+      ],
+    });
+    plan.doc.execute(add);
+    plan.select({ kind: 'roof', id: add.createdId });
+    const asked: RoofEdgeRequest[] = [];
+    plan.on('roofEdgeRequest', (e) => asked.push(e));
+    const p = { x: 9, y: 4.02 }; // edge 2 of the hole, from (10, 4) to (8, 4)... index 1 is 8,4 to 10,4
+    fire(plan, 'pointerdown', p);
+    fire(plan, 'pointerup', p);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.hole).toBe(0);
+    expect(asked[0]!.index).toBe(1);
+    expect(asked[0]!.wallId).toBeUndefined();
+  });
+
+  it('handles follow the outline after a change that is not a selection change', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    plan.select({ kind: 'roof', id });
+    const pos = (): Vec2[] =>
+      handles(plan).map((h) => {
+        const m = /matrix\([^,]+,0,0,[^,]+,([-\d.e]+),([-\d.e]+)\)/.exec(
+          h.getAttribute('transform') ?? '',
+        )!;
+        return { x: Number(m[1]), y: Number(m[2]) };
+      });
+    const expected = (): Vec2[] =>
+      roofHandles(plan.doc.floor.roofs[id]!, plan.doc.floor).map((h) => h.at);
+    const near = (a: Vec2[], b: Vec2[]) =>
+      a.forEach((p, i) => {
+        expect(p.x).toBeCloseTo(b[i]!.x, 3);
+        expect(p.y).toBeCloseTo(b[i]!.y, 3);
+      });
+    near(pos(), expected());
+    const before = expected();
+    plan.doc.execute(moveNode('n3', { x: 6, y: 5 }));
+    expect(expected()).not.toEqual(before);
+    near(pos(), expected());
+    plan.doc.undo();
+    near(pos(), before);
   });
 
   it('Delete removes the selected roof', () => {

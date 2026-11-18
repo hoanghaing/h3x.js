@@ -92,7 +92,10 @@ export interface LengthEditRequest {
 /** Asks the host to edit one roof edge (an outline edge of an independent roof, or a follow roof's wall). */
 export interface RoofEdgeRequest {
   roofId: Id;
-  /** Index of the edge in its ring (follow roofs: in the roof's outline ring). */
+  /**
+   * Index of the edge in its ring. For follow roofs `wallId` is authoritative and `index` is
+   * within the first body's outer ring (the ring the vertex handles cover).
+   */
   index: number;
   /** Set when the edge belongs to a hole of the roof. */
   hole?: number;

@@ -445,11 +445,24 @@ export class SelectEditTool implements Tool {
     if (!roof || !this.press) return;
     const scale = ctx.plan.view.scale;
     const geo = ctx.plan.cachedRoofGeometry(roof.id);
-    const h = nearestHandle(roofHandles(roof, ctx.doc.floor, geo), e.plan, ROOF_HANDLE_PX / scale);
+    const hit = e.hit?.kind;
+    // A handle wins over a wall (a follow roof's corners sit on the wall faces) and over a node it
+    // is nearer to, but not over columns or stairs.
+    const grabbable = !hit || hit === 'roof' || hit === 'wall' || hit === 'room' || hit === 'site';
+    const handles = roofHandles(roof, ctx.doc.floor, geo);
+    let h = grabbable ? nearestHandle(handles, e.plan, ROOF_HANDLE_PX / scale) : null;
+    if (!h && hit === 'node') {
+      // A corner node sits just inside a follow roof's corner: the nearer of the two wins.
+      const n = ctx.doc.floor.nodes[e.hit!.id];
+      const dn = n ? Math.hypot(n.x - e.plan.x, n.y - e.plan.y) : 0;
+      h = nearestHandle(handles, e.plan, Math.min(ROOF_HANDLE_PX / scale, dn - 1e-9));
+    }
     if (h) {
       this.press.roofVertex = { index: h.index, ...(h.hole !== undefined ? { hole: h.hole } : {}) };
       return;
     }
+    // Edge clicks never steal a click that landed on another entity.
+    if (hit && hit !== 'roof') return;
     const edge = roofEdgeAt(roof, ctx.doc.floor, e.plan, ROOF_EDGE_PX / scale);
     if (edge) this.press.roofEdge = edge;
   }
