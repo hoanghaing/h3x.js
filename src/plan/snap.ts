@@ -62,7 +62,12 @@ export function snapPoint(p: Vec2, others: Vec2[], opts: SnapOptions): SnapResul
   return { point: { x: axis('x'), y: axis('y') }, guides };
 }
 
-export type DrawSnapTarget = { kind: 'node'; id: Id } | { kind: 'wall'; id: Id } | { kind: 'free' };
+export type DrawSnapTarget =
+  | { kind: 'node'; id: Id }
+  | { kind: 'wall'; id: Id }
+  | { kind: 'site-vertex' }
+  | { kind: 'site-edge' }
+  | { kind: 'free' };
 
 export interface DrawSnapResult extends SnapResult {
   target: DrawSnapTarget;
@@ -75,11 +80,15 @@ const ANGLE_TOLERANCE = (5 * Math.PI) / 180;
 
 /**
  * Snap for drawing tools. Priority: node within `reach` > closest point on a
- * wall center line within `reach` > alignment to nodes and `extra` > 45-degree
+ * wall center line within `reach` > a `site` corner within `reach` > the closest point on a `site`
+ * edge within `reach` > alignment to nodes and `extra` > 45-degree
  * angle lock from `from` (length grid-snapped) > grid. With `structure: false` the node and
  * wall targets are skipped (nodes still serve as alignment points). `exclude` nodes are neither
  * targets nor alignment points, and walls touching them are not targets. A wall hit closer than
  * `MIN_WALL_LENGTH` to an end of the wall (where a split would fail) snaps to that end node.
+ * Through `ToolContext.snapDraw` the plan passes the project site whenever there is one, so site
+ * corners and edges are targets for every tool using it: drawing (walls, columns, roofs) and
+ * node, column and roof-vertex drags in the select tool alike; `site: false` turns them off.
  */
 export function snapDraw(
   p: Vec2,
@@ -90,6 +99,8 @@ export function snapDraw(
     extra?: Vec2[];
     structure?: boolean;
     exclude?: Id[];
+    /** Site outline; its corners and edges are snap targets (ignores `structure` and `exclude`; callers omit it to turn site snapping off). */
+    site?: readonly Vec2[];
   },
 ): DrawSnapResult {
   const skip = new Set(opts.exclude);
@@ -128,6 +139,27 @@ export function snapDraw(
       };
     return { point: at, guides: [], target: { kind: 'wall', id: wallHit.id } };
   }
+
+  const site = opts.site ?? [];
+  let vertexHit: { d: number; at: Vec2 } | undefined;
+  for (const v of site) {
+    const d = Math.hypot(v.x - p.x, v.y - p.y);
+    if (d <= opts.reach && (!vertexHit || d < vertexHit.d)) vertexHit = { d, at: v };
+  }
+  if (vertexHit)
+    return {
+      point: { x: vertexHit.at.x, y: vertexHit.at.y },
+      guides: [],
+      target: { kind: 'site-vertex' },
+    };
+  let edgeHit: { d: number; at: Vec2 } | undefined;
+  if (site.length >= 2)
+    for (let i = 0; i < site.length; i++) {
+      const { point } = closestPointOnSegment(p, site[i]!, site[(i + 1) % site.length]!);
+      const d = Math.hypot(point.x - p.x, point.y - p.y);
+      if (d <= opts.reach && (!edgeHit || d < edgeHit.d)) edgeHit = { d, at: point };
+    }
+  if (edgeHit) return { point: edgeHit.at, guides: [], target: { kind: 'site-edge' } };
 
   const snapped = snapPoint(p, [...nodes, ...(opts.extra ?? [])], opts);
   const free: DrawSnapTarget = { kind: 'free' };

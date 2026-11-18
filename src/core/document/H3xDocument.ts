@@ -6,6 +6,7 @@ import { layoutValidator, validateLayout } from '../validate/layout';
 import { validateColumnSupport } from '../validate/floors';
 import { validateStairs } from '../validate/stairs';
 import { validateStairParams } from '../commands/stairs';
+import { validateRoofParams } from '../commands/roofs';
 import { checkRefs } from '../validate/refs';
 import { placementValidator, validatePlacements } from '../validate/placement';
 import type { Floor, Id, Issue, PresetResolver, Project } from '../types';
@@ -81,6 +82,7 @@ export class H3xDocument {
       items: {},
       columns: {},
       stairs: {},
+      roofs: {},
     };
     return new H3xDocument(
       {
@@ -101,7 +103,7 @@ export class H3xDocument {
    * Throws H3xValidationError 'no-floor' for an empty floor list, 'duplicate-id' for
    * repeated floor ids, 'invalid-floor-dimension' for a non-finite or non-positive
    * slabThickness (a missing one defaults to 0.15), 'invalid-stair' for a stair failing
-   * validateStairParams and 'bad-reference' for dangling wall / node references. Levels and
+   * validateStairParams, 'invalid-roof' for a roof failing validateRoofParams and 'bad-reference' for dangling wall / node references. Levels and
    * elevations are normalised as in fromXML.
    */
   static fromProject(p: Project, opts: { presets?: PresetResolver } = {}): H3xDocument {
@@ -126,6 +128,9 @@ export class H3xDocument {
       (f as { stairs?: Floor['stairs'] }).stairs ??= {};
       const stairIssues = Object.values(f.stairs).flatMap(validateStairParams);
       if (stairIssues.length > 0) throw new H3xValidationError(stairIssues);
+      (f as { roofs?: Floor['roofs'] }).roofs ??= {};
+      const roofIssues = Object.values(f.roofs).flatMap(validateRoofParams);
+      if (roofIssues.length > 0) throw new H3xValidationError(roofIssues);
       (f as { slabThickness?: number }).slabThickness ??= DEFAULT_SLAB_THICKNESS;
       if (!Number.isFinite(f.slabThickness) || f.slabThickness <= 0) {
         throw new H3xValidationError([

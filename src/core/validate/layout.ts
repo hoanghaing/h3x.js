@@ -13,6 +13,7 @@ import { isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygo
 import { segmentsIntersect } from '../geometry/segment';
 import { distance, tidy } from '../geometry/vec';
 import { isBelowMinRoomArea, roomArea, roomPolygon } from '../rooms/detect';
+import { validateRoofs } from './roofs';
 import { circleOverlapArea, columnPolygon, columnShape } from '../shapes';
 import type { Column, Floor, Id, Issue, Site, Vec2 } from '../types';
 
@@ -246,6 +247,7 @@ export function validateLayout(floor: Floor, site?: Site): Issue[] {
     ...columnSizeIssues(floor, Object.keys(floor.columns)),
     ...columnOverlapIssues(floor),
     ...siteIssues(site),
+    ...validateRoofs(floor),
   ];
 }
 

@@ -68,6 +68,18 @@ const flush = () => {
 };
 
 describe('H3xViewer', () => {
+  it('setRoofsVisible toggles the scene roofs and redraws', () => {
+    const { scene, fake, viewer } = setup();
+    flush();
+    fake.render.mockClear();
+    viewer.setRoofsVisible(false);
+    expect(scene.roofsVisible).toBe(false);
+    flush();
+    expect(fake.render).toHaveBeenCalledTimes(1);
+    viewer.setRoofsVisible(true);
+    expect(scene.roofsVisible).toBe(true);
+  });
+
   it('appends the canvas and coalesces render requests', () => {
     const { container, fake, viewer } = setup();
     expect(container.contains(fake.domElement)).toBe(true);

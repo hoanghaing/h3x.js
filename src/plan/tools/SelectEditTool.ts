@@ -5,22 +5,31 @@ import {
   moveNode,
   moveWall,
   pushPullWall,
-  removeColumn,
-  removeNode,
-  removeStair,
-  removeWall,
-  setSite,
   splitWall,
   stairOutline,
   updateStair,
   type Command,
   type Id,
   type Issue,
+  type Roof,
+  type RoofEdge,
   type Stair,
   type Vec2,
 } from '../../core';
 import { add, dot, leftNormal, scale, sub } from '../../core/geometry/vec';
 import type { HitTarget } from '../hit';
+import {
+  ROOF_EDGE_PX,
+  ROOF_HANDLE_PX,
+  detachAndMoveVertex,
+  moveRoofVertex,
+  nearestHandle,
+  roofEdgeAt,
+  roofHandles,
+  translateRoof,
+  type RoofEdgeRef,
+  type RoofVertexRef,
+} from '../roofEdit';
 import { nearestFaceVertex, snapScalar, type SnapGuide } from '../snap';
 import type { ScreenPoint } from '../types';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
@@ -40,6 +49,10 @@ interface Press {
   plan: Vec2;
   shift: boolean;
   moved: boolean;
+  /** The press grabbed a vertex handle of the selected roof. */
+  roofVertex?: RoofVertexRef;
+  /** The press is near an edge of the selected roof (a click on it asks the host to edit it). */
+  roofEdge?: { ref: RoofEdgeRef; current: RoofEdge };
   /** The gesture was ended (Esc, interruption): ignore the rest of this press. */
   dead: boolean;
 }
@@ -50,7 +63,7 @@ type Drop = { node: Id; at: Vec2 } | { wall: Id; at: Vec2 };
 interface Gesture {
   key: string;
   /** 'push' is a Shift + wall drag (push / pull). */
-  kind: 'node' | 'wall' | 'push' | 'column' | 'stair';
+  kind: 'node' | 'wall' | 'push' | 'column' | 'stair' | 'roof' | 'roofVertex';
   id: Id;
   /** Wall drags: unit left normal at gesture start. */
   normal: Vec2;
@@ -60,6 +73,11 @@ interface Gesture {
   applied: number;
   /** Node drags: the join target the pointer is snapped onto, if any. */
   drop: Drop | null;
+  /** Roof drags: the roof at gesture start; vertex drags: the grabbed vertex. */
+  roof?: Roof;
+  vertex?: RoofVertexRef;
+  /** Roof drags: the translation currently applied. */
+  shift?: Vec2;
 }
 
 const SNAP_RADIUS_PX = 8;
@@ -71,7 +89,7 @@ const ARROWS: Record<string, Vec2> = {
   ArrowDown: { x: 0, y: -1 },
 };
 
-type Selectable = 'node' | 'wall' | 'column' | 'stair' | 'site';
+type Selectable = 'node' | 'wall' | 'column' | 'stair' | 'roof' | 'site' | 'opening' | 'item';
 /** |normal component| above which a wall counts as moving along that axis (push / pull guides). */
 const AXIS_PARALLEL = 1 - 1e-9;
 
@@ -80,13 +98,18 @@ const SELECTABLE: ReadonlySet<string> = new Set<Selectable>([
   'wall',
   'column',
   'stair',
+  'roof',
   'site',
+  'opening',
+  'item',
 ]);
 const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
 
 /**
- * Selects nodes, walls, columns, stairs and the site; drags nodes, walls, columns and stairs (one undo step per
- * drag), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
+ * Selects nodes, walls, columns, stairs, roofs, openings, items and the site; drags nodes, walls, columns, stairs
+ * and independent roofs (one undo step per drag; a vertex handle of a selected roof moves that
+ * vertex, detaching a follow roof first; a click on an edge of the selected roof asks the host to
+ * edit it), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
  * another node or a wall joins it, double-click on a wall inserts a point, Delete / Backspace
  * removes the selection.
  */
@@ -138,12 +161,17 @@ export class SelectEditTool implements Tool {
       moved: false,
       dead: false,
     };
+    this.grabRoofHandle(e);
+    if (this.press.roofVertex || this.press.roofEdge) return true;
     const kind = e.hit?.kind;
     return (
+      kind === 'roof' ||
       kind === 'node' ||
       kind === 'wall' ||
       kind === 'column' ||
       kind === 'stair' ||
+      kind === 'opening' ||
+      kind === 'item' ||
       kind === 'dimension'
     );
   }
@@ -170,6 +198,11 @@ export class SelectEditTool implements Tool {
       return;
     }
     if (press.moved) return;
+    if (press.roofEdge) {
+      this.askRoofEdge(press.roofEdge, press.screen);
+      return;
+    }
+    if (press.roofVertex) return;
     const t = press.target;
     if (t && selectable(t.kind)) this.ctx.plan.select({ kind: t.kind, id: t.id });
     else if (t?.kind !== 'dimension') this.ctx.plan.select(null);
@@ -205,21 +238,10 @@ export class SelectEditTool implements Tool {
     }
     const sel = ctx.plan.selection;
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (this.gesture || !sel || e.altKey || e.ctrlKey || e.metaKey) return false;
-      const cmd =
-        sel.kind === 'node'
-          ? removeNode(sel.id)
-          : sel.kind === 'wall'
-            ? removeWall(sel.id)
-            : sel.kind === 'column'
-              ? removeColumn(sel.id)
-              : sel.kind === 'stair'
-                ? removeStair(sel.id)
-                : sel.kind === 'site'
-                  ? setSite(null)
-                  : null;
-      if (!cmd) return false;
-      if (this.run(cmd)) ctx.plan.select(null);
+      if (this.gesture || !sel || !selectable(sel.kind) || e.altKey || e.ctrlKey || e.metaKey) {
+        return false;
+      }
+      ctx.plan.deleteSelection();
       return true;
     }
     const dir = ARROWS[e.key];
@@ -254,7 +276,20 @@ export class SelectEditTool implements Tool {
     let kind: Gesture['kind'];
     let normal: Vec2 = { x: 0, y: 0 };
     let start: Vec2 = { x: 0, y: 0 };
-    if (t?.kind === 'wall') {
+    let roof: Roof | undefined;
+    let vertex: RoofVertexRef | undefined;
+    const sel = ctx.plan.selection;
+    if (press.roofVertex && sel?.kind === 'roof') {
+      roof = floor.roofs[sel.id];
+      if (!roof) return;
+      kind = 'roofVertex';
+      vertex = press.roofVertex;
+    } else if (t?.kind === 'roof') {
+      // A follow roof cannot be moved as a whole.
+      roof = floor.roofs[t.id];
+      if (!roof || roof.follow || !roof.points) return;
+      kind = 'roof';
+    } else if (t?.kind === 'wall') {
       const w = floor.walls[t.id];
       const a = w && floor.nodes[w.a];
       const b = w && floor.nodes[w.b];
@@ -278,17 +313,20 @@ export class SelectEditTool implements Tool {
     } else {
       return;
     }
+    const id = roof ? roof.id : t!.id;
     this.gesture = {
       key: `plan-drag-${++this.gestureCount}`,
       kind,
-      id: t.id,
+      id,
       normal,
       start,
       applied: 0,
       drop: null,
+      ...(roof ? { roof: structuredClone(roof), shift: { x: 0, y: 0 } } : {}),
+      ...(vertex ? { vertex } : {}),
     };
-    ctx.plan.select({ kind: t.kind, id: t.id });
-    if (kind === 'node') ctx.setDragging(t.id);
+    ctx.plan.select({ kind: roof ? 'roof' : (t!.kind as Selectable), id });
+    if (kind === 'node') ctx.setDragging(id);
   }
 
   private step(e: PlanPointerEvent): void {
@@ -297,6 +335,8 @@ export class SelectEditTool implements Tool {
     if (g.kind === 'node') this.stepNode(g, e.plan, free);
     else if (g.kind === 'column') this.stepColumn(g, e.plan, free);
     else if (g.kind === 'stair') this.stepStair(g, e.plan, free);
+    else if (g.kind === 'roofVertex') this.stepRoofVertex(g, e.plan, free);
+    else if (g.kind === 'roof') this.stepRoof(g, e.plan, free);
     else if (g.kind === 'push') this.stepPush(g, e.plan, free);
     else this.stepWall(g, e.plan, free);
   }
@@ -348,6 +388,81 @@ export class SelectEditTool implements Tool {
     const same = r.point.x === s.x && r.point.y === s.y;
     const ok = same || this.run(updateStair(g.id, { x: r.point.x, y: r.point.y }), g.key);
     ctx.showGuides(ok ? r.guides : []);
+  }
+
+  /** Moves the grabbed vertex of a roof to the snapped pointer; a follow roof is detached first. */
+  private stepRoofVertex(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const roof = ctx.doc.floor.roofs[g.id];
+    if (!roof || !g.vertex) return;
+    const r = ctx.snapDraw(p, undefined, free);
+    if (roof.follow) {
+      const cmd = detachAndMoveVertex(g.id, g.vertex.index, r.point);
+      const ok = this.run(cmd, g.key);
+      if (ok) ctx.plan.emitRoofDetached({ roofId: g.id, newIds: [...cmd.newIds] });
+      ctx.showGuides(ok ? r.guides : []);
+      return;
+    }
+    const at = roofHandles(roof, ctx.doc.floor).find(
+      (h) => h.index === g.vertex!.index && h.hole === g.vertex!.hole,
+    )?.at;
+    const same = at && at.x === r.point.x && at.y === r.point.y;
+    const ok = same || this.run(moveRoofVertex(g.id, roof, g.vertex, r.point), g.key);
+    ctx.showGuides(ok ? r.guides : []);
+  }
+
+  /** Moves an independent roof; the pointer delta snaps to the grid like a stair drag. */
+  private stepRoof(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    if (!g.roof || !g.shift) return;
+    const grid = ctx.plan.snapOptions.grid;
+    const d = sub(p, this.press!.plan);
+    const shift = free ? d : { x: snapScalar(d.x, grid), y: snapScalar(d.y, grid) };
+    if (shift.x === g.shift.x && shift.y === g.shift.y) return;
+    if (this.run(translateRoof(g.id, g.roof, shift), g.key)) g.shift = shift;
+  }
+
+  /** Records a vertex handle or edge of the selected roof under the press, if any. */
+  private grabRoofHandle(e: PlanPointerEvent): void {
+    const ctx = this.ctx!;
+    const sel = ctx.plan.selection;
+    const roof = sel?.kind === 'roof' ? ctx.doc.floor.roofs[sel.id] : undefined;
+    if (!roof || !this.press) return;
+    const scale = ctx.plan.view.scale;
+    const hit = e.hit?.kind;
+    // A handle wins over a wall (a follow roof's corners sit on the wall faces) and over a node it
+    // is nearer to, but not over columns or stairs.
+    const grabbable = !hit || hit === 'roof' || hit === 'wall' || hit === 'room' || hit === 'site';
+    const handles = roofHandles(roof, ctx.doc.floor);
+    let h = grabbable ? nearestHandle(handles, e.plan, ROOF_HANDLE_PX / scale) : null;
+    if (!h && hit === 'node') {
+      // A corner node sits just inside a follow roof's corner: the nearer of the two wins.
+      const n = ctx.doc.floor.nodes[e.hit!.id];
+      const dn = n ? Math.hypot(n.x - e.plan.x, n.y - e.plan.y) : 0;
+      h = nearestHandle(handles, e.plan, Math.min(ROOF_HANDLE_PX / scale, dn - 1e-9));
+    }
+    if (h) {
+      this.press.roofVertex = { index: h.index, ...(h.hole !== undefined ? { hole: h.hole } : {}) };
+      return;
+    }
+    // Edge clicks never steal a click that landed on another entity.
+    if (hit && hit !== 'roof') return;
+    const edge = roofEdgeAt(roof, ctx.doc.floor, e.plan, ROOF_EDGE_PX / scale);
+    if (edge) this.press.roofEdge = edge;
+  }
+
+  private askRoofEdge(edge: NonNullable<Press['roofEdge']>, screen: ScreenPoint): void {
+    const sel = this.ctx!.plan.selection;
+    if (sel?.kind !== 'roof') return;
+    const { ref, current } = edge;
+    this.ctx!.plan.emitRoofEdgeRequest({
+      roofId: sel.id,
+      index: ref.index,
+      ...(ref.hole !== undefined ? { hole: ref.hole } : {}),
+      ...(ref.wallId !== undefined ? { wallId: ref.wallId } : {}),
+      current,
+      at: screen,
+    });
   }
 
   /** Move that puts the nearest corner of the stair's outline (at `centre`) on a wall-face vertex. */

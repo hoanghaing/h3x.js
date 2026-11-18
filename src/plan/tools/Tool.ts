@@ -18,16 +18,17 @@ export interface ToolContext {
   /** Snaps with the plan's snap options; alignment reaches 8 screen px. `disabled` returns `p` as is. */
   snap(p: Vec2, exclude: Id[], disabled: boolean): SnapResult;
   /**
-   * Drawing snap (node > wall > alignment > 45-degree lock from `from` > grid); reach is 8 screen px.
+   * Drawing snap (node > wall > site corner > site edge > alignment > 45-degree lock from `from` > grid); reach is 8 screen px.
    * `extra` adds alignment points; `structure: false` ignores node / wall targets; `exclude` nodes are
-   * neither targets nor alignment points and their walls are not targets. `disabled` returns `p` as a free target.
+   * neither targets nor alignment points and their walls are not targets. Site corners and edges (the existing site outline) are targets
+   * regardless of `structure` / `exclude`, for drawing and for node / column / roof-vertex drags alike; `site: false` turns them off. `disabled` returns `p` as a free target.
    */
   snapDraw(
     p: Vec2,
     from: Vec2 | undefined,
     disabled: boolean,
     extra?: Vec2[],
-    opts?: { structure?: boolean; exclude?: Id[] },
+    opts?: { structure?: boolean; exclude?: Id[]; site?: boolean },
   ): DrawSnapResult;
   /** Draws snap guides in the overlay; `[]` clears. */
   showGuides(g: SnapResult['guides']): void;

@@ -179,3 +179,60 @@ describe('snapDraw near a wall end', () => {
     expect(ok.target).toEqual({ kind: 'wall', id: 'w1' });
   });
 });
+
+describe('snapDraw site option', () => {
+  const site = [
+    { x: 10, y: 10 },
+    { x: 20, y: 10 },
+    { x: 20, y: 20 },
+    { x: 10, y: 20 },
+  ];
+
+  it('snaps to a site corner with kind site-vertex', () => {
+    const r = snapDraw({ x: 10.05, y: 10.04 }, floor, { ...dopts, site });
+    expect(r.point).toEqual({ x: 10, y: 10 });
+    expect(r.target).toEqual({ kind: 'site-vertex' });
+  });
+
+  it('snaps onto a site edge with kind site-edge', () => {
+    const r = snapDraw({ x: 15.03, y: 10.06 }, floor, { ...dopts, site });
+    expect(Math.abs(r.point.y - 10)).toBeLessThan(1e-9);
+    expect(r.point.x).toBeCloseTo(15.03, 9);
+    expect(r.target).toEqual({ kind: 'site-edge' });
+  });
+
+  it('prefers a corner over an edge near it', () => {
+    const r = snapDraw({ x: 10.08, y: 10.02 }, floor, { ...dopts, site });
+    expect(r.target).toEqual({ kind: 'site-vertex' });
+  });
+
+  it('lets a wall node or wall within reach win over the site', () => {
+    const near = [
+      { x: 0.02, y: 0.02 },
+      { x: 20, y: 20 },
+      { x: 0, y: 5 },
+    ];
+    const n = snapDraw({ x: 0.03, y: 0.03 }, floor, { ...dopts, site: near });
+    expect(n.target).toEqual({ kind: 'node', id: 'a' });
+    const w = snapDraw({ x: 2, y: 0.05 }, floor, {
+      ...dopts,
+      site: [
+        { x: 0, y: 0.08 },
+        { x: 5, y: 0.08 },
+        { x: 5, y: 5 },
+      ],
+    });
+    expect(w.target).toEqual({ kind: 'wall', id: 'w1' });
+  });
+
+  it('beats alignment and grid, ignores sites out of reach', () => {
+    const r = snapDraw({ x: 15.03, y: 10.06 }, floor, {
+      ...dopts,
+      site,
+      extra: [{ x: 15, y: 50 }],
+    });
+    expect(r.target).toEqual({ kind: 'site-edge' });
+    const far = snapDraw({ x: 15, y: 10.5 }, floor, { ...dopts, site });
+    expect(far.target).toEqual({ kind: 'free' });
+  });
+});

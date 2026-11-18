@@ -21,6 +21,7 @@ const FLOOR_GEOMETRY_KINDS = new Set([
   'column',
   'floor',
   'stair',
+  'roof',
 ]);
 
 /**
@@ -31,8 +32,8 @@ export type H3xViewMode = 'active' | 'cutaway' | 'all';
 
 /**
  * A three.js scene graph kept in sync with an H3xDocument: one Group per floor
- * (`h3x-floor-<id>`, lowest first) holding its walls, room floors, joins, columns, stairs and
- * slab, plus the site line on the root. The slab and room floors of a floor are cut by the stair
+ * (`h3x-floor-<id>`, lowest first) holding its walls, room floors, joins, columns, stairs,
+ * roofs and slab, plus the site line on the root. The slab and room floors of a floor are cut by the stair
  * outlines (`stairOutline`) of the floor below.
  */
 export class H3xScene {
@@ -44,6 +45,7 @@ export class H3xScene {
   /** `below|above` neighbour ids per floor at the last sync (stairs depend on both). */
   private readonly neighbours = new Map<Id, string>();
   private mode: H3xViewMode = 'all';
+  private roofsShown = true;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
   private readonly unsubscribeActive: () => void;
@@ -75,6 +77,32 @@ export class H3xScene {
     if (this.disposed) return;
     this.applyVisibility();
     this.notify();
+  }
+
+  get roofsVisible(): boolean {
+    return this.roofsShown;
+  }
+
+  /** Shows or hides every roof (bodies, frames, posts) on every floor; fires onInvalidate. */
+  setRoofsVisible(visible: boolean): void {
+    this.roofsShown = visible;
+    if (this.disposed) return;
+    for (const view of this.views.values()) view.roofsVisible = visible;
+    this.notify();
+  }
+
+  /**
+   * The meshes of a roof: its body (`h3x-roof-<id>`), then the frame bars
+   * (`h3x-roof-<id>-frame`, glass / polycarbonate) and posts (`h3x-roof-<id>-posts`) when
+   * drawn. Empty when the roof draws nothing.
+   */
+  getRoofMeshes(id: Id, floorId?: Id): Mesh[] {
+    const view = this.view(floorId);
+    if (!view) return [];
+    return [view.roofMeshes, view.roofFrameMeshes, view.roofPostMeshes].flatMap((m) => {
+      const mesh = m.get(id);
+      return mesh ? [mesh] : [];
+    });
   }
 
   getWallMesh(id: Id, floorId?: Id): Mesh | undefined {
@@ -173,6 +201,7 @@ export class H3xScene {
       const fresh = !view;
       if (!view) {
         view = new FloorView(floor.id, this.materials);
+        view.roofsVisible = this.roofsShown;
         this.views.set(floor.id, view);
       }
       const pair = (floors[i - 1]?.id ?? '') + '|' + (floors[i + 1]?.id ?? '');

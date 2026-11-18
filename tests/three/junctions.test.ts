@@ -30,6 +30,7 @@ function floorOf(
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
 }
 
@@ -149,5 +150,122 @@ describe('H3xScene junction caps', () => {
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0]!.object.userData.h3xKind).toBe('join');
     expect(hits[0]!.point.x).toBeLessThanOrEqual(1e-9);
+  });
+});
+
+describe('junction fill with mixed wall heights', () => {
+  /** T junction at the origin: through wall along x with `through` height, stem down -y with `stem` height. */
+  function tFloor(through: number, stem: number): Floor {
+    const f = floorOf({ a: [-4, 0], n: [0, 0], b: [4, 0], s: [0, -4] }, [
+      ['w1', 'a', 'n', 0.2],
+      ['w2', 'n', 'b', 0.2],
+      ['w3', 'n', 's', 0.2],
+    ]);
+    f.walls.w1!.height = through;
+    f.walls.w2!.height = through;
+    f.walls.w3!.height = stem;
+    return f;
+  }
+
+  function joinVertices(floor: Floor): { x: number; y: number; z: number }[] {
+    const scene = sceneOf(floor);
+    const out: { x: number; y: number; z: number }[] = [];
+    scene.root.getObjectByName('h3x-joins')!.traverse((o) => {
+      const pos = (o as Mesh).geometry?.getAttribute('position');
+      if (!pos) return;
+      for (let i = 0; i < pos.count; i++)
+        out.push({ x: pos.getX(i), y: pos.getY(i), z: pos.getZ(i) });
+    });
+    return out;
+  }
+
+  it('keeps a low parapet junction from rising to a taller butting wall', () => {
+    const verts = joinVertices(tFloor(1.1, 3));
+    expect(verts.length).toBeGreaterThan(0);
+    // The 3 m stem outline in plan: x in [-0.1, 0.1], y <= -0.1. Nothing above 1.1 may lie outside it.
+    for (const v of verts) {
+      if (v.y <= 1.1 + 1e-6) continue;
+      const planY = -v.z;
+      expect(Math.abs(v.x) <= 0.1 + 1e-6 && planY <= -0.1 + 1e-6).toBe(true);
+    }
+  });
+
+  it('caps the junction at the tall through wall height', () => {
+    const hits = hitsDown(sceneOf(tFloor(3, 1.1)).root, { x: 0, y: 0.05 });
+    expect(hits[0]!.point.y).toBeCloseTo(3, 6);
+  });
+
+  it('caps the junction at the low through wall height', () => {
+    const hits = hitsDown(sceneOf(tFloor(1.1, 3)).root, { x: 0, y: 0.05 });
+    expect(hits[0]!.point.y).toBeCloseTo(1.1, 6);
+  });
+});
+
+describe('closing height steps between walls and junction fill', () => {
+  /** Horizontal ray at height y from plan `from` along plan direction `dir`. */
+  function hitsAlong(root: Object3D, from: Vec2, dir: Vec2, y: number) {
+    return new Raycaster(
+      new Vector3(from.x, y, -from.y),
+      new Vector3(dir.x, 0, -dir.y).normalize(),
+    ).intersectObject(root, true);
+  }
+
+  function tFloor(through: number, stem: number): Floor {
+    const f = floorOf({ a: [-4, 0], n: [0, 0], b: [4, 0], s: [0, -4] }, [
+      ['w1', 'a', 'n', 0.2],
+      ['w2', 'n', 'b', 0.2],
+      ['w3', 'n', 's', 0.2],
+    ]);
+    f.walls.w1!.height = through;
+    f.walls.w2!.height = through;
+    f.walls.w3!.height = stem;
+    return f;
+  }
+
+  it('closes the end of a tall stem above a low through wall', () => {
+    const scene = sceneOf(tFloor(1.1, 3));
+    const hits = hitsAlong(scene.root, { x: 0, y: 1 }, { x: 0, y: -1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.y).toBeCloseTo(2, 6);
+    // Below the parapet top the through wall itself blocks the ray.
+    expect(hitsAlong(scene.root, { x: 0, y: 1 }, { x: 0, y: -1 }, 0.5)[0]!.point.z).toBeCloseTo(
+      -0.1,
+      6,
+    );
+  });
+
+  it('closes the side of a high through junction above a low stem', () => {
+    const scene = sceneOf(tFloor(3, 1.1));
+    const hits = hitsAlong(scene.root, { x: 0, y: -3 }, { x: 0, y: 1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.z).toBeCloseTo(0.1, 6);
+  });
+
+  it('closes the mitre end of a tall wall meeting a low wall in an L corner', () => {
+    const f = floorOf({ a: [-4, 0], n: [0, 0], c: [0, 4] }, [
+      ['w1', 'a', 'n', 0.2],
+      ['w2', 'n', 'c', 0.2],
+    ]);
+    f.walls.w2!.height = 1.1;
+    const scene = sceneOf(f);
+    const hits = hitsAlong(scene.root, { x: 0, y: 2 }, { x: 0, y: -1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.y).toBeCloseTo(2, 6);
+    expect(hits[0]!.point.z).toBeCloseTo(0, 6);
+  });
+
+  it('closes the seam between fan pieces of different heights', () => {
+    const f = floorOf({ n: [0, 0], e: [4, 0], w: [-4, 0], t: [0, 4], s: [0, -4] }, [
+      ['w1', 'n', 'e', 0.2],
+      ['w2', 'n', 'w', 0.2],
+      ['w3', 'n', 't', 0.2],
+      ['w4', 'n', 's', 0.2],
+    ]);
+    f.walls.w3!.height = 1.1;
+    f.walls.w4!.height = 1.1;
+    const scene = sceneOf(f);
+    const hits = hitsAlong(scene.root, { x: 0.05, y: 1 }, { x: 0, y: -1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.z).toBeCloseTo(-0.05, 6);
   });
 });

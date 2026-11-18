@@ -75,6 +75,10 @@ export function splitAt(
   draft.nodes[newNodeId] = { id: newNodeId, x: tidy(p.x), y: tidy(p.y) };
   draft.walls[newWallId] = { ...structuredClone(w), id: newWallId, a: newNodeId, b: w.b };
   w.b = newNodeId;
+  for (const roof of Object.values(draft.roofs)) {
+    const edge = roof.wallEdges?.[wallId];
+    if (edge) roof.wallEdges![newWallId] = structuredClone(edge);
+  }
   for (const o of Object.values(draft.openings)) {
     if (o.wall === wallId && o.offset > s) {
       o.wall = newWallId;

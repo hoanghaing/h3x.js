@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { H3xDocument, moveNode, type Floor, type Project, type Vec2 } from '../../src/core';
+import {
+  H3xDocument,
+  moveNode,
+  setSite,
+  type Floor,
+  type Project,
+  type Vec2,
+} from '../../src/core';
 import { H3xPlan } from '../../src/plan/H3xPlan';
 import { DrawWallTool } from '../../src/plan/tools/DrawWallTool';
 import { DrawWallTool as Exported, type SegmentLengthRequest } from '../../src/plan';
@@ -306,5 +313,42 @@ describe('DrawWallTool', () => {
     const added = Object.values(plan.doc.floor.walls).find((w) => !/^w\d$/.test(w.id))!;
     expect(added.thickness).toBe(0.15);
     expect(added.height).toBe(3.2);
+  });
+
+  it('snaps wall ends exactly onto site corners', () => {
+    const plan = makePlan();
+    plan.doc.execute(
+      setSite([
+        { x: 10, y: 10 },
+        { x: 20, y: 10 },
+        { x: 20, y: 18 },
+        { x: 10, y: 18 },
+      ]),
+    );
+    click(plan, { x: 10.05, y: 10.04 });
+    click(plan, { x: 19.96, y: 10.03 });
+    expect(hasWallBetween(plan, { x: 10, y: 10 }, { x: 20, y: 10 })).toBe(true);
+  });
+
+  it('Alt disables site snapping', () => {
+    const plan = makePlan();
+    plan.doc.execute(
+      setSite([
+        { x: 10, y: 10 },
+        { x: 20, y: 10 },
+        { x: 20, y: 18 },
+        { x: 10, y: 18 },
+      ]),
+    );
+    const alt = { altKey: true };
+    const a = { x: 10.05, y: 10.04 };
+    const b = { x: 12.31, y: 10.77 };
+    fire(plan, 'pointermove', a, alt);
+    fire(plan, 'pointerdown', a, alt);
+    fire(plan, 'pointerup', a, alt);
+    fire(plan, 'pointermove', b, alt);
+    fire(plan, 'pointerdown', b, alt);
+    fire(plan, 'pointerup', b, alt);
+    expect(hasWallBetween(plan, a, b)).toBe(true);
   });
 });

@@ -228,6 +228,12 @@ export class H3xViewer {
     });
   }
 
+  /** Shows or hides every roof of the scene (`H3xScene.setRoofsVisible`) and redraws. */
+  setRoofsVisible(visible: boolean): void {
+    if (this.disposed) return;
+    this.scene.setRoofsVisible(visible);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;

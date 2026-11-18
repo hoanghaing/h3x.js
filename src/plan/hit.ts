@@ -1,8 +1,9 @@
-import type { Floor, Id, PresetResolver, Room, Site } from '../core';
+import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '../core';
 import { H3xValidationError, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { WallCorners } from '../shared/walls/joins';
+import { roofHit } from './roofs';
 import { columnShape, inRoomShape, itemFootprint, openingShape, wallOutline } from './shapes';
 import type { PlanKind, Rect, ScreenPoint } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
@@ -19,6 +20,10 @@ export interface HitScene {
   site?: Readonly<Site>;
   /** Rise of `floor`'s stairs to the floor above (`stairRise`); NaN / absent: stairs hit on their bay. */
   stairRise?: number;
+  /** false: roofs are hidden and never hit (default true). */
+  roofsVisible?: boolean;
+  /** Roof geometry cached at render time by roof id; missing entries are computed. */
+  roofGeometry?: ReadonlyMap<Id, RoofGeometry>;
 }
 
 const NODE_TOLERANCE_PX = 8;
@@ -91,6 +96,14 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     if (pointInPolygon(p, stairOutline(stair, rise))) return { kind: 'stair', id: stair.id };
   }
 
+  if (scene.roofsVisible !== false) {
+    const roofReach = WALL_TOLERANCE_PX / view.scale;
+    for (const roof of Object.values(floor.roofs)) {
+      if (roofHit(roof, floor, p, roofReach, scene.roofGeometry?.get(roof.id)))
+        return { kind: 'roof', id: roof.id };
+    }
+  }
+
   for (const room of Object.values(floor.rooms)) {
     const shape = closedRoomShape(floor, room);
     if (shape && inRoomShape(p, shape)) return { kind: 'room', id: room.id };
@@ -104,6 +117,15 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   }
 
   return null;
+}
+
+/** The room whose drawn (inner) outline contains `p`, if any. */
+export function roomAt(floor: Floor, p: Vec2): Room | undefined {
+  for (const room of Object.values(floor.rooms)) {
+    const shape = closedRoomShape(floor, room);
+    if (shape && inRoomShape(p, shape)) return room;
+  }
+  return undefined;
 }
 
 /** The room's drawn (inner) outline and holes, or undefined for a room that does not close (tolerated on load). */

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { H3xDocument, type Floor, type Project, type Vec2 } from '../../src/core';
+import { H3xDocument, setSite, type Floor, type Project, type Vec2 } from '../../src/core';
 import { H3xPlan } from '../../src/plan/H3xPlan';
 import { DrawSiteTool } from '../../src/plan/tools/DrawSiteTool';
 import { DrawSiteTool as Exported } from '../../src/plan';
@@ -162,5 +162,23 @@ describe('DrawSiteTool', () => {
     plan.setTool(tool);
     fire(plan, 'pointermove', corners[2]!);
     expect(previewLines(plan)).toHaveLength(0);
+  });
+
+  it('does not snap to the existing site outline', () => {
+    const plan = makePlan();
+    plan.doc.execute(
+      setSite([
+        { x: 50, y: 50 },
+        { x: 60, y: 50 },
+        { x: 60, y: 60 },
+      ]),
+    );
+    click(plan, { x: 50.04, y: 50.03 });
+    click(plan, { x: 55, y: 40 });
+    click(plan, { x: 45, y: 40 });
+    click(plan, { x: 50.04, y: 50.03 });
+    const pts = site(plan)!.points;
+    expect(pts).toContainEqual({ x: 50.05, y: 50.05 });
+    expect(pts).not.toContainEqual({ x: 50, y: 50 });
   });
 });

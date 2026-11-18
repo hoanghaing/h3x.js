@@ -13,11 +13,13 @@ import {
   removeFloor,
   setFloorHeight,
   setWallFinish,
+  updateRoof,
   type Floor,
   type Project,
 } from '../../src/core';
 import { H3xScene, MaterialLibrary, type H3xViewMode } from '../../src/three';
 import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
+import { gableWallEdges, roofRoom, testRoof } from './helpers';
 
 function makeDoc(floor = oneRoomFloor()): H3xDocument {
   const project = { name: 'p', floors: [floor] } as unknown as Project;
@@ -42,6 +44,7 @@ describe('H3xScene', () => {
       'h3x-joins',
       'h3x-columns',
       'h3x-stairs',
+      'h3x-roofs',
       'h3x-slab',
     ]);
     for (const id of ['w1', 'w2', 'w3', 'w4']) {
@@ -361,5 +364,134 @@ describe('H3xScene with several floors', () => {
       'h3x-floor-f1',
       'h3x-floor-f2',
     ]);
+  });
+});
+
+describe('H3xScene roofs', () => {
+  function roofDoc(roof = testRoof(), floor = roofRoom()): H3xDocument {
+    floor.roofs[roof.id] = roof;
+    return makeDoc(floor);
+  }
+  const top = (o: Object3D): number => new Box3().setFromObject(o).max.y;
+  /** Visible itself and through every ancestor. */
+  const shown = (o: Object3D): boolean => {
+    for (let p: Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  };
+  const roofObjects = (scene: H3xScene): Object3D[] => {
+    const out: Object3D[] = [];
+    scene.root.traverse((o) => {
+      if (o.name.startsWith('h3x-roof-')) out.push(o);
+    });
+    return out;
+  };
+
+  it('builds a named roof mesh in the floor group', () => {
+    const scene = new H3xScene(roofDoc());
+    const [mesh, ...rest] = scene.getRoofMeshes('R1');
+    expect(rest).toHaveLength(0);
+    expect(mesh!.name).toBe('h3x-roof-R1');
+    expect(mesh!.userData).toEqual({ h3xKind: 'roof', h3xId: 'R1', h3xFloorId: 'f1' });
+    expect(floorGroup(scene).getObjectByName('h3x-roof-R1')).toBe(mesh);
+    expect((mesh!.material as MeshStandardMaterial).name).toBe('roof-tile');
+    expect(top(mesh!)).toBeCloseTo(5.1 + 0.1 / Math.cos(Math.PI / 4), 4);
+    expect(scene.getRoofMeshes('nope')).toEqual([]);
+  });
+
+  it('glass roof on posts: translucent body, frame and posts', () => {
+    const roof = testRoof({
+      follow: false,
+      rooms: undefined,
+      points: [
+        { x: 10, y: 0 },
+        { x: 14, y: 0 },
+        { x: 14, y: 3 },
+        { x: 10, y: 3 },
+      ],
+      edges: [
+        { kind: 'slope', pitch: 10 },
+        { kind: 'gable' },
+        { kind: 'gable' },
+        { kind: 'gable' },
+      ],
+      material: 'glass',
+      supports: 'posts',
+    });
+    const scene = new H3xScene(roofDoc(roof));
+    const meshes = scene.getRoofMeshes('R1');
+    expect(meshes.map((m) => m.name)).toEqual([
+      'h3x-roof-R1',
+      'h3x-roof-R1-frame',
+      'h3x-roof-R1-posts',
+    ]);
+    const glass = meshes[0]!.material as MeshStandardMaterial;
+    expect(glass.transparent).toBe(true);
+    expect(glass.depthWrite).toBe(false);
+    expect(meshes.every((m) => m.userData.h3xKind === 'roof')).toBe(true);
+  });
+
+  it('setRoofsVisible hides every roof object and survives rebuilds', () => {
+    const doc = roofDoc(testRoof({ supports: 'posts', overhang: 1 }));
+    const scene = new H3xScene(doc);
+    const fn = vi.fn();
+    scene.onInvalidate(fn);
+    expect(roofObjects(scene).length).toBeGreaterThan(0);
+    expect(roofObjects(scene).every(shown)).toBe(true);
+    scene.setRoofsVisible(false);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(roofObjects(scene).some(shown)).toBe(false);
+    expect(shown(scene.getWallMesh('w1')!)).toBe(true);
+    doc.execute(updateRoof('R1', { pitch: 30 }));
+    expect(roofObjects(scene).some(shown)).toBe(false);
+    scene.setRoofsVisible(true);
+    expect(roofObjects(scene).every(shown)).toBe(true);
+  });
+
+  it('updateRoof pitch updates the mesh on change', () => {
+    const doc = roofDoc();
+    const scene = new H3xScene(doc);
+    const mesh = scene.getRoofMeshes('R1')[0]!;
+    const fn = vi.fn();
+    scene.onInvalidate(fn);
+    doc.execute(updateRoof('R1', { pitch: 30 }));
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(scene.getRoofMeshes('R1')[0]).toBe(mesh);
+    expect(top(mesh)).toBeCloseTo(3 + 2.1 * Math.tan(Math.PI / 6) + 0.1 / Math.cos(Math.PI / 6), 4);
+  });
+
+  it('gable walls rise with the roof and follow its edits', () => {
+    const f = roofRoom(6, 4);
+    const doc = roofDoc(testRoof({ wallEdges: gableWallEdges(f) }), f);
+    const scene = new H3xScene(doc);
+    expect(top(scene.getWallMesh('w2')!)).toBeCloseTo(5.1, 4);
+    expect(top(scene.getWallMesh('w1')!)).toBeCloseTo(3, 4);
+    doc.execute(updateRoof('R1', { pitch: 30 }));
+    expect(top(scene.getWallMesh('w2')!)).toBeCloseTo(3 + 2.1 * Math.tan(Math.PI / 6), 4);
+  });
+
+  it('a failed roof renders the flat fallback without throwing', () => {
+    const roof = testRoof({
+      follow: false,
+      rooms: undefined,
+      points: [
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 4, y: 4 },
+        { x: 0, y: 4 },
+      ],
+      edges: [{ kind: 'gable' }, { kind: 'gable' }, { kind: 'gable' }, { kind: 'gable' }],
+    });
+    let scene!: H3xScene;
+    expect(() => (scene = new H3xScene(roofDoc(roof)))).not.toThrow();
+    const mesh = scene.getRoofMeshes('R1')[0]!;
+    const b = new Box3().setFromObject(mesh);
+    expect(b.min.y).toBeCloseTo(3, 5);
+    expect(b.max.y).toBeCloseTo(3.1, 5);
+  });
+
+  it('a roof follows view modes with its floor', () => {
+    const scene = new H3xScene(roofDoc());
+    scene.setViewMode('active');
+    expect(shown(scene.getRoofMeshes('R1')[0]!)).toBe(true);
   });
 });

@@ -2,12 +2,14 @@
 import {
   H3xDocument,
   addFloor,
+  applyRoofPreset,
   removeFloor,
   setFloorHeight,
   setGroundElevation,
   setSlabThickness,
   stairParams,
   updateStair,
+  type RoofPresetId,
   type Stair,
 } from 'h3x/core';
 import {
@@ -15,12 +17,14 @@ import {
   DrawSiteTool,
   DrawWallTool,
   H3xPlan,
+  RoofTool,
   SelectEditTool,
   StairTool,
 } from 'h3x/plan';
 import { H3xScene, H3xViewer, type H3xViewMode } from 'h3x/three';
 import layoutXml from './layouts/nha-ong-4x16.h3x?raw';
 import townhouseXml from './layouts/townhouse-3f.xml?raw';
+import trapezoidXml from './layouts/townhouse-trapezoid.xml?raw';
 import { attachLengthInput, attachSegmentLengthInput } from './lengthInput';
 import { nextProjection, projectionLabel } from './projection';
 import { widenHouse } from './widen';
@@ -41,8 +45,10 @@ function mount(next: H3xDocument): void {
   scene = new H3xScene(doc);
   viewer = new H3xViewer(appHost, scene);
   scene.setViewMode(viewSelect.value as H3xViewMode);
+  viewer.setRoofsVisible(roofsCheck.checked);
   viewer.fitToContent();
   plan = new H3xPlan(planHost, doc, { stairLabels: { up: 'LÊN', down: 'XUỐNG' } });
+  plan.setRoofsVisible(roofsCheck.checked);
   plan.fitToContent();
   teardown = [
     attachLengthInput(plan, planHost),
@@ -52,6 +58,13 @@ function mount(next: H3xDocument): void {
     doc.on('change', refreshStairControls),
     doc.on('activefloor', refreshStairControls),
     plan.on('selectionchange', refreshStairControls),
+    plan.on('selectionchange', (sel) => {
+      // Show the selected roof's kind in the preset select.
+      const preset = sel?.kind === 'roof' ? doc.floor.roofs[sel.id]?.preset : undefined;
+      if (preset) roofPresetSelect.value = preset;
+    }),
+    plan.on('roofdetached', () => say('Mái đã tách khỏi tường, giờ là đa giác độc lập')),
+    plan.on('roofEdgeRequest', (r) => say(`Cạnh mái ${r.wallId ?? r.index}: ${r.current.kind}`)),
     plan.on('issues', ({ standing }) => {
       if (standing.length > 0) say(`${standing.length} vấn đề tồn tại`, true);
       else say('');
@@ -147,12 +160,21 @@ function patchStair(patch: Partial<Omit<Stair, 'id'>>, ok: string, coalesceKey?:
 }
 
 const viewSelect = document.getElementById('sel-view') as HTMLSelectElement;
+const roofsCheck = document.getElementById('chk-roofs') as HTMLInputElement;
+const roofPresetSelect = document.getElementById('sel-roof-preset') as HTMLSelectElement;
+const roofModeSelect = document.getElementById('sel-roof-mode') as HTMLSelectElement;
 
 mount(H3xDocument.fromXML(townhouseXml));
 
 floorSelect.addEventListener('change', () => doc.setActiveFloor(floorSelect.value));
-on('btn-floor-above', () => run(addFloor({ position: 'above' }), 'Đã thêm tầng trên'));
-on('btn-floor-below', () => run(addFloor({ position: 'below' }), 'Đã thêm tầng dưới'));
+// A new floor becomes the active one, so the next edit (or "Xóa tầng") acts on it.
+const addFloorAndOpen = (position: 'above' | 'below', ok: string): void => {
+  const cmd = addFloor({ position });
+  run(cmd, ok);
+  if (doc.project.floors.some((f) => f.id === cmd.createdId)) doc.setActiveFloor(cmd.createdId);
+};
+on('btn-floor-above', () => addFloorAndOpen('above', 'Đã thêm tầng trên'));
+on('btn-floor-below', () => addFloorAndOpen('below', 'Đã thêm tầng dưới'));
 on('btn-floor-remove', () => run(removeFloor(doc.activeFloorId), 'Đã xóa tầng'));
 wallHeightInput.addEventListener('change', () =>
   run(setFloorHeight(doc.activeFloorId, Number(wallHeightInput.value)), 'Đã đổi chiều cao tường'),
@@ -176,6 +198,56 @@ on('btn-wall', () => {
 on('btn-site', () => {
   plan.setTool(new DrawSiteTool());
   say('Vẽ khu đất: nhấp từng đỉnh, nhấp đỉnh đầu hoặc Enter để đóng');
+});
+on('btn-delete', () => {
+  if (!plan.deleteSelection())
+    say('Chọn một đối tượng để xoá (nút, tường, cột, cầu thang, mái, khu đất)', true);
+  else say('Đã xoá');
+});
+// Delete / Backspace also works after using the toolbar (focus left the plan): the plan handles
+// keys only while it has focus, so the page forwards them unless a text field is being edited.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  const t = e.target as HTMLElement | null;
+  if (
+    t?.closest('svg') ||
+    t?.matches('input[type="text"], input[type="number"], input:not([type]), textarea')
+  )
+    return;
+  if (plan.deleteSelection()) {
+    e.preventDefault();
+    say('Đã xoá');
+  }
+});
+/** The RoofTool in use, so the preset / mode selects can change it without re-creating it. */
+let roofTool: RoofTool | null = null;
+const roofMode = (): 'follow' | 'draw' => (roofModeSelect.value === 'draw' ? 'draw' : 'follow');
+on('btn-roof', () => {
+  const mode = roofMode();
+  roofTool = new RoofTool({ preset: roofPresetSelect.value as RoofPresetId, mode });
+  plan.setTool(roofTool);
+  say(
+    mode === 'follow'
+      ? 'Vẽ mái: nhấp vào một phòng của tầng này (mái theo tường)'
+      : 'Vẽ mái: nhấp từng đỉnh, nhấp đỉnh đầu hoặc Enter để đóng',
+  );
+});
+// A new preset replaces the selected roof's kind at once (2D and 3D follow the change event) and
+// applies to the next roofs the tool adds.
+roofPresetSelect.addEventListener('change', () => {
+  const preset = roofPresetSelect.value as RoofPresetId;
+  roofTool?.setOptions({ preset });
+  const sel = plan.selection;
+  if (sel?.kind === 'roof') {
+    const r = doc.tryExecute(applyRoofPreset(sel.id, preset));
+    if (r.ok) say('Đã đổi kiểu mái');
+    else say(`Không hợp lệ: ${r.issues.map((i) => i.message).join('; ')}`, true);
+  }
+});
+roofModeSelect.addEventListener('change', () => roofTool?.setOptions({ mode: roofMode() }));
+roofsCheck.addEventListener('change', () => {
+  viewer.setRoofsVisible(roofsCheck.checked);
+  plan.setRoofsVisible(roofsCheck.checked);
 });
 on('btn-column-round', () => {
   plan.setTool(new ColumnTool({ shape: 'round' }));
@@ -229,6 +301,11 @@ on('btn-load-3f', () => {
   say('Đã nạp nhà phố 3 tầng');
 });
 
+on('btn-load-trap', () => {
+  mount(H3xDocument.fromXML(trapezoidXml));
+  say('Đã nạp nhà phố hình thang (chọn tầng 3: sân thượng, tum, mái tôn, mái kính)');
+});
+
 // Derive from viewer.projection: viewFromAxis also switches to orthographic.
 on('btn-projection', () => {
   viewer.setProjection(nextProjection(viewer.projection));
@@ -266,3 +343,16 @@ window.addEventListener('keydown', (e) => {
   } else return;
   e.preventDefault();
 });
+
+// Handle for poking at the demo from the browser console.
+(window as unknown as { h3x: object }).h3x = {
+  get doc() {
+    return doc;
+  },
+  get plan() {
+    return plan;
+  },
+  get scene() {
+    return scene;
+  },
+};

@@ -5,9 +5,11 @@ import {
   H3xDocument,
   addColumn,
   addFloor,
+  addRoof,
   addStair,
   addWall,
   moveNode,
+  roofGeometry,
   setSite,
   validateStairs,
   splitWall,
@@ -17,10 +19,17 @@ import {
   type Vec2,
 } from '../../src/core';
 import { HISTORY_LIMIT } from '../../src/core/document/history';
-import { H3xPlan, type H3xPlanOptions, type LengthEditRequest } from '../../src/plan/H3xPlan';
+import {
+  H3xPlan,
+  type H3xPlanOptions,
+  type LengthEditRequest,
+  type RoofEdgeRequest,
+} from '../../src/plan/H3xPlan';
+import { roofHandles } from '../../src/plan/roofEdit';
 import { SelectEditTool } from '../../src/plan/tools/SelectEditTool';
 import { SelectEditTool as Exported } from '../../src/plan';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
+import { acuteFloor, lFloor } from '../fixtures/irregular';
 
 function docOf(floor: Floor): H3xDocument {
   return H3xDocument.fromProject(
@@ -866,5 +875,235 @@ describe('SelectEditTool stair outline', () => {
     fire(plan, 'pointerdown', { x: 7, y: 3.4 });
     fire(plan, 'pointerup', { x: 7, y: 3.4 });
     expect(plan.selection).toEqual({ kind: 'stair', id: add.createdId });
+  });
+});
+
+describe('SelectEditTool roofs', () => {
+  const followRoof = (plan: H3xPlan) => {
+    const add = addRoof({ preset: 'hip', follow: true, rooms: ['r1'] });
+    plan.doc.execute(add);
+    return add.createdId;
+  };
+  const independent = (plan: H3xPlan) => {
+    const add = addRoof({
+      preset: 'gable',
+      points: [
+        { x: 6, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 4 },
+        { x: 6, y: 4 },
+      ],
+    });
+    plan.doc.execute(add);
+    return add.createdId;
+  };
+  const corner = (plan: H3xPlan, id: string, i: number): Vec2 =>
+    roofGeometry(plan.doc.floor.roofs[id]!, plan.doc.floor).bodies[0]!.outline[0]![i]!;
+
+  it('dragging a vertex of a follow roof detaches it and moves the vertex in one undo step', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    plan.select({ kind: 'roof', id });
+    const detached: unknown[] = [];
+    plan.on('roofdetached', (e) => detached.push(e));
+    const before = structuredClone(plan.doc.floor.roofs[id]!);
+    const v = corner(plan, id, 0);
+    drag(plan, v, { x: v.x - 1, y: v.y - 1 });
+    const r = plan.doc.floor.roofs[id]!;
+    expect(r.follow).toBe(false);
+    expect(r.points).toHaveLength(4);
+    expect(r.points![0]!.x).toBeCloseTo(v.x - 1, 1);
+    expect(r.points![0]!.y).toBeCloseTo(v.y - 1, 1);
+    expect(detached).toEqual([{ roofId: id, newIds: [] }]);
+    plan.doc.undo();
+    expect(plan.doc.floor.roofs[id]).toEqual(before);
+  });
+
+  it('dragging a vertex of an independent roof moves just that vertex', () => {
+    const plan = makePlan();
+    const id = independent(plan);
+    plan.select({ kind: 'roof', id });
+    const detached: unknown[] = [];
+    plan.on('roofdetached', (e) => detached.push(e));
+    drag(plan, { x: 10, y: 4 }, { x: 11, y: 5 });
+    const pts = plan.doc.floor.roofs[id]!.points!;
+    expect(pts[2]!.x).toBeCloseTo(11, 1);
+    expect(pts[2]!.y).toBeCloseTo(5, 1);
+    expect(pts[0]).toEqual({ x: 6, y: 0 });
+    expect(detached).toEqual([]);
+  });
+
+  it('dragging inside an independent roof moves it by a grid-snapped delta', () => {
+    const plan = makePlan();
+    const id = independent(plan);
+    drag(plan, { x: 8, y: 2 }, { x: 8.52, y: 3.01 });
+    const pts = plan.doc.floor.roofs[id]!.points!;
+    expect(pts[0]!.x).toBeCloseTo(6.5, 9);
+    expect(pts[0]!.y).toBeCloseTo(1, 9);
+    expect(plan.selection).toEqual({ kind: 'roof', id });
+  });
+
+  it('dragging inside a follow roof does nothing', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    const before = structuredClone(plan.doc.floor.roofs[id]!);
+    drag(plan, { x: 2, y: 2 }, { x: 3, y: 3 });
+    expect(plan.doc.floor.roofs[id]).toEqual(before);
+  });
+
+  it('clicking the edge of the selected roof asks the editor for the edge', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    plan.select({ kind: 'roof', id });
+    const asked: RoofEdgeRequest[] = [];
+    plan.on('roofEdgeRequest', (e) => asked.push(e));
+    const a = corner(plan, id, 0);
+    const b = corner(plan, id, 1);
+    const mid = { x: (a.x + b.x) / 2 + 0.7, y: (a.y + b.y) / 2 - 0.03 }; // just outside the wall
+    fire(plan, 'pointerdown', mid);
+    fire(plan, 'pointerup', mid);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.roofId).toBe(id);
+    expect(asked[0]!.index).toBe(0);
+    expect(asked[0]!.wallId).toBe('w1');
+    expect(asked[0]!.current).toEqual({ kind: 'slope', pitch: 30 });
+    expect(plan.selection).toEqual({ kind: 'roof', id });
+  });
+
+  const planOf = (floor: Floor): H3xPlan => {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+    document.body.appendChild(el);
+    const plan = new H3xPlan(el, docOf(floor), {});
+    plan.fitToContent();
+    plans.push(plan);
+    return plan;
+  };
+  const handles = (plan: H3xPlan): Element[] =>
+    Array.from(plan.svg.querySelectorAll('.h3x-plan-roof-handle'));
+
+  it('with a follow roof selected, clicking an outer wall selects the wall', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    plan.select({ kind: 'roof', id });
+    const asked: RoofEdgeRequest[] = [];
+    plan.on('roofEdgeRequest', (e) => asked.push(e));
+    const p = { x: 2.9, y: -0.1 }; // on the outer face of w1, away from the corners
+    fire(plan, 'pointerdown', p);
+    fire(plan, 'pointerup', p);
+    expect(asked).toEqual([]);
+    expect(plan.selection).toEqual({ kind: 'wall', id: 'w1' });
+  });
+
+  it.each([
+    ['L-shaped', lFloor],
+    ['acute (bevelled corner)', acuteFloor],
+  ])('dragging handle k of a %s follow roof moves detached points[k]', (_n, make) => {
+    const plan = planOf(make());
+    const add = addRoof({ preset: 'hip', follow: true, rooms: ['r1'] });
+    plan.doc.execute(add);
+    const id = add.createdId;
+    plan.select({ kind: 'roof', id });
+    const verts = roofHandles(plan.doc.floor.roofs[id]!, plan.doc.floor).map((h) => h.at);
+    expect(handles(plan)).toHaveLength(verts.length);
+    for (let k = 0; k < verts.length; k++) {
+      const p = plan.doc.floor.roofs[id]!;
+      const before = structuredClone(p);
+      const v = roofHandles(p, plan.doc.floor)[k]!.at;
+      const to = { x: v.x + 0.3, y: v.y - 0.3 };
+      drag(plan, v, to, 5, { altKey: true });
+      const pts = plan.doc.floor.roofs[id]!.points!;
+      expect(pts[k]!.x).toBeCloseTo(to.x, 1);
+      expect(pts[k]!.y).toBeCloseTo(to.y, 1);
+      expect(pts).toHaveLength(verts.length);
+      plan.doc.undo();
+      expect(plan.doc.floor.roofs[id]).toEqual(before);
+    }
+  });
+
+  it('an edge click on a hole of an independent roof reports hole and index', () => {
+    const plan = makePlan();
+    const add = addRoof({
+      preset: 'gable',
+      points: [
+        { x: 6, y: 0 },
+        { x: 12, y: 0 },
+        { x: 12, y: 6 },
+        { x: 6, y: 6 },
+      ],
+      holes: [
+        [
+          { x: 8, y: 2 },
+          { x: 8, y: 4 },
+          { x: 10, y: 4 },
+          { x: 10, y: 2 },
+        ],
+      ],
+    });
+    plan.doc.execute(add);
+    plan.select({ kind: 'roof', id: add.createdId });
+    const asked: RoofEdgeRequest[] = [];
+    plan.on('roofEdgeRequest', (e) => asked.push(e));
+    const p = { x: 9, y: 4.02 }; // edge 2 of the hole, from (10, 4) to (8, 4)... index 1 is 8,4 to 10,4
+    fire(plan, 'pointerdown', p);
+    fire(plan, 'pointerup', p);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.hole).toBe(0);
+    expect(asked[0]!.index).toBe(1);
+    expect(asked[0]!.wallId).toBeUndefined();
+  });
+
+  it('handles follow the outline after a change that is not a selection change', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    plan.select({ kind: 'roof', id });
+    const pos = (): Vec2[] =>
+      handles(plan).map((h) => {
+        const m = /matrix\([^,]+,0,0,[^,]+,([-\d.e]+),([-\d.e]+)\)/.exec(
+          h.getAttribute('transform') ?? '',
+        )!;
+        return { x: Number(m[1]), y: Number(m[2]) };
+      });
+    const expected = (): Vec2[] =>
+      roofHandles(plan.doc.floor.roofs[id]!, plan.doc.floor).map((h) => h.at);
+    const near = (a: Vec2[], b: Vec2[]) =>
+      a.forEach((p, i) => {
+        expect(p.x).toBeCloseTo(b[i]!.x, 3);
+        expect(p.y).toBeCloseTo(b[i]!.y, 3);
+      });
+    near(pos(), expected());
+    const before = expected();
+    plan.doc.execute(moveNode('n3', { x: 6, y: 5 }));
+    expect(expected()).not.toEqual(before);
+    near(pos(), expected());
+    plan.doc.undo();
+    near(pos(), before);
+  });
+
+  it('Delete removes the selected roof', () => {
+    const plan = makePlan();
+    const id = followRoof(plan);
+    plan.select({ kind: 'roof', id });
+    key(plan, 'Delete');
+    expect(plan.doc.floor.roofs[id]).toBeUndefined();
+    expect(plan.selection).toBeNull();
+  });
+});
+
+describe('SelectEditTool openings', () => {
+  it('selects a door by clicking it and deletes it with Delete (one undo step)', () => {
+    const plan = makePlan();
+    const p = { x: 1.65, y: 0 };
+    fire(plan, 'pointermove', p);
+    fire(plan, 'pointerdown', p);
+    fire(plan, 'pointerup', p);
+    expect(plan.selection).toEqual({ kind: 'opening', id: 'o1' });
+    expect(plan.getElement('opening', 'o1')!.classList.contains('h3x-plan-selected')).toBe(true);
+    key(plan, 'Delete');
+    expect(plan.doc.floor.openings.o1).toBeUndefined();
+    expect(plan.selection).toBeNull();
+    plan.doc.undo();
+    expect(plan.doc.floor.openings.o1).toBeDefined();
   });
 });

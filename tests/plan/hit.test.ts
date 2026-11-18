@@ -50,6 +50,25 @@ describe('hitTest', () => {
     expect(hitTest(s, at(2, 2))).toEqual({ kind: 'item', id: 'i1' });
   });
 
+  it('hits a roof inside its overhang outline, after walls and before rooms; hidden roofs are skipped', () => {
+    const s = scene();
+    s.floor.roofs['rf'] = {
+      id: 'rf',
+      kind: 'flat',
+      follow: true,
+      rooms: ['r1'],
+      pitch: 0,
+      base: 0,
+      overhang: 0.5,
+      gableOverhang: 0.3,
+      thickness: 0.1,
+      material: 'concrete',
+    } as Floor['roofs'][string];
+    expect(hitTest(s, at(3, 0))).toEqual({ kind: 'wall', id: 'w1' });
+    expect(hitTest(s, at(2, 2))).toEqual({ kind: 'roof', id: 'rf' });
+    expect(hitTest({ ...s, roofsVisible: false }, at(2, 2))).toEqual({ kind: 'room', id: 'r1' });
+  });
+
   it('hits a room at its centre', () => {
     expect(hitTest(scene(), at(2, 2))).toEqual({ kind: 'room', id: 'r1' });
   });
