@@ -1,8 +1,9 @@
 import { Group, Mesh, type BufferGeometry } from 'three';
-import { layoutStair, stairRise, type Floor, type Id, type Vec2 } from '../core';
+import { gableProfile, layoutStair, stairRise, type Floor, type Id, type Vec2 } from '../core';
 import { buildColumnGeometry } from './columns';
 import { buildFloorGeometry } from './floors';
 import type { MaterialLibrary } from './materials';
+import { buildRoofParts } from './roofs';
 import { buildSlabGeometry } from './slab';
 import { buildHandrailGeometry, buildStairGeometry } from './stairs';
 import { buildJoinGeometry } from './walls/joinGeometry';
@@ -13,7 +14,7 @@ import { buildWallGeometry } from './walls/wallGeometry';
  * userData.h3xKind of the meshes an H3xScene creates. Every mesh also carries
  * `userData.h3xId` (entity id, unique only within its floor) and `userData.h3xFloorId`.
  */
-export type H3xKind = 'wall' | 'room' | 'join' | 'column' | 'slab' | 'stair';
+export type H3xKind = 'wall' | 'room' | 'join' | 'column' | 'slab' | 'stair' | 'roof';
 
 /** What a floor's geometry needs from its neighbours. */
 export interface FloorContext {
@@ -39,6 +40,8 @@ export class FloorView {
   private readonly joinsGroup = new Group();
   private readonly columnsGroup = new Group();
   private readonly stairsGroup = new Group();
+  /** Roof bodies, frames and posts; hidden as a whole by `roofsVisible`. */
+  private readonly roofsGroup = new Group();
   readonly wallMeshes = new Map<Id, Mesh>();
   readonly floorMeshes = new Map<Id, Mesh>();
   private readonly joinMeshes = new Map<Id, Mesh>();
@@ -47,6 +50,10 @@ export class FloorView {
   /** Main stair mass per stair id; the handrail is a separate mesh (same userData). */
   readonly stairMeshes = new Map<Id, Mesh>();
   private readonly railMeshes = new Map<Id, Mesh>();
+  /** Roof body per roof id (`h3x-roof-<id>`); frame and posts are separate meshes. */
+  readonly roofMeshes = new Map<Id, Mesh>();
+  readonly roofFrameMeshes = new Map<Id, Mesh>();
+  readonly roofPostMeshes = new Map<Id, Mesh>();
 
   constructor(
     readonly floorId: Id,
@@ -59,13 +66,23 @@ export class FloorView {
     this.joinsGroup.name = 'h3x-joins';
     this.columnsGroup.name = 'h3x-columns';
     this.stairsGroup.name = 'h3x-stairs';
+    this.roofsGroup.name = 'h3x-roofs';
     this.group.add(
       this.wallsGroup,
       this.floorsGroup,
       this.joinsGroup,
       this.columnsGroup,
       this.stairsGroup,
+      this.roofsGroup,
     );
+  }
+
+  get roofsVisible(): boolean {
+    return this.roofsGroup.visible;
+  }
+
+  set roofsVisible(v: boolean) {
+    this.roofsGroup.visible = v;
   }
 
   get slabMesh(): Mesh | undefined {
@@ -82,12 +99,14 @@ export class FloorView {
     const openings = ctx.openings ?? [];
     const { corners, junctions, risers } = computeJoins(f);
 
+    // Gable walls rise to pitched roofs; skip the profile search on floors without one.
+    const pitched = Object.values(f.roofs).some((r) => r.kind === 'pitched');
     const walls = new Map<Id, Built>();
     for (const wall of Object.values(f.walls)) {
       const wallCorners = corners[wall.id];
       if (!wallCorners) continue;
       walls.set(wall.id, {
-        geom: buildWallGeometry(f, wall.id, wallCorners),
+        geom: buildWallGeometry(f, wall.id, wallCorners, pitched ? profileOf(f, wall.id) : null),
         material: [
           this.materials.wall(wall.finishLeft),
           this.materials.wall(wall.finishRight),
@@ -130,6 +149,16 @@ export class FloorView {
       const rail = buildHandrailGeometry(layout, f);
       if (rail) rails.set(stair.id, { geom: rail, material: this.materials.trim() });
     }
+    const roofs = new Map<Id, Built>();
+    const frames = new Map<Id, Built>();
+    const posts = new Map<Id, Built>();
+    for (const roof of Object.values(f.roofs)) {
+      const parts = buildRoofParts(roof, f);
+      if (parts.body)
+        roofs.set(roof.id, { geom: parts.body, material: this.materials.roof(roof.material) });
+      if (parts.frame) frames.set(roof.id, { geom: parts.frame, material: this.materials.steel() });
+      if (parts.posts) posts.set(roof.id, { geom: parts.posts, material: this.materials.steel() });
+    }
 
     sync(this.wallMeshes, this.wallsGroup, 'wall', this.floorId, walls);
     sync(this.floorMeshes, this.floorsGroup, 'room', this.floorId, floors);
@@ -141,6 +170,17 @@ export class FloorView {
     if (this.slabMesh) this.slabMesh.name = 'h3x-slab';
     for (const m of this.stairMeshes.values()) m.name = 'h3x-stair';
     for (const m of this.railMeshes.values()) m.name = 'h3x-handrail';
+    sync(this.roofMeshes, this.roofsGroup, 'roof', this.floorId, roofs);
+    sync(this.roofFrameMeshes, this.roofsGroup, 'roof', this.floorId, frames);
+    sync(this.roofPostMeshes, this.roofsGroup, 'roof', this.floorId, posts);
+    for (const [id, m] of this.roofMeshes) {
+      m.name = 'h3x-roof-' + id;
+      // Translucent roofs neither cast shadows nor hide what is under them.
+      const mat = m.material as { transparent?: boolean };
+      m.castShadow = !mat.transparent;
+    }
+    for (const [id, m] of this.roofFrameMeshes) m.name = 'h3x-roof-' + id + '-frame';
+    for (const [id, m] of this.roofPostMeshes) m.name = 'h3x-roof-' + id + '-posts';
   }
 
   /** Disposes every geometry and detaches the group. Materials belong to the library. */
@@ -153,6 +193,9 @@ export class FloorView {
       this.slabMeshes,
       this.stairMeshes,
       this.railMeshes,
+      this.roofMeshes,
+      this.roofFrameMeshes,
+      this.roofPostMeshes,
     ]) {
       for (const mesh of meshes.values()) {
         mesh.geometry.dispose();
@@ -161,6 +204,15 @@ export class FloorView {
       meshes.clear();
     }
     this.group.removeFromParent();
+  }
+}
+
+/** The gable profile of a wall; a failure leaves the wall at its own height. */
+function profileOf(floor: Floor, wallId: Id): Vec2[] | null {
+  try {
+    return gableProfile(floor, wallId);
+  } catch {
+    return null;
   }
 }
 

@@ -5,7 +5,14 @@ import { wallUsableRange } from '../../src/core/validate/layout';
 import { computeWallCorners, type WallCorners } from '../../src/three/walls/joins';
 import { WALL_GROUP, buildWallGeometry } from '../../src/three/walls/wallGeometry';
 import { oneRoomFloor } from '../fixtures/floors';
-import { groupArea, groupFaceNormals, groupNormals } from './helpers';
+import {
+  gableWallEdges,
+  groupArea,
+  groupFaceNormals,
+  groupNormals,
+  roofRoom,
+  testRoof,
+} from './helpers';
 
 function isolatedFloor(): Floor {
   return {
@@ -173,5 +180,56 @@ describe('buildWallGeometry', () => {
     g.computeBoundingBox();
     expectNear(g.boundingBox!.min.y, 3.5);
     expectNear(g.boundingBox!.max.y, 3.5 + 3.2);
+  });
+});
+
+describe('buildWallGeometry: gable walls', () => {
+  function gableFloor(): Floor {
+    const f = roofRoom(6, 4);
+    f.roofs.R1 = testRoof({ wallEdges: gableWallEdges(f) });
+    return f;
+  }
+  const maxY = (g: ReturnType<typeof build>): number => {
+    g.computeBoundingBox();
+    return g.boundingBox!.max.y;
+  };
+
+  it('raises short gable walls to the roof underside; eaves walls stay', () => {
+    const f = gableFloor();
+    expectNear(maxY(build(f, 'w2')), 3 + 2.1, 1e-5);
+    expectNear(maxY(build(f, 'w4')), 3 + 2.1, 1e-5);
+    expectNear(maxY(build(f, 'w1')), 3);
+    expectNear(maxY(build(f, 'w3')), 3);
+  });
+
+  it('faces follow the profile (outer face 4.2 wide, inner 3.8)', () => {
+    const g = build(gableFloor(), 'w2');
+    // w2 runs +y at x = 6: right side is the outer face
+    expectNear(area(g, 'right'), 4.2 * 3 + 4.41, 1e-4);
+    expectNear(area(g, 'left'), 3.8 * 3 + 4.37, 1e-4);
+    expectAllNear(groupFaceNormals(g, WALL_GROUP.right), 1, 0, 0);
+    // sloped top cap: two pieces rising to the ridge, both facing up
+    const caps = groupFaceNormals(g, WALL_GROUP.trim).filter((n) => n.y > 0.1);
+    expect(caps.some((n) => n.z < -0.1)).toBe(true);
+    expect(caps.some((n) => n.z > 0.1)).toBe(true);
+  });
+
+  it('openings are unchanged on a gable wall', () => {
+    const f = gableFloor();
+    const before = build(f, 'w2');
+    f.openings.o9 = {
+      id: 'o9',
+      wall: 'w2',
+      preset: 'window-01',
+      offset: 2,
+      width: 1.2,
+      height: 1.4,
+      sill: 0.9,
+      flip: false,
+    };
+    const after = build(f, 'w2');
+    expectNear(area(before, 'left') - area(after, 'left'), 1.2 * 1.4, 1e-4);
+    expectNear(area(before, 'right') - area(after, 'right'), 1.2 * 1.4, 1e-4);
+    expectNear(maxY(after), 3 + 2.1, 1e-5);
   });
 });
