@@ -55,9 +55,11 @@ export function insetPolygon(pts: Vec2[], distances: number[]): Vec2[] {
 
 /**
  * Offsets edge i (pts[i] to pts[i+1]) outward (to the right of a CCW ring) by distances[i];
- * negative moves it inward. Consecutive offset lines meet at a miter point; when that point
- * is farther than miterLimit x |distance| from the input vertex the corner is bevelled into
- * two points instead. source[k] is the input edge that output edge k (points[k] to
+ * negative moves it inward. Consecutive offset lines meet at a miter point. When that point
+ * overshoots the vertex (lies ahead of it along the incoming edge, as at an acute outward
+ * corner or an acute reflex inset) and is farther than miterLimit x |distance| away, the
+ * corner is bevelled into two points instead. A miter that lies behind the vertex (an inset
+ * convex corner, an outward reflex corner) is always kept: it cannot spike. source[k] is the input edge that output edge k (points[k] to
  * points[k+1]) came from; a bevel edge takes the index of the edge before it.
  */
 export function growPolygon(
@@ -87,7 +89,8 @@ export function growPolygon(
     }
     const t = cross(sub(l1.p, l0.p), l1.dir) / denom;
     const m = { x: l0.p.x + l0.dir.x * t, y: l0.p.y + l0.dir.y * t };
-    if (Math.hypot(m.x - v.x, m.y - v.y) <= limit) {
+    const overshoot = (m.x - v.x) * l0.dir.x + (m.y - v.y) * l0.dir.y > 0;
+    if (!overshoot || Math.hypot(m.x - v.x, m.y - v.y) <= limit) {
       points.push(m);
       source.push(i);
       continue;

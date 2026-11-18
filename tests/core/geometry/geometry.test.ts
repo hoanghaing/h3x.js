@@ -150,11 +150,67 @@ describe('growPolygon', () => {
     ];
     const { points, source } = growPolygon(tri, [0.1, 0.1, 0.1], MITER_LIMIT);
     expect(points).toHaveLength(4);
-    expect(source).toHaveLength(points.length);
+    expect(source).toEqual([2, 0, 1, 2]);
+    // the two bevel points sit exactly MITER_LIMIT x d from the tip
+    for (const p of points.slice(0, 2)) {
+      expect(Math.hypot(p.x, p.y)).toBeCloseTo(MITER_LIMIT * 0.1, 9);
+    }
     for (const p of points) {
       const d = Math.min(...tri.map((v) => Math.hypot(p.x - v.x, p.y - v.y)));
       expect(d).toBeLessThanOrEqual(MITER_LIMIT * 0.1 + 1e-9);
     }
+    expect(isSimple(points)).toBe(true);
+    expect(signedArea(points)).toBeGreaterThanOrEqual(signedArea(tri));
+  });
+
+  const acuteTri = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 * Math.tan((10 * Math.PI) / 180) },
+  ];
+  // a square with a thin wedge notch (about 11 degrees) whose tip at (5, 5) is a reflex corner
+  const notched = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 5.5, y: 10 },
+    { x: 5, y: 5 },
+    { x: 4.5, y: 10 },
+    { x: 0, y: 10 },
+  ];
+
+  it('insets an acute convex corner with a plain miter (simple, shrinking ring)', () => {
+    const { points } = growPolygon(acuteTri, [-0.1, -0.1, -0.1]);
+    expect(points).toHaveLength(3);
+    expect(isSimple(points)).toBe(true);
+    expect(signedArea(points)).toBeGreaterThan(0);
+    expect(signedArea(points)).toBeLessThan(signedArea(acuteTri));
+  });
+
+  it('grows a ring monotonically with the distance', () => {
+    const areas = [0, 0.05, 0.1, 0.2].map((d) => {
+      const { points } = growPolygon(acuteTri, [d, d, d]);
+      expect(isSimple(points)).toBe(true);
+      return signedArea(points);
+    });
+    expect(areas).toEqual([...areas].sort((a, b) => a - b));
+  });
+
+  it('keeps a notch (acute reflex corner) simple when growing and when insetting', () => {
+    const out = growPolygon(
+      notched,
+      notched.map(() => 0.1),
+    );
+    expect(isSimple(out.points)).toBe(true);
+    expect(signedArea(out.points)).toBeGreaterThan(signedArea(notched));
+    const inn = growPolygon(
+      notched,
+      notched.map(() => -0.1),
+    );
+    expect(inn.points.length).toBeGreaterThan(notched.length); // the notch tip is bevelled
+    expect(isSimple(inn.points)).toBe(true);
+    expect(signedArea(inn.points)).toBeGreaterThan(0);
+    expect(signedArea(inn.points)).toBeLessThan(signedArea(notched));
   });
 
   it('negative distances shrink', () => {
