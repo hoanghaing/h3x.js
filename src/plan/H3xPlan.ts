@@ -226,6 +226,7 @@ export class H3xPlan {
           ...(extra ? { extra } : {}),
           ...(o?.structure === false ? { structure: false } : {}),
           ...(o?.exclude ? { exclude: o.exclude } : {}),
+          ...(doc.project.site ? { site: doc.project.site.points } : {}),
         });
       },
       showGuides: (g) => this.showGuides(g),

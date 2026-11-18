@@ -147,7 +147,7 @@ export class DrawWallTool implements Tool {
     const start = this.chain.points[0]!;
     const ends =
       (target.kind === 'node' && target.id === start.node) ||
-      (target.kind !== 'free' && !last.created.has(target.id));
+      ((target.kind === 'node' || target.kind === 'wall') && !last.created.has(target.id));
     const cmd = addWall({
       from: last.node ? { node: last.node } : { at: last.at },
       to: target.kind === 'node' ? { node: target.id } : { at: point },

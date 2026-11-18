@@ -18,7 +18,7 @@ export interface ToolContext {
   /** Snaps with the plan's snap options; alignment reaches 8 screen px. `disabled` returns `p` as is. */
   snap(p: Vec2, exclude: Id[], disabled: boolean): SnapResult;
   /**
-   * Drawing snap (node > wall > alignment > 45-degree lock from `from` > grid); reach is 8 screen px.
+   * Drawing snap (node > wall > site corner > site edge > alignment > 45-degree lock from `from` > grid); reach is 8 screen px.
    * `extra` adds alignment points; `structure: false` ignores node / wall targets; `exclude` nodes are
    * neither targets nor alignment points and their walls are not targets. `disabled` returns `p` as a free target.
    */
