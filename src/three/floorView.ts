@@ -80,7 +80,7 @@ export class FloorView {
   rebuild(floor: Readonly<Floor>, ctx: FloorContext = {}): void {
     const f = floor as Floor;
     const openings = ctx.openings ?? [];
-    const { corners, junctions } = computeJoins(f);
+    const { corners, junctions, risers } = computeJoins(f);
 
     const walls = new Map<Id, Built>();
     for (const wall of Object.values(f.walls)) {
@@ -101,9 +101,9 @@ export class FloorView {
       if (geom) floors.set(room.id, { geom, material: this.materials.floor(room.floorFinish) });
     }
     const joins = new Map<Id, Built>();
-    for (const [nodeId, junction] of Object.entries(junctions)) {
+    for (const nodeId of new Set([...Object.keys(junctions), ...Object.keys(risers)])) {
       joins.set(nodeId, {
-        geom: buildJoinGeometry(junction, f.elevation),
+        geom: buildJoinGeometry(junctions[nodeId], f.elevation, risers[nodeId]),
         material: this.materials.trim(),
       });
     }

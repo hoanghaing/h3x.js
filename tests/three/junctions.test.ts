@@ -200,3 +200,72 @@ describe('junction fill with mixed wall heights', () => {
     expect(hits[0]!.point.y).toBeCloseTo(1.1, 6);
   });
 });
+
+describe('closing height steps between walls and junction fill', () => {
+  /** Horizontal ray at height y from plan `from` along plan direction `dir`. */
+  function hitsAlong(root: Object3D, from: Vec2, dir: Vec2, y: number) {
+    return new Raycaster(
+      new Vector3(from.x, y, -from.y),
+      new Vector3(dir.x, 0, -dir.y).normalize(),
+    ).intersectObject(root, true);
+  }
+
+  function tFloor(through: number, stem: number): Floor {
+    const f = floorOf({ a: [-4, 0], n: [0, 0], b: [4, 0], s: [0, -4] }, [
+      ['w1', 'a', 'n', 0.2],
+      ['w2', 'n', 'b', 0.2],
+      ['w3', 'n', 's', 0.2],
+    ]);
+    f.walls.w1!.height = through;
+    f.walls.w2!.height = through;
+    f.walls.w3!.height = stem;
+    return f;
+  }
+
+  it('closes the end of a tall stem above a low through wall', () => {
+    const scene = sceneOf(tFloor(1.1, 3));
+    const hits = hitsAlong(scene.root, { x: 0, y: 1 }, { x: 0, y: -1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.y).toBeCloseTo(2, 6);
+    // Below the parapet top the through wall itself blocks the ray.
+    expect(hitsAlong(scene.root, { x: 0, y: 1 }, { x: 0, y: -1 }, 0.5)[0]!.point.z).toBeCloseTo(
+      -0.1,
+      6,
+    );
+  });
+
+  it('closes the side of a high through junction above a low stem', () => {
+    const scene = sceneOf(tFloor(3, 1.1));
+    const hits = hitsAlong(scene.root, { x: 0, y: -3 }, { x: 0, y: 1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.z).toBeCloseTo(0.1, 6);
+  });
+
+  it('closes the mitre end of a tall wall meeting a low wall in an L corner', () => {
+    const f = floorOf({ a: [-4, 0], n: [0, 0], c: [0, 4] }, [
+      ['w1', 'a', 'n', 0.2],
+      ['w2', 'n', 'c', 0.2],
+    ]);
+    f.walls.w2!.height = 1.1;
+    const scene = sceneOf(f);
+    const hits = hitsAlong(scene.root, { x: 0, y: 2 }, { x: 0, y: -1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.y).toBeCloseTo(2, 6);
+    expect(hits[0]!.point.z).toBeCloseTo(0, 6);
+  });
+
+  it('closes the seam between fan pieces of different heights', () => {
+    const f = floorOf({ n: [0, 0], e: [4, 0], w: [-4, 0], t: [0, 4], s: [0, -4] }, [
+      ['w1', 'n', 'e', 0.2],
+      ['w2', 'n', 'w', 0.2],
+      ['w3', 'n', 't', 0.2],
+      ['w4', 'n', 's', 0.2],
+    ]);
+    f.walls.w3!.height = 1.1;
+    f.walls.w4!.height = 1.1;
+    const scene = sceneOf(f);
+    const hits = hitsAlong(scene.root, { x: 0.05, y: 1 }, { x: 0, y: -1 }, 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.point.z).toBeCloseTo(-0.05, 6);
+  });
+});

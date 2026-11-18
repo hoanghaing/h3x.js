@@ -117,7 +117,7 @@ export class H3xPlan {
   private readonly underlay: SVGGElement;
   /** Which dimensions show; editing state is supplied here by later tools. */
   private readonly dimensionState: DimensionState = { selection: null, draggingNode: null };
-  private joins: Joins = { corners: {}, junctions: {} };
+  private joins: Joins = { corners: {}, junctions: {}, risers: {} };
   private _view: View;
   private readonly unsubscribe: () => void;
   private readonly unsubscribeActive: () => void;
