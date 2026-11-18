@@ -3,15 +3,19 @@ import { deepEqual } from '../document/history';
 import { syncRooms } from '../rooms/sync';
 import type { Floor, Id, Wall } from '../types';
 
-type FloorKind = 'node' | 'wall' | 'opening' | 'item' | 'column' | 'room';
+type FloorKind = 'node' | 'wall' | 'opening' | 'item' | 'column' | 'room' | 'roof';
 
-const COLLECTIONS: [FloorKind, 'nodes' | 'walls' | 'openings' | 'items' | 'columns' | 'rooms'][] = [
+const COLLECTIONS: [
+  FloorKind,
+  'nodes' | 'walls' | 'openings' | 'items' | 'columns' | 'rooms' | 'roofs',
+][] = [
   ['node', 'nodes'],
   ['wall', 'walls'],
   ['opening', 'openings'],
   ['item', 'items'],
   ['column', 'columns'],
   ['room', 'rooms'],
+  ['roof', 'roofs'],
 ];
 
 const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -50,7 +54,7 @@ export function diffFloors(before: Readonly<Floor>, after: Readonly<Floor>): Ent
   return diffKinds(before, after, new Set(COLLECTIONS.map(([k]) => k)));
 }
 
-const NON_ROOM = new Set<FloorKind>(['node', 'wall', 'opening', 'item', 'column']);
+const NON_ROOM = new Set<FloorKind>(['node', 'wall', 'opening', 'item', 'column', 'roof']);
 
 /**
  * A command that mutates a clone of the floor. Rooms in the draft are ignored:

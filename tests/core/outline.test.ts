@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { floorOutline } from '../../src/core/floors/outline';
 import { signedArea } from '../../src/core/geometry/polygon';
 import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
-import { courtyardFloor } from '../fixtures/irregular';
+import { acuteFloor, courtyardFloor } from '../fixtures/irregular';
 
 describe('floorOutline', () => {
   it('one room: a single outer ring grown to the outer wall faces', () => {
@@ -42,5 +42,13 @@ describe('floorOutline', () => {
 
   it('unknown room ids give no rings', () => {
     expect(floorOutline(twoRoomFloor(), ['nope'])).toEqual([]);
+  });
+});
+
+describe('floorOutline bevels', () => {
+  it('acuteFloor: every ring maps one wall to each edge', () => {
+    for (const ring of floorOutline(acuteFloor())) {
+      expect(ring.walls).toHaveLength(ring.points.length);
+    }
   });
 });

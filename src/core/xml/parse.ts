@@ -5,6 +5,8 @@ import { detectRooms } from '../rooms/detect';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { checkRefs } from '../validate/refs';
 import { validateStairParams } from '../commands/stairs';
+import { validateRoofParams } from '../commands/roofs';
+import { parseRoofEdge } from '../roofs/edges';
 import { signedArea } from '../geometry/polygon';
 import type {
   Column,
@@ -15,6 +17,9 @@ import type {
   Opening,
   PlanNode,
   Project,
+  Roof,
+  RoofEdge,
+  RoofMaterial,
   Room,
   Site,
   Vec2,
@@ -155,6 +160,99 @@ function parseStair(e: Element): Stair {
   return s;
 }
 
+function parseRoof(e: Element): Roof {
+  const bad = (attribute: string, message: string): H3xParseError =>
+    new H3xParseError(`<roof> attribute "${attribute}" ${message}`, {
+      element: 'roof',
+      attribute,
+    });
+  const points = (attribute: string, raw: string): Vec2[] =>
+    raw
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((pair) => {
+        const parts = pair.split(',');
+        const x = Number(parts[0]);
+        const y = Number(parts[1]);
+        if (
+          parts.length !== 2 ||
+          parts.some((s) => s.trim() === '') ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(y)
+        ) {
+          throw bad(attribute, `has a point that is not "x,y" with finite numbers: "${pair}"`);
+        }
+        return { x, y };
+      });
+  const edges = (attribute: string, raw: string): RoofEdge[] =>
+    raw
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((spec) => {
+        try {
+          return parseRoofEdge(spec);
+        } catch (err) {
+          throw bad(attribute, `is malformed: ${(err as Error).message}`);
+        }
+      });
+  const follow = (opt(e, 'follow') ?? '1') !== '0' && opt(e, 'follow') !== 'false';
+  const r: Roof = {
+    id: req(e, 'id'),
+    kind: (opt(e, 'kind') ?? 'pitched') as Roof['kind'],
+    follow,
+    pitch: num(e, 'pitch', 30),
+    base: num(e, 'base', 0),
+    overhang: num(e, 'overhang', 0.5),
+    gableOverhang: num(e, 'gableOverhang', 0.3),
+    thickness: num(e, 'thickness', 0.1),
+    material: (opt(e, 'material') ?? 'tile') as RoofMaterial,
+  };
+  if (r.kind !== 'pitched' && r.kind !== 'flat') {
+    throw bad('kind', `must be pitched or flat: "${r.kind}"`);
+  }
+  const preset = opt(e, 'preset');
+  if (preset !== undefined) r.preset = preset;
+  if (follow) {
+    r.rooms = (opt(e, 'rooms') ?? '').split(/\s+/).filter(Boolean);
+    const raw = opt(e, 'wallEdges');
+    if (raw !== undefined) {
+      const wallEdges: Record<Id, RoofEdge> = {};
+      for (const item of raw.split(/\s+/).filter(Boolean)) {
+        const i = item.indexOf(':');
+        if (i <= 0) throw bad('wallEdges', `entry is not "wall:spec": "${item}"`);
+        wallEdges[item.slice(0, i)] = edges('wallEdges', item.slice(i + 1))[0]!;
+      }
+      if (Object.keys(wallEdges).length > 0) r.wallEdges = wallEdges;
+    }
+  } else {
+    r.points = points('points', opt(e, 'points') ?? '');
+    const holes = opt(e, 'holes');
+    if (holes !== undefined) {
+      r.holes = holes
+        .split(';')
+        .filter((h) => h.trim() !== '')
+        .map((h) => points('holes', h));
+    }
+    const es = opt(e, 'edges');
+    if (es !== undefined) r.edges = edges('edges', es);
+    const hes = opt(e, 'holeEdges');
+    if (hes !== undefined) {
+      r.holeEdges = hes
+        .split(';')
+        .filter((h) => h.trim() !== '')
+        .map((h) => edges('holeEdges', h));
+    }
+  }
+  for (const k of ['breakHeight', 'upperPitch', 'parapet', 'postSize', 'postSpacing'] as const) {
+    if (e.getAttribute(k) !== null) r[k] = num(e, k);
+  }
+  const supports = opt(e, 'supports');
+  if (supports !== undefined) r.supports = supports as 'posts';
+  const issue = validateRoofParams(r)[0];
+  if (issue) throw new H3xParseError(`<roof id="${r.id}">: ${issue.message}`, { element: 'roof' });
+  return r;
+}
+
 function parseSite(e: Element): Site {
   const bad = (message: string): H3xParseError =>
     new H3xParseError(message, { element: 'site', attribute: 'points' });
@@ -195,6 +293,7 @@ function parseFloor(fe: Element): Floor {
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
   if (floor.slabThickness <= 0) {
     throw new H3xParseError(
@@ -281,6 +380,9 @@ function parseFloor(fe: Element): Floor {
         break;
       case 'stair':
         add(floor.stairs, parseStair(e), 'stair');
+        break;
+      case 'roof':
+        add(floor.roofs, parseRoof(e), 'roof');
         break;
       default:
         break; // unknown elements are ignored

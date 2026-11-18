@@ -42,6 +42,7 @@ const floor = (id: string, level: number, stairs: Record<string, Stair> = {}): F
   items: {},
   columns: {},
   stairs,
+  roofs: {},
 });
 
 function project(stair: Stair = uStair()): Project {

@@ -21,6 +21,7 @@ function isolatedFloor(): Floor {
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
 }
 

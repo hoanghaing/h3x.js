@@ -147,6 +147,7 @@ describe('active floor', () => {
       walls: {},
       columns: {},
       stairs: {},
+      roofs: {},
     });
     applyChanges(project, [change], 'backward');
     expect(project.floors).toEqual(start.floors);

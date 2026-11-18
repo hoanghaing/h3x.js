@@ -44,6 +44,7 @@ export function oneRoomFloor(): Floor {
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
 }
 
@@ -79,6 +80,7 @@ export function twoRoomFloor(): Floor {
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
 }
 

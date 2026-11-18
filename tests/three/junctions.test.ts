@@ -30,6 +30,7 @@ function floorOf(
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
 }
 

@@ -35,6 +35,20 @@ export {
 export type { NewItem } from './commands/objects';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
 export { addStair, updateStair, removeStair, validateStairParams } from './commands/stairs';
+export {
+  addRoof,
+  updateRoof,
+  setRoofParams,
+  setRoofEdge,
+  detachRoof,
+  fitRoofToWalls,
+  removeRoof,
+  validateRoofParams,
+} from './commands/roofs';
+export type { NewRoof } from './commands/roofs';
+export { ROOF_PRESETS, presetEdges, presetWallEdges } from './roofs/presets';
+export type { RoofPresetId, RoofPreset } from './roofs/presets';
+export { parseRoofEdge, formatRoofEdge } from './roofs/edges';
 export { layoutStair, stairBay, stairOutline, stairParams } from './stairs/layout';
 export type { StairLayout, StairParam, StairPiece } from './stairs/layout';
 export * from './stairs/constants';

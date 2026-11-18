@@ -120,6 +120,7 @@ export function addFloor(opts: {
         items: {},
         columns: {},
         stairs: {},
+        roofs: {},
       };
       for (const r of detectRooms(tmp)) {
         const id = createId();
@@ -148,7 +149,7 @@ export function removeFloor(floorId: Id): Command {
       }
       const changes: EntityChange[] = [];
       const drop = (
-        kind: 'room' | 'item' | 'opening' | 'column' | 'stair' | 'wall' | 'node',
+        kind: 'room' | 'item' | 'opening' | 'column' | 'stair' | 'roof' | 'wall' | 'node',
         coll: Record<Id, unknown>,
       ): void => {
         for (const [id, before] of Object.entries(coll)) {
@@ -160,6 +161,7 @@ export function removeFloor(floorId: Id): Command {
       drop('opening', floor.openings);
       drop('column', floor.columns);
       drop('stair', floor.stairs);
+      drop('roof', floor.roofs);
       drop('wall', floor.walls);
       drop('node', floor.nodes);
       const { props, ground } = stackOf(ctx);

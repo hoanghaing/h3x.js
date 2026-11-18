@@ -32,6 +32,7 @@ function floorOfRings(rings: [number, number][][], extra: [string, string][] = [
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
   detectRooms(floor).forEach((d, i) => {
     floor.rooms[`r${i + 1}`] = { id: `r${i + 1}`, walls: d.walls, name: `Room ${i + 1}` };
