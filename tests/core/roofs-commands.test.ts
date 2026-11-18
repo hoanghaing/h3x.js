@@ -5,6 +5,7 @@ import { H3xValidationError } from '../../src/core/errors';
 import { addWall, splitWall } from '../../src/core/commands/structure';
 import {
   addRoof,
+  applyRoofPreset,
   detachRoof,
   fitRoofToWalls,
   removeRoof,
@@ -500,5 +501,55 @@ describe('roof commands', () => {
     const f = twoRoomFloor();
     f.roofs.bad = { ...sample(), id: 'bad', pitch: 95 };
     expect(codeOf(() => doc(f))).toBe('invalid-roof');
+  });
+});
+
+describe('applyRoofPreset', () => {
+  it("replaces a follow roof's kind in place, keeping id, rooms and base; one undo step", () => {
+    const d = doc();
+    const add = addRoof({ preset: 'thai', follow: true, rooms: ['r1'], base: 0.2 });
+    d.execute(add);
+    d.execute(applyRoofPreset(add.createdId, 'metal'));
+    const r = d.floor.roofs[add.createdId]!;
+    expect(r.preset).toBe('metal');
+    expect(r.material).toBe('metal');
+    expect(r.pitch).toBe(ROOF_PRESETS.metal.pitch);
+    expect(r.overhang).toBe(ROOF_PRESETS.metal.overhang);
+    expect(r.rooms).toEqual(['r1']);
+    expect(r.base).toBe(0.2);
+    expect(Object.keys(d.floor.roofs)).toHaveLength(1);
+    // a shed keeps one sloped side: the other walls are gables
+    expect(Object.values(r.wallEdges ?? {}).some((e) => e.kind === 'gable')).toBe(true);
+    d.undo();
+    expect(d.floor.roofs[add.createdId]!.preset).toBe('thai');
+  });
+
+  it('drops fields the new preset does not have (posts, break, parapet)', () => {
+    const d = doc();
+    const add = addRoof({ preset: 'glass-frame', points: rect(4, 3) });
+    d.execute(add);
+    d.execute(applyRoofPreset(add.createdId, 'mansard'));
+    let r = d.floor.roofs[add.createdId]!;
+    expect(r.supports).toBeUndefined();
+    expect(r.breakHeight).toBe(ROOF_PRESETS.mansard.breakHeight);
+    expect(r.edges).toHaveLength(4);
+    d.execute(applyRoofPreset(add.createdId, 'flat'));
+    r = d.floor.roofs[add.createdId]!;
+    expect(r.kind).toBe('flat');
+    expect(r.breakHeight).toBeUndefined();
+    expect(r.parapet).toBe(ROOF_PRESETS.flat.parapet);
+  });
+
+  it('is a no-op when the roof already matches the preset', () => {
+    const d = doc();
+    const add = addRoof({ preset: 'hip', follow: true, rooms: ['r1'] });
+    d.execute(add);
+    expect(
+      applyRoofPreset(add.createdId, 'hip').run({
+        floor: d.floor,
+        floorId: d.activeFloorId,
+        project: d.project,
+      } as never),
+    ).toEqual([]);
   });
 });

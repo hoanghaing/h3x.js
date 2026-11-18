@@ -5,12 +5,6 @@ import {
   moveNode,
   moveWall,
   pushPullWall,
-  removeColumn,
-  removeNode,
-  removeRoof,
-  removeStair,
-  removeWall,
-  setSite,
   splitWall,
   stairOutline,
   updateStair,
@@ -240,23 +234,10 @@ export class SelectEditTool implements Tool {
     }
     const sel = ctx.plan.selection;
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (this.gesture || !sel || e.altKey || e.ctrlKey || e.metaKey) return false;
-      const cmd =
-        sel.kind === 'node'
-          ? removeNode(sel.id)
-          : sel.kind === 'wall'
-            ? removeWall(sel.id)
-            : sel.kind === 'column'
-              ? removeColumn(sel.id)
-              : sel.kind === 'stair'
-                ? removeStair(sel.id)
-                : sel.kind === 'roof'
-                  ? removeRoof(sel.id)
-                  : sel.kind === 'site'
-                    ? setSite(null)
-                    : null;
-      if (!cmd) return false;
-      if (this.run(cmd)) ctx.plan.select(null);
+      if (this.gesture || !sel || !selectable(sel.kind) || e.altKey || e.ctrlKey || e.metaKey) {
+        return false;
+      }
+      ctx.plan.deleteSelection();
       return true;
     }
     const dir = ARROWS[e.key];

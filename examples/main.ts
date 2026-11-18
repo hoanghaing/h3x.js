@@ -2,6 +2,7 @@
 import {
   H3xDocument,
   addFloor,
+  applyRoofPreset,
   removeFloor,
   setFloorHeight,
   setGroundElevation,
@@ -57,6 +58,11 @@ function mount(next: H3xDocument): void {
     doc.on('change', refreshStairControls),
     doc.on('activefloor', refreshStairControls),
     plan.on('selectionchange', refreshStairControls),
+    plan.on('selectionchange', (sel) => {
+      // Show the selected roof's kind in the preset select.
+      const preset = sel?.kind === 'roof' ? doc.floor.roofs[sel.id]?.preset : undefined;
+      if (preset) roofPresetSelect.value = preset;
+    }),
     plan.on('roofdetached', () => say('Mái đã tách khỏi tường, giờ là đa giác độc lập')),
     plan.on('roofEdgeRequest', (r) => say(`Cạnh mái ${r.wallId ?? r.index}: ${r.current.kind}`)),
     plan.on('issues', ({ standing }) => {
@@ -187,15 +193,52 @@ on('btn-site', () => {
   plan.setTool(new DrawSiteTool());
   say('Vẽ khu đất: nhấp từng đỉnh, nhấp đỉnh đầu hoặc Enter để đóng');
 });
+on('btn-delete', () => {
+  if (!plan.deleteSelection())
+    say('Chọn một đối tượng để xoá (nút, tường, cột, cầu thang, mái, khu đất)', true);
+  else say('Đã xoá');
+});
+// Delete / Backspace also works after using the toolbar (focus left the plan): the plan handles
+// keys only while it has focus, so the page forwards them unless a text field is being edited.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  const t = e.target as HTMLElement | null;
+  if (
+    t?.closest('svg') ||
+    t?.matches('input[type="text"], input[type="number"], input:not([type]), textarea')
+  )
+    return;
+  if (plan.deleteSelection()) {
+    e.preventDefault();
+    say('Đã xoá');
+  }
+});
+/** The RoofTool in use, so the preset / mode selects can change it without re-creating it. */
+let roofTool: RoofTool | null = null;
+const roofMode = (): 'follow' | 'draw' => (roofModeSelect.value === 'draw' ? 'draw' : 'follow');
 on('btn-roof', () => {
-  const mode = roofModeSelect.value === 'draw' ? 'draw' : 'follow';
-  plan.setTool(new RoofTool({ preset: roofPresetSelect.value as RoofPresetId, mode }));
+  const mode = roofMode();
+  roofTool = new RoofTool({ preset: roofPresetSelect.value as RoofPresetId, mode });
+  plan.setTool(roofTool);
   say(
     mode === 'follow'
       ? 'Vẽ mái: nhấp vào một phòng của tầng này (mái theo tường)'
       : 'Vẽ mái: nhấp từng đỉnh, nhấp đỉnh đầu hoặc Enter để đóng',
   );
 });
+// A new preset replaces the selected roof's kind at once (2D and 3D follow the change event) and
+// applies to the next roofs the tool adds.
+roofPresetSelect.addEventListener('change', () => {
+  const preset = roofPresetSelect.value as RoofPresetId;
+  roofTool?.setOptions({ preset });
+  const sel = plan.selection;
+  if (sel?.kind === 'roof') {
+    const r = doc.tryExecute(applyRoofPreset(sel.id, preset));
+    if (r.ok) say('Đã đổi kiểu mái');
+    else say(`Không hợp lệ: ${r.issues.map((i) => i.message).join('; ')}`, true);
+  }
+});
+roofModeSelect.addEventListener('change', () => roofTool?.setOptions({ mode: roofMode() }));
 roofsCheck.addEventListener('change', () => {
   viewer.setRoofsVisible(roofsCheck.checked);
   plan.setRoofsVisible(roofsCheck.checked);

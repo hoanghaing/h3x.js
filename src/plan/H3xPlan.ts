@@ -10,7 +10,16 @@ import type {
   Vec2,
 } from '../core';
 import { Emitter } from '../core/document/emitter';
-import { setWallLength, stairRise } from '../core';
+import {
+  removeColumn,
+  removeNode,
+  removeRoof,
+  removeStair,
+  removeWall,
+  setSite,
+  setWallLength,
+  stairRise,
+} from '../core';
 import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
 import { PlanInput } from './input';
@@ -388,6 +397,40 @@ export class H3xPlan {
     this.refreshDimensions();
     this.refreshMarks();
     this.selectionEmitter.emit(next);
+  }
+
+  /**
+   * Deletes the selected node, wall, column, stair, roof or site (one undo step) and clears the
+   * selection. Returns false when nothing deletable is selected or the edit is rejected (the
+   * rejection is reported as for any edit). Tools call it for Delete / Backspace; editors can
+   * call it from a button.
+   */
+  deleteSelection(): boolean {
+    const sel = this._selection;
+    if (!sel) return false;
+    const cmd =
+      sel.kind === 'node'
+        ? removeNode(sel.id)
+        : sel.kind === 'wall'
+          ? removeWall(sel.id)
+          : sel.kind === 'column'
+            ? removeColumn(sel.id)
+            : sel.kind === 'stair'
+              ? removeStair(sel.id)
+              : sel.kind === 'roof'
+                ? removeRoof(sel.id)
+                : sel.kind === 'site'
+                  ? setSite(null)
+                  : null;
+    if (!cmd) return false;
+    const res = this.doc.tryExecute(cmd);
+    if (!res.ok) {
+      this.reportRejected(res.issues);
+      return false;
+    }
+    this.reportRejected([]);
+    this.select(null);
+    return true;
   }
 
   get issues(): PlanIssues {

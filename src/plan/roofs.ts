@@ -23,6 +23,10 @@ const ringPath = (r: readonly Vec2[]): string =>
 const ringsPath = (rings: readonly (readonly Vec2[])[]): string => rings.map(ringPath).join('');
 
 /** Horizontal direction of steepest descent of a face plane, or undefined for a level face. */
+/** Spacing and line width (m) of the glass / polycarbonate hatch. */
+const HATCH_STEP = 0.25;
+const HATCH_WIDTH = 0.02;
+
 export function faceDescent(face: RoofFace): Vec2 | undefined {
   const poly = face.polygon;
   const n = { x: 0, y: 0, z: 0 };
@@ -99,15 +103,23 @@ export function roofOwnShapes(
   const light = roof.material === 'glass' || roof.material === 'polycarbonate';
   const hatchId = `${prefix}-roof-hatch-${roof.id}`;
   if (light) {
+    // Plan coordinates are meters: a true-scale hatch, one line every 0.25 m, 2 cm wide.
     const pattern = svgEl('pattern', {
       id: hatchId,
-      width: '8',
-      height: '8',
+      width: String(HATCH_STEP),
+      height: String(HATCH_STEP),
       patternUnits: 'userSpaceOnUse',
       patternTransform: 'rotate(45)',
     });
     pattern.append(
-      svgEl('line', { x1: '0', y1: '0', x2: '0', y2: '8', class: `${prefix}-roof-hatch` }),
+      svgEl('line', {
+        x1: '0',
+        y1: '0',
+        x2: '0',
+        y2: String(HATCH_STEP),
+        class: `${prefix}-roof-hatch`,
+        style: `stroke-width:${HATCH_WIDTH}`,
+      }),
     );
     const defs = svgEl('defs');
     defs.append(pattern);

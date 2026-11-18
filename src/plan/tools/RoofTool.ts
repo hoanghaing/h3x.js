@@ -1,4 +1,4 @@
-import { addRoof, type Vec2 } from '../../core';
+import { addRoof, applyRoofPreset, type Command, type Id, type Vec2 } from '../../core';
 import { GEOM_TOL } from '../../core/constants';
 import { signedArea } from '../../core/geometry/polygon';
 import { distance } from '../../core/geometry/vec';
@@ -18,7 +18,10 @@ export interface RoofToolOptions {
 
 /**
  * Adds roofs. Follow mode: a click inside a room adds a roof that follows that room's outer wall
- * faces and selects it; a click outside every room is rejected (`roof-no-room`). Draw mode: like
+ * faces and selects it; a click on an existing roof (or in a room an existing follow roof covers)
+ * replaces that roof's kind with the tool's preset (`applyRoofPreset`) instead of stacking a new
+ * one, and selects it; a click outside every room is rejected (`roof-no-room`). Delete /
+ * Backspace removes the selected roof. Draw mode: like
  * `DrawSiteTool`, every click adds a vertex (snapping to nodes, walls, the site, alignments, 45
  * degree locks and the grid); a click within 8 screen px of the first vertex (with at least 3),
  * Enter or a double-click closes the polygon and adds one independent roof (one undo step). Esc
@@ -27,8 +30,8 @@ export interface RoofToolOptions {
 export class RoofTool implements Tool {
   private ctx: ToolContext | null = null;
   private points: Vec2[] = [];
-  private readonly preset: RoofPresetId;
-  private readonly mode: 'follow' | 'draw';
+  private preset: RoofPresetId;
+  private mode: 'follow' | 'draw';
 
   constructor(opts: RoofToolOptions = {}) {
     this.preset = opts.preset ?? 'thai';
@@ -37,6 +40,15 @@ export class RoofTool implements Tool {
 
   activate(ctx: ToolContext): void {
     this.ctx = ctx;
+  }
+
+  /** Changes the preset for the next roofs (and replacements) and / or the mode; a drawing in progress is cancelled when the mode changes. */
+  setOptions(opts: RoofToolOptions): void {
+    if (opts.preset !== undefined) this.preset = opts.preset;
+    if (opts.mode !== undefined && opts.mode !== this.mode) {
+      this.cancel();
+      this.mode = opts.mode;
+    }
   }
 
   deactivate(): void {
@@ -48,7 +60,7 @@ export class RoofTool implements Tool {
     const ctx = this.ctx;
     if (!ctx || e.native.button !== 0) return false;
     if (this.mode === 'follow') {
-      this.addFollow(e.plan);
+      this.addFollow(e);
       return true;
     }
     const first = this.points[0];
@@ -79,7 +91,7 @@ export class RoofTool implements Tool {
   }
 
   onKeyDown(e: KeyboardEvent): boolean {
-    if (this.points.length === 0) return false;
+    if (this.points.length === 0) return this.deleteSelected(e);
     if (e.key === 'Escape') {
       this.cancel();
       return true;
@@ -91,9 +103,29 @@ export class RoofTool implements Tool {
     return false;
   }
 
-  private addFollow(p: Vec2): void {
+  /** Delete / Backspace with a roof selected removes it. */
+  private deleteSelected(e: KeyboardEvent): boolean {
+    const ctx = this.ctx;
+    const sel = ctx?.plan.selection;
+    if (!ctx || sel?.kind !== 'roof' || (e.key !== 'Delete' && e.key !== 'Backspace')) return false;
+    ctx.plan.deleteSelection();
+    return true;
+  }
+
+  private addFollow(e: PlanPointerEvent): void {
     const ctx = this.ctx!;
-    const room = roomAt(ctx.doc.floor, p);
+    const floor = ctx.doc.floor;
+    const room = roomAt(floor, e.plan);
+    const existing: Id | undefined =
+      e.hit?.kind === 'roof'
+        ? e.hit.id
+        : room
+          ? Object.values(floor.roofs).find((r) => r.follow && r.rooms?.includes(room.id))?.id
+          : undefined;
+    if (existing) {
+      this.replace(existing);
+      return;
+    }
     if (!room) {
       ctx.plan.reportRejected([
         { code: 'roof-no-room', ids: [], message: 'Click inside a room to add a roof' },
@@ -102,6 +134,19 @@ export class RoofTool implements Tool {
     }
     // A preset's gable walls are stored by `addRoof` itself (wallEdges of a follow roof).
     this.commit(addRoof({ preset: this.preset, follow: true, rooms: [room.id] }));
+  }
+
+  /** Gives an existing roof the tool's preset (no-op when it already has it) and selects it. */
+  private replace(id: Id): void {
+    const ctx = this.ctx!;
+    const cmd: Command = applyRoofPreset(id, this.preset);
+    const res = ctx.doc.tryExecute(cmd);
+    if (!res.ok) {
+      ctx.plan.reportRejected(res.issues);
+      return;
+    }
+    ctx.plan.reportRejected([]);
+    ctx.plan.select({ kind: 'roof', id });
   }
 
   private commit(cmd: ReturnType<typeof addRoof>): boolean {

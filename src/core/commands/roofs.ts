@@ -458,6 +458,63 @@ export function fitRoofToWalls(id: Id, rooms?: Id[]): Command {
   };
 }
 
+/**
+ * Replaces a roof's kind with a preset, in place (same id, same outline / rooms, same `base` and
+ * `gableOverhang`): pitch, break, overhang, thickness, material, parapet and supports come from the
+ * preset (fields the preset leaves out are removed), and the edges are rebuilt from the preset
+ * (`presetEdges` for an independent roof, the preset's gable walls for a follow roof; `holeEdges`
+ * are dropped). One undo step; no change returns [].
+ */
+export function applyRoofPreset(id: Id, presetId: RoofPresetId): Command {
+  return {
+    label: 'applyRoofPreset',
+    run: (ctx) => {
+      const r = getRoof(ctx.floor, id);
+      const preset = ROOF_PRESETS[presetId];
+      if (!preset) throw fail('invalid-roof', [id], `Unknown roof preset "${String(presetId)}"`);
+      const after: Roof = {
+        id: r.id,
+        kind: preset.shape === 'flat' ? 'flat' : 'pitched',
+        follow: r.follow,
+        pitch: preset.pitch ?? r.pitch,
+        base: r.base,
+        overhang: preset.overhang,
+        gableOverhang: r.gableOverhang,
+        thickness: preset.thickness,
+        material: preset.material,
+        ...defined({
+          preset: presetId,
+          rooms: r.rooms && [...r.rooms],
+          points: r.points && structuredClone(r.points),
+          holes: r.holes && structuredClone(r.holes),
+          breakHeight: preset.breakHeight,
+          upperPitch: preset.upperPitch,
+          parapet: preset.parapet,
+          supports: preset.supports,
+          postSize: preset.supports ? r.postSize : undefined,
+          postSpacing: preset.supports ? r.postSpacing : undefined,
+        }),
+      } as Roof;
+      if (after.kind === 'pitched') {
+        if (!after.follow && after.points) {
+          after.edges = presetEdges(presetId, after.points);
+        } else if (after.follow && after.rooms) {
+          const gables: Record<Id, RoofEdge> = {};
+          for (const ring of floorOutline(ctx.floor, after.rooms)) {
+            for (const [wall, e] of Object.entries(presetWallEdges(presetId, ring))) {
+              if (e.kind === 'gable') gables[wall] = e;
+            }
+          }
+          if (Object.keys(gables).length > 0) after.wallEdges = gables;
+        }
+      }
+      if (deepEqual(r, after)) return [];
+      check(after);
+      return [{ kind: 'roof', id, before: structuredClone(r), after }];
+    },
+  };
+}
+
 export function removeRoof(id: Id): Command {
   return {
     label: 'removeRoof',

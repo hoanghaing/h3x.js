@@ -111,4 +111,54 @@ describe('RoofTool', () => {
     expect(roofs(plan)).toHaveLength(0);
     expect(plan.doc.canUndo).toBe(false);
   });
+
+  it('follow mode: a click on an existing roof replaces its kind instead of stacking a new one', () => {
+    const tool = new RoofTool({ preset: 'thai' });
+    const plan = makePlan(tool);
+    click(plan, { x: 2, y: 2 });
+    const id = roofs(plan)[0]!.id;
+    tool.setOptions({ preset: 'metal' });
+    click(plan, { x: 2, y: 2 });
+    expect(roofs(plan)).toHaveLength(1);
+    expect(roofs(plan)[0]!.id).toBe(id);
+    expect(roofs(plan)[0]!.preset).toBe('metal');
+    expect(plan.selection).toEqual({ kind: 'roof', id });
+    plan.doc.undo();
+    expect(roofs(plan)[0]!.preset).toBe('thai');
+  });
+
+  it('Delete removes the selected roof while the tool is active', () => {
+    const plan = makePlan(new RoofTool());
+    click(plan, { x: 2, y: 2 });
+    plan.svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(roofs(plan)).toHaveLength(0);
+    expect(plan.selection).toBeNull();
+  });
+
+  it('setOptions switches the mode and cancels a drawing in progress', () => {
+    const tool = new RoofTool({ mode: 'draw' });
+    const plan = makePlan(tool);
+    click(plan, { x: 10, y: 10 });
+    click(plan, { x: 13, y: 10 });
+    tool.setOptions({ mode: 'follow' });
+    click(plan, { x: 2, y: 2 });
+    expect(roofs(plan)).toHaveLength(1);
+    expect(roofs(plan)[0]!.follow).toBe(true);
+  });
+});
+
+describe('H3xPlan.deleteSelection', () => {
+  it('deletes the selected entity in one undo step, and returns false with nothing selected', () => {
+    const plan = makePlan(new RoofTool());
+    expect(plan.deleteSelection()).toBe(false);
+    click(plan, { x: 2, y: 2 });
+    expect(plan.deleteSelection()).toBe(true);
+    expect(roofs(plan)).toHaveLength(0);
+    plan.doc.undo();
+    expect(roofs(plan)).toHaveLength(1);
+    plan.select({ kind: 'wall', id: Object.keys(plan.doc.floor.walls)[0]! });
+    const walls = Object.keys(plan.doc.floor.walls).length;
+    expect(plan.deleteSelection()).toBe(true);
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(walls - 1);
+  });
 });

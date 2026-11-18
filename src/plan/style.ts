@@ -48,7 +48,7 @@ ${p} .${prefix}-roof .${prefix}-roof-line { stroke-width: 0.75; }
 ${p} .${prefix}-roof .${prefix}-roof-arrow { fill: #b45309; stroke: none; }
 ${p} .${prefix}-roof .${prefix}-roof-post { fill: #78716c; stroke: #292524; }
 ${p} .${prefix}-roof .${prefix}-roof-light { stroke: none; opacity: 0.6; }
-${p} .${prefix}-roof .${prefix}-roof-hatch { stroke: #0e7490; stroke-width: 1; }
+${p} .${prefix}-roof .${prefix}-roof-hatch { stroke: #0e7490; }
 ${p} .${prefix}-roof-label { fill: #92400e; font-size: 10px; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: #fafaf9; stroke-width: 3px; }
 ${p} .${prefix}-roof.${prefix}-selected path, ${p} .${prefix}-roof.${prefix}-selected polygon { stroke: #2563eb; }
 ${p} .${prefix}-roof.${prefix}-invalid path, ${p} .${prefix}-roof.${prefix}-rejected path { stroke: #dc2626; }

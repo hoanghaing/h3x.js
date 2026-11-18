@@ -43,6 +43,7 @@ export {
   detachRoof,
   fitRoofToWalls,
   removeRoof,
+  applyRoofPreset,
   validateRoofParams,
 } from './commands/roofs';
 export type { NewRoof, RoofPatch } from './commands/roofs';
