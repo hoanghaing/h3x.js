@@ -1,7 +1,8 @@
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from 'three';
 import { H3xValidationError, type Floor, type Id, type Vec2 } from '../core';
+import { MITER_LIMIT } from '../core/constants';
 import { roomNodeLoop } from '../core/rooms/detect';
-import { insetPolygon, pointInPolygon, signedArea } from '../core/geometry/polygon';
+import { growPolygon, pointInPolygon, signedArea } from '../core/geometry/polygon';
 import { toWorld } from './coords';
 import { ccw, cutConvex, emitConvex, insideRing, keptPieces, triangulate2D } from './openings';
 import { TriangleSink } from './triangulate';
@@ -79,10 +80,11 @@ function chainLoops(floor: Floor, edges: Edge[]): Edge[][] {
 export function buildSlabGeometry(floor: Floor, openings: Vec2[][] = []): BufferGeometry | null {
   const rings = chainLoops(floor, boundaryEdges(floor)).map((loop) => {
     const centre = loop.map((e) => floor.nodes[e.from] as Vec2);
-    const grown = insetPolygon(
+    const grown = growPolygon(
       centre,
-      loop.map((e) => -(floor.walls[e.wall]?.thickness ?? 0) / 2),
-    );
+      loop.map((e) => (floor.walls[e.wall]?.thickness ?? 0) / 2),
+      MITER_LIMIT,
+    ).points;
     return { pts: grown, area: signedArea(centre) };
   });
   const outers = rings.filter((r) => r.area > 0);

@@ -1,5 +1,5 @@
 import type { Floor, Id, Vec2 } from '../types';
-import { GEOM_TOL } from '../constants';
+import { GEOM_TOL, MITER_LIMIT } from '../constants';
 import { EPS, cross, distance, leftNormal, normalize, sub } from '../geometry/vec';
 
 /** Wall outline corners in plan space. start = node a, left = left of a→b. */
@@ -32,7 +32,7 @@ export interface Joins {
 }
 
 /** A join point farther than MITER_LIMIT × half-thickness from its node falls back to a square end. */
-export const MITER_LIMIT = 4;
+export { MITER_LIMIT };
 
 interface Incident {
   corners: WallCorners;

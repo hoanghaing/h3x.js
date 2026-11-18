@@ -1,5 +1,5 @@
 import type { Vec2 } from '../types';
-import { GEOM_TOL } from '../constants';
+import { GEOM_TOL, MITER_LIMIT } from '../constants';
 import { EPS, cross, leftNormal, normalize, sub } from './vec';
 import { closestPointOnSegment, segmentsIntersect } from './segment';
 
@@ -51,6 +51,63 @@ export function insetPolygon(pts: Vec2[], distances: number[]): Vec2[] {
     const t = cross(sub(l1.p, l0.p), l1.dir) / denom;
     return { x: l0.p.x + l0.dir.x * t, y: l0.p.y + l0.dir.y * t };
   });
+}
+
+/**
+ * Offsets edge i (pts[i] to pts[i+1]) outward (to the right of a CCW ring) by distances[i];
+ * negative moves it inward. Consecutive offset lines meet at a miter point; when that point
+ * is farther than miterLimit x |distance| from the input vertex the corner is bevelled into
+ * two points instead. source[k] is the input edge that output edge k (points[k] to
+ * points[k+1]) came from; a bevel edge takes the index of the edge before it.
+ */
+export function growPolygon(
+  pts: Vec2[],
+  distances: number[],
+  miterLimit: number = MITER_LIMIT,
+): { points: Vec2[]; source: number[] } {
+  const n = pts.length;
+  const lines = pts.map((p, i) => {
+    const dir = normalize(sub(at(pts, i + 1), p));
+    const nrm = { x: dir.y, y: -dir.x };
+    const d = distances[i] ?? 0;
+    return { p: { x: p.x + nrm.x * d, y: p.y + nrm.y * d }, dir, nrm, d };
+  });
+  const points: Vec2[] = [];
+  const source: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const v = pts[i] as Vec2;
+    const l0 = at(lines, i - 1);
+    const l1 = at(lines, i);
+    const limit = miterLimit * Math.max(Math.abs(l0.d), Math.abs(l1.d));
+    const denom = cross(l0.dir, l1.dir);
+    if (Math.abs(denom) < EPS) {
+      points.push({ x: l1.p.x, y: l1.p.y }); // parallel edges
+      source.push(i);
+      continue;
+    }
+    const t = cross(sub(l1.p, l0.p), l1.dir) / denom;
+    const m = { x: l0.p.x + l0.dir.x * t, y: l0.p.y + l0.dir.y * t };
+    if (Math.hypot(m.x - v.x, m.y - v.y) <= limit) {
+      points.push(m);
+      source.push(i);
+      continue;
+    }
+    // Bevel: each offset vertex slides along its own edge until it is `limit` from v.
+    const reach = (l: typeof l0): number => Math.sqrt(Math.max(0, limit * limit - l.d * l.d));
+    const s0 = reach(l0);
+    const s1 = reach(l1);
+    points.push({
+      x: v.x + l0.nrm.x * l0.d + l0.dir.x * s0,
+      y: v.y + l0.nrm.y * l0.d + l0.dir.y * s0,
+    });
+    source.push((((i - 1) % n) + n) % n);
+    points.push({
+      x: v.x + l1.nrm.x * l1.d - l1.dir.x * s1,
+      y: v.y + l1.nrm.y * l1.d - l1.dir.y * s1,
+    });
+    source.push(i);
+  }
+  return { points, source };
 }
 
 /** Ray casting; points within GEOM_TOL of the boundary count as inside. */

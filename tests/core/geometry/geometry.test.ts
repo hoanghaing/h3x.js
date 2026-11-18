@@ -4,9 +4,11 @@ import {
   signedArea,
   isSimple,
   insetPolygon,
+  growPolygon,
   pointInPolygon,
   polygonContainsPolygon,
 } from '../../../src/core/geometry/polygon';
+import { MITER_LIMIT } from '../../../src/core/constants';
 import { obbOverlap, wallOBB, obbCorners } from '../../../src/core/geometry/obb';
 import { leftNormal, normalize, length, distance } from '../../../src/core/geometry/vec';
 
@@ -126,5 +128,37 @@ describe('obb', () => {
     expect(w.halfW).toBe(2);
     expect(w.halfD).toBeCloseTo(0.1);
     expect(w.rotation).toBe(0);
+  });
+});
+
+describe('growPolygon', () => {
+  it('grows a square outward on every edge', () => {
+    const { points, source } = growPolygon(sq(0, 0, 4, 4), [0.1, 0.1, 0.1, 0.1]);
+    expect(points).toHaveLength(4);
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(4.2, 9);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(4.2, 9);
+    expect(source).toEqual([0, 1, 2, 3]);
+  });
+
+  it('bevels a 10 degree corner instead of spiking', () => {
+    const tri = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 * Math.tan((10 * Math.PI) / 180) },
+    ];
+    const { points, source } = growPolygon(tri, [0.1, 0.1, 0.1], MITER_LIMIT);
+    expect(points).toHaveLength(4);
+    expect(source).toHaveLength(points.length);
+    for (const p of points) {
+      const d = Math.min(...tri.map((v) => Math.hypot(p.x - v.x, p.y - v.y)));
+      expect(d).toBeLessThanOrEqual(MITER_LIMIT * 0.1 + 1e-9);
+    }
+  });
+
+  it('negative distances shrink', () => {
+    const { points } = growPolygon(sq(0, 0, 4, 4), [-0.5, -0.5, -0.5, -0.5]);
+    expect(Math.min(...points.map((p) => p.x))).toBeCloseTo(0.5, 9);
   });
 });

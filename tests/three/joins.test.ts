@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Floor, Vec2 } from '../../src/core';
 import { MITER_LIMIT, computeWallCorners, type WallCorners } from '../../src/three/walls/joins';
+import { irregularFixtures } from '../fixtures/irregular';
 import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
 
 const near = (p: Vec2, x: number, y: number) => {
@@ -129,4 +130,26 @@ describe('computeWallCorners', () => {
     ]);
     expect(Object.keys(computeWallCorners(f))).toEqual(['w']);
   });
+});
+
+describe('computeWallCorners on irregular lots', () => {
+  for (const [name, make] of Object.entries(irregularFixtures)) {
+    it(`${name}: every outline point stays near its wall`, () => {
+      const floor = make();
+      const corners = computeWallCorners(floor);
+      for (const w of Object.values(floor.walls)) {
+        const a = floor.nodes[w.a]!;
+        const b = floor.nodes[w.b]!;
+        const c = corner(corners, w.id);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const l2 = dx * dx + dy * dy;
+        for (const p of [c.startLeft, c.startRight, c.endLeft, c.endRight]) {
+          const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+          const d = Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
+          expect(d).toBeLessThanOrEqual((w.thickness / 2) * MITER_LIMIT + 1e-6);
+        }
+      }
+    });
+  }
 });
