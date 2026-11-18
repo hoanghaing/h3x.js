@@ -219,7 +219,7 @@ A roof is in one of two modes:
 | `id`            | string                                                        | yes                  | -         |                                                                                        |
 | `kind`          | `pitched` \| `flat`                                           | no                   | `pitched` | `flat` is a horizontal slab with an optional parapet.                                  |
 | `preset`        | string                                                        | no                   | omitted   | Informational: the preset the roof was created from (see below).                       |
-| `follow`        | `1` \| `0`                                                    | no                   | `1`       | `0` or `false` selects independent mode.                                               |
+| `follow`        | `1` \| `0` \| `true` \| `false`                               | no                   | `1`       | `1` / `true` follows the walls; `0` / `false` selects independent mode.                |
 | `rooms`         | id list                                                       | follow               | empty     | Room ids separated by whitespace. A room that no longer exists is dropped.             |
 | `wallEdges`     | list of `wallId:spec`                                         | no                   | omitted   | Follow only. Walls not listed use `pitch`.                                             |
 | `points`        | point list                                                    | independent          | -         | At least 3 `x,y` pairs, CCW, at the outer wall faces.                                  |
@@ -227,8 +227,8 @@ A roof is in one of two modes:
 | `edges`         | spec list                                                     | independent, pitched | -         | One spec per outline edge (edge `i` runs `points[i]` to `points[i+1]`).                |
 | `holeEdges`     | spec lists separated by `;`                                   | no                   | omitted   | One list per hole, one spec per hole edge. Missing: slope at `pitch`.                  |
 | `pitch`         | number                                                        | no                   | `30`      | Default slope, degrees, in (0, 90).                                                    |
-| `breakHeight`   | number                                                        | no                   | omitted   | Default break height above the eaves, meters (> 0), for two-pitch slopes (mansard).    |
-| `upperPitch`    | number                                                        | no                   | omitted   | Default upper pitch, degrees, in (0, 90), used above `breakHeight`.                    |
+| `breakHeight`   | number                                                        | no                   | omitted   | Two-pitch slopes: break height above the eaves, meters (> 0). Needs `upperPitch`.      |
+| `upperPitch`    | number                                                        | no                   | omitted   | Upper pitch, degrees, in (0, 90), used above `breakHeight`. Needs `breakHeight`.       |
 | `base`          | number                                                        | no                   | `0`       | Meters above floor elevation + `wallHeight`. May be negative.                          |
 | `overhang`      | number                                                        | no                   | `0.5`     | Eaves overhang, meters, horizontal (>= 0).                                             |
 | `gableOverhang` | number                                                        | no                   | `0.3`     | Rake overhang at gable edges, meters (>= 0).                                           |
@@ -277,11 +277,13 @@ Defaults are omitted on save. A follow roof stores only the walls whose spec is 
 `wallEdges`; an independent roof always stores `edges` when pitched.
 
 Parse errors (`element: 'roof'`): a `kind`, `material` or `supports` outside the listed values; a
-`pitch` / `upperPitch` outside (0, 90) or a `breakHeight` not above 0; a non-finite number; a
-negative `overhang`, `gableOverhang` or `parapet`; a `thickness`, `postSize` or `postSpacing` not
-above 0; an independent roof with fewer than 3 points, a malformed `x,y` pair, or (when pitched)
-an `edges` count different from the points count; a hole with fewer than 3 points or a `holeEdges`
-list whose length differs from its hole; a malformed edge spec (`attribute` names the attribute).
+`follow` other than `0`, `1`, `true` or `false`; a `pitch` / `upperPitch` outside (0, 90) or a
+`breakHeight` not above 0; a `breakHeight` without an `upperPitch` or the reverse (`attribute` names
+the one present); a non-finite number; a negative `overhang`, `gableOverhang` or `parapet`; a
+`thickness`, `postSize` or `postSpacing` not above 0; an independent roof with fewer than 3 points,
+a malformed `x,y` pair, or (when pitched) an `edges` count different from the points count; a hole
+with fewer than 3 points or a `holeEdges` list whose length differs from its hole; a malformed edge
+spec (`attribute` names the attribute).
 `H3xDocument.fromProject` rejects the same roofs with `invalid-roof`.
 
 Non-blocking warnings (reported by `validateLayout`): `roof-invalid-outline`, `roof-no-walls` and

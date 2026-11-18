@@ -195,7 +195,11 @@ function parseRoof(e: Element): Roof {
           throw bad(attribute, `is malformed: ${(err as Error).message}`);
         }
       });
-  const follow = (opt(e, 'follow') ?? '1') !== '0' && opt(e, 'follow') !== 'false';
+  const followRaw = opt(e, 'follow') ?? '1';
+  if (!['0', '1', 'true', 'false'].includes(followRaw)) {
+    throw bad('follow', `must be 0, 1, true or false: "${followRaw}"`);
+  }
+  const follow = followRaw === '1' || followRaw === 'true';
   const r: Roof = {
     id: req(e, 'id'),
     kind: (opt(e, 'kind') ?? 'pitched') as Roof['kind'],
@@ -245,6 +249,12 @@ function parseRoof(e: Element): Roof {
   }
   for (const k of ['breakHeight', 'upperPitch', 'parapet', 'postSize', 'postSpacing'] as const) {
     if (e.getAttribute(k) !== null) r[k] = num(e, k);
+  }
+  if (r.breakHeight !== undefined && r.upperPitch === undefined) {
+    throw bad('breakHeight', 'needs upperPitch (a break takes both)');
+  }
+  if (r.upperPitch !== undefined && r.breakHeight === undefined) {
+    throw bad('upperPitch', 'needs breakHeight (a break takes both)');
   }
   const supports = opt(e, 'supports');
   if (supports !== undefined) r.supports = supports as 'posts';

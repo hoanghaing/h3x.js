@@ -143,6 +143,65 @@ describe('roof XML', () => {
     );
   });
 
+  const parseError = (xml: string): H3xParseError => {
+    try {
+      projectFromXML(xml);
+    } catch (e) {
+      expect(e).toBeInstanceOf(H3xParseError);
+      return e as H3xParseError;
+    }
+    return expect.unreachable();
+  };
+
+  it('a break height without an upper pitch (or the reverse) is a parse error', () => {
+    const base = projectToXML(project([roof({ id: 'a', wallEdges: { w2: { kind: 'gable' } } })]));
+    for (const [attr, other] of [
+      ['breakHeight="1.5"', 'upperPitch'],
+      ['upperPitch="20"', 'breakHeight'],
+    ] as const) {
+      const e = parseError(base.replace('<roof id="a"', `<roof id="a" ${attr}`));
+      expect(e.element).toBe('roof');
+      expect(e.attribute).toBe(attr.split('=')[0]);
+      expect(e.message).toContain(other);
+    }
+    // the edge grammar has no half pair either
+    for (const spec of ['w2:slope:30/1.5', 'w2:slope:30//20']) {
+      expect(parseError(base.replace('w2:gable', spec)).attribute).toBe('wallEdges');
+    }
+    const both = projectFromXML(
+      base.replace('<roof id="a"', '<roof id="a" breakHeight="1.5" upperPitch="20"'),
+    );
+    expect(both.floors[0]!.roofs.a).toMatchObject({ breakHeight: 1.5, upperPitch: 20 });
+  });
+
+  it('follow accepts only 0, 1, true and false', () => {
+    const base = projectToXML(project([roof({ id: 'a' })]));
+    expect(base).toContain('follow="1"');
+    for (const v of ['1', 'true']) {
+      const p = projectFromXML(base.replace('follow="1"', `follow="${v}"`));
+      expect(p.floors[0]!.roofs.a!.follow).toBe(true);
+    }
+    for (const v of ['x', '', 'yes', '2']) {
+      const e = parseError(base.replace('follow="1"', `follow="${v}"`));
+      expect(e.element).toBe('roof');
+      expect(e.attribute).toBe('follow');
+    }
+    const indep = projectToXML(
+      project([
+        roof({
+          id: 'b',
+          follow: false,
+          rooms: undefined,
+          points: outer,
+          edges: Array(4).fill({ kind: 'gable' }),
+        }),
+      ]),
+    );
+    expect(indep).toContain('follow="0"');
+    const p = projectFromXML(indep.replace('follow="0"', 'follow="false"'));
+    expect(p.floors[0]!.roofs.b!.follow).toBe(false);
+  });
+
   it('wallEdges and rooms naming something missing are dropped on save', () => {
     const p = project([
       roof({
