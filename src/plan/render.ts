@@ -8,6 +8,7 @@ import type {
   PresetResolver,
   Room,
   Site,
+  Roof,
   Stair,
   Vec2,
   Wall,
@@ -23,6 +24,7 @@ import {
   wallOutline,
   type OpeningShape,
 } from './shapes';
+import { roofOwnShapes } from './roofs';
 import { stairOwnShapes, type StairLabels } from './stairs';
 import { NODE_RADIUS_PX } from './style';
 import type { PlanKind, Rect } from './types';
@@ -139,6 +141,8 @@ export interface RenderContext {
   presets: PresetResolver | undefined;
   site?: Readonly<Site>;
   /** Stairs of `floor`: rise to the floor above (NaN when none), labels and class prefix. */
+  /** Class prefix, for kinds drawn with their own classes (roofs). */
+  prefix?: string;
   stairs?: { rise: number; labels: StairLabels; prefix: string };
 }
 
@@ -150,6 +154,7 @@ export type KindEntity =
   | { kind: 'item'; entity: Item }
   | { kind: 'column'; entity: Column }
   | { kind: 'stair'; entity: Stair }
+  | { kind: 'roof'; entity: Roof }
   | { kind: 'site'; entity: Site };
 
 /** The `<g>` of one entity with the (empty) children its updater fills in. */
@@ -248,6 +253,9 @@ export function updateEntityElement(g: SVGGElement, e: KindEntity, ctx: RenderCo
       if (!s) return;
       return g.replaceChildren(...stairOwnShapes(e.entity, { ...s, view: ctx.view }));
     }
+    case 'roof':
+      if (!ctx.prefix) return;
+      return g.replaceChildren(...roofOwnShapes(e.entity, ctx.floor, ctx.view, ctx.prefix));
     case 'site':
       return setAttr(first, 'points', pointsAttr(e.entity.points));
   }

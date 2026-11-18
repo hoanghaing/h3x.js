@@ -24,6 +24,7 @@ const LAYERS = [
   'columns',
   'openings',
   'items',
+  'roofs',
   'dimensions',
   'nodes',
   'overlay',

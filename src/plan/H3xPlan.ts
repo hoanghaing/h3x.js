@@ -110,6 +110,7 @@ export class H3xPlan {
   private readonly prefix: string;
   private readonly presets: PresetResolver | undefined;
   private readonly stairLabels: StairLabels;
+  private _roofsVisible = true;
   private readonly root: SVGGElement;
   private readonly dom: PlanDom;
   private readonly grid: { major: SVGPathElement; minor: SVGPathElement } | undefined;
@@ -265,6 +266,7 @@ export class H3xPlan {
       presets: this.presets,
       site: this.doc.project.site,
       stairRise: this.stairRise(),
+      roofsVisible: this._roofsVisible,
     };
     return hitTest(scene, s);
   }
@@ -285,6 +287,13 @@ export class H3xPlan {
     if (this.disposed) return;
     this.dropTarget = at ? { x: at.x, y: at.y } : null;
     renderDropTarget(this.dom.layers.overlay, this._view, this.prefix, this.dropTarget);
+  }
+
+  /** Shows or hides the roofs layer; hidden roofs are not hit. Default shown. */
+  setRoofsVisible(visible: boolean): void {
+    if (this.disposed) return;
+    this._roofsVisible = visible;
+    setAttr(this.dom.layers.roofs, 'display', visible ? 'inline' : 'none');
   }
 
   /** The current view (a copy). */
@@ -466,7 +475,7 @@ export class H3xPlan {
     }
     if (scaleChanged) {
       // Screen-space children (labels, handles) are counter-scaled.
-      for (const kind of ['node', 'room', 'stair'] as const) {
+      for (const kind of ['node', 'room', 'stair', 'roof'] as const) {
         for (const id of this.dom.elements[kind].keys()) this.syncEntity(kind, id);
       }
       this.refreshUnderlay(); // stair labels below
@@ -495,7 +504,10 @@ export class H3xPlan {
     const heights = e.changes.some((c) => c.kind === 'floor');
     if (heights || (below && e.changes.some((c) => floorOf(c) === below))) this.refreshUnderlay();
     // Storey heights set the rise of the active floor's stairs.
-    if (heights) for (const id of this.dom.elements.stair.keys()) this.syncEntity('stair', id);
+    if (heights) {
+      for (const id of this.dom.elements.stair.keys()) this.syncEntity('stair', id);
+      for (const id of this.dom.elements.roof.keys()) this.syncEntity('roof', id);
+    }
     if (own.length === 0) {
       this.refreshMarks();
       return;
@@ -587,6 +599,7 @@ export class H3xPlan {
       corners: this.joins.corners,
       presets: this.presets,
       site: this.doc.project.site,
+      prefix: this.prefix,
       stairs: {
         rise: this.stairRise(),
         labels: this.stairLabels,

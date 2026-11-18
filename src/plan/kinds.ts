@@ -12,6 +12,7 @@ export const LAYERS = [
   'columns',
   'openings',
   'items',
+  'roofs',
   'dimensions',
   'nodes',
   'overlay',
@@ -26,6 +27,7 @@ export const LAYER_OF: Record<PlanKind, LayerName> = {
   item: 'items',
   column: 'columns',
   stair: 'stairs',
+  roof: 'roofs',
   site: 'site',
 };
 export const KINDS = Object.keys(LAYER_OF) as PlanKind[];
@@ -39,6 +41,7 @@ export const COLLECTION = {
   item: 'items',
   column: 'columns',
   stair: 'stairs',
+  roof: 'roofs',
 } as const satisfies Record<Exclude<PlanKind, 'site'>, keyof Floor>;
 
 export const isPlanKind = (kind: string): kind is PlanKind => kind in LAYER_OF;

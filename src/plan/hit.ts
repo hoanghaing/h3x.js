@@ -3,6 +3,7 @@ import { H3xValidationError, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { WallCorners } from '../shared/walls/joins';
+import { roofHit } from './roofs';
 import { columnShape, inRoomShape, itemFootprint, openingShape, wallOutline } from './shapes';
 import type { PlanKind, Rect, ScreenPoint } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
@@ -19,6 +20,8 @@ export interface HitScene {
   site?: Readonly<Site>;
   /** Rise of `floor`'s stairs to the floor above (`stairRise`); NaN / absent: stairs hit on their bay. */
   stairRise?: number;
+  /** false: roofs are hidden and never hit (default true). */
+  roofsVisible?: boolean;
 }
 
 const NODE_TOLERANCE_PX = 8;
@@ -89,6 +92,13 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   const rise = scene.stairRise ?? NaN;
   for (const stair of Object.values(floor.stairs)) {
     if (pointInPolygon(p, stairOutline(stair, rise))) return { kind: 'stair', id: stair.id };
+  }
+
+  if (scene.roofsVisible !== false) {
+    const roofReach = WALL_TOLERANCE_PX / view.scale;
+    for (const roof of Object.values(floor.roofs)) {
+      if (roofHit(roof, floor, p, roofReach)) return { kind: 'roof', id: roof.id };
+    }
   }
 
   for (const room of Object.values(floor.rooms)) {

@@ -41,6 +41,17 @@ ${p} .${prefix}-stair.${prefix}-rejected polygon, ${p} .${prefix}-stair.${prefix
 ${p} .${prefix}-stair.${prefix}-rejected .${prefix}-stair-outline { stroke-width: 3; }
 ${p} .${prefix}-stair.${prefix}-selected .${prefix}-stair-arrow { fill: #2563eb; stroke: none; }
 ${p} .${prefix}-stair.${prefix}-invalid .${prefix}-stair-arrow, ${p} .${prefix}-stair.${prefix}-rejected .${prefix}-stair-arrow { fill: #dc2626; stroke: none; }
+${p} .${prefix}-roof path, ${p} .${prefix}-roof polygon { fill: none; stroke: #b45309; stroke-width: 1; }
+${p} .${prefix}-roof .${prefix}-roof-eave { stroke-dasharray: 6 4; }
+${p} .${prefix}-roof .${prefix}-roof-outline { stroke-width: 1.5; }
+${p} .${prefix}-roof .${prefix}-roof-line { stroke-width: 0.75; }
+${p} .${prefix}-roof .${prefix}-roof-arrow { fill: #b45309; stroke: none; }
+${p} .${prefix}-roof .${prefix}-roof-post { fill: #78716c; stroke: #292524; }
+${p} .${prefix}-roof .${prefix}-roof-light { stroke: none; opacity: 0.6; }
+${p} .${prefix}-roof .${prefix}-roof-hatch { stroke: #0e7490; stroke-width: 1; }
+${p} .${prefix}-roof-label { fill: #92400e; font-size: 10px; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: #fafaf9; stroke-width: 3px; }
+${p} .${prefix}-roof.${prefix}-selected path, ${p} .${prefix}-roof.${prefix}-selected polygon { stroke: #2563eb; }
+${p} .${prefix}-roof.${prefix}-invalid path, ${p} .${prefix}-roof.${prefix}-rejected path { stroke: #dc2626; }
 ${p} .${prefix}-site polygon { fill: none; stroke: #78716c; stroke-width: 1.5; stroke-dasharray: 8 4; }
 ${p} .${prefix}-item polygon { fill: none; stroke: #78716c; stroke-width: 1; }
 ${p} .${prefix}-dimension path { fill: none; stroke: #2563eb; stroke-width: 1; }
