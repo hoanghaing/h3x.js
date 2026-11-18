@@ -89,34 +89,79 @@ function slopeOf(id: RoofPresetId): RoofEdge {
 
 const len = (a: Vec2, b: Vec2): number => Math.hypot(b.x - a.x, b.y - a.y);
 
-/**
- * Which edges of `ring` slope under the preset's shape: hip = all; shed = the longest edge;
- * gable = edges whose direction is within 30 degrees (either sense) of the longest edge's
- * direction. Ties go to the first edge.
- */
-function slopes(id: RoofPresetId, ring: Vec2[]): boolean[] {
+/** Consecutive edges within this angle of each other belong to one side (a run). */
+const RUN_ANGLE = (2 * Math.PI) / 180;
+
+/** Run index of each edge: consecutive collinear edges (wrapping around the ring) share one. */
+function runsOf(ring: Vec2[]): number[] {
   const n = ring.length;
-  const shape = ROOF_PRESETS[id].shape;
-  if (shape === 'hip' || shape === 'flat' || n === 0) return ring.map(() => true);
-  const lens = ring.map((p, i) => len(p, ring[(i + 1) % n]!));
-  let best = 0;
-  lens.forEach((l, i) => {
-    if (l > lens[best]!) best = i;
-  });
-  if (shape === 'shed') return lens.map((_, i) => i === best);
   const d = (i: number): Vec2 => {
     const a = ring[i]!;
     const b = ring[(i + 1) % n]!;
     return { x: b.x - a.x, y: b.y - a.y };
   };
-  const ref = d(best);
-  return lens.map((l, i) => {
-    if (i === best) return true;
-    if (l === 0) return false;
-    const v = d(i);
-    const cos = Math.abs(ref.x * v.x + ref.y * v.y) / (lens[best]! * l);
-    return cos >= Math.cos(GABLE_ANGLE) - 1e-9;
+  const joined = (i: number, j: number): boolean => {
+    const u = d(i);
+    const v = d(j);
+    const l = Math.hypot(u.x, u.y) * Math.hypot(v.x, v.y);
+    if (l === 0) return true;
+    return u.x * v.x + u.y * v.y > 0 && Math.abs(u.x * v.y - u.y * v.x) / l <= Math.sin(RUN_ANGLE);
+  };
+  const run: number[] = [];
+  let cur = 0;
+  for (let i = 0; i < n; i++) {
+    if (i > 0 && !joined(i - 1, i)) cur++;
+    run.push(cur);
+  }
+  if (cur > 0 && joined(n - 1, 0)) {
+    for (let i = 0; i < n; i++) if (run[i] === cur) run[i] = 0;
+  }
+  return run;
+}
+
+/**
+ * Which edges of `ring` slope under the preset's shape. Consecutive collinear edges form one
+ * side (a wall split by an interior wall is still one eaves line); the longest side by summed
+ * length decides. hip = all; shed = every edge of the longest side; gable = every edge of the
+ * sides whose direction is within 30 degrees (either sense) of the longest side's direction.
+ * Ties go to the first side.
+ */
+function slopes(id: RoofPresetId, ring: Vec2[]): boolean[] {
+  const n = ring.length;
+  const shape = ROOF_PRESETS[id].shape;
+  if (shape === 'hip' || shape === 'flat' || n === 0) return ring.map(() => true);
+  const run = runsOf(ring);
+  const count = Math.max(...run) + 1;
+  const total = new Array<number>(count).fill(0);
+  ring.forEach((p, i) => {
+    const r = run[i]!;
+    total[r]! += len(p, ring[(i + 1) % n]!);
   });
+  let best = 0;
+  total.forEach((l, r) => {
+    if (l > total[best]! + 1e-9) best = r;
+  });
+  if (shape === 'shed') return run.map((r) => r === best);
+  // Direction of a run: from its first start to its last end (wrapped runs are contiguous mod n).
+  const dir = (r: number): Vec2 => {
+    const idx = run.map((x, i) => (x === r ? i : -1)).filter((i) => i >= 0);
+    // The run's first edge is the one whose predecessor is not in the run.
+    const startEdge = idx.find((i) => run[(i - 1 + n) % n] !== r) ?? idx[0]!;
+    const endEdge = idx.find((i) => run[(i + 1) % n] !== r) ?? idx[idx.length - 1]!;
+    const a = ring[startEdge]!;
+    const b = ring[(endEdge + 1) % n]!;
+    return { x: b.x - a.x, y: b.y - a.y };
+  };
+  const ref = dir(best);
+  const refLen = Math.hypot(ref.x, ref.y);
+  const slopesRun = Array.from({ length: count }, (_, r) => {
+    if (r === best) return true;
+    const v = dir(r);
+    const l = Math.hypot(v.x, v.y);
+    if (l === 0 || refLen === 0) return false;
+    return Math.abs(ref.x * v.x + ref.y * v.y) / (refLen * l) >= Math.cos(GABLE_ANGLE) - 1e-9;
+  });
+  return run.map((r) => slopesRun[r]!);
 }
 
 /** One edge spec per edge of `ring` (edge i = ring[i] to ring[i + 1]) for the preset's shape. */

@@ -137,6 +137,49 @@ describe('roof presets', () => {
     });
   });
 
+  it('gable on a split outline: the long sides slope even where interior walls cut them', () => {
+    const m = presetWallEdges('gable', floorOutline(twoRoomFloor())[0]!);
+    const kinds = (ids: string[]): string[] => ids.map((w) => m[w]!.kind);
+    expect(kinds(['w1', 'w2', 'w4', 'w5'])).toEqual(['slope', 'slope', 'slope', 'slope']);
+    expect(
+      Object.keys(m)
+        .filter((w) => m[w]!.kind === 'gable')
+        .sort(),
+    ).toEqual(['w3', 'w6']);
+  });
+
+  it('shed on a split outline: both pieces of one long side slope, the rest gable', () => {
+    const m = presetWallEdges('shed', floorOutline(twoRoomFloor())[0]!);
+    const sloped = Object.keys(m)
+      .filter((w) => m[w]!.kind === 'slope')
+      .sort();
+    expect(sloped.join()).toMatch(/^(w1,w2|w4,w5)$/);
+  });
+
+  it('presetEdges treats a side split by a collinear vertex as one', () => {
+    const ring = [
+      { x: 0, y: 0 },
+      { x: 3, y: 0 },
+      { x: 6, y: 0 },
+      { x: 6, y: 4.1 },
+      { x: 0, y: 4.1 },
+    ];
+    expect(presetEdges('gable', ring).map((e) => e.kind)).toEqual([
+      'slope',
+      'slope',
+      'gable',
+      'slope',
+      'gable',
+    ]);
+    expect(presetEdges('shed', ring).map((e) => e.kind)).toEqual([
+      'slope',
+      'slope',
+      'gable',
+      'gable',
+      'gable',
+    ]);
+  });
+
   it('presetWallEdges maps ring edges to walls', () => {
     const ring = floorOutline(oneRoomFloor())[0]!;
     const m = presetWallEdges('gable', ring);
