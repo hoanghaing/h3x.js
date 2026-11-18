@@ -34,6 +34,8 @@ export {
   H3xPlan,
   type H3xPlanOptions,
   type LengthEditRequest,
+  type RoofDetached,
+  type RoofEdgeRequest,
   type SegmentLengthRequest,
 } from './H3xPlan';
 export type { PlanPointerEvent, Tool, ToolContext } from './tools/Tool';
@@ -41,4 +43,5 @@ export { SelectEditTool, type SelectEditToolOptions } from './tools/SelectEditTo
 export { DrawWallTool, type DrawWallToolOptions } from './tools/DrawWallTool';
 export { DrawSiteTool } from './tools/DrawSiteTool';
 export { ColumnTool, type ColumnToolOptions } from './tools/ColumnTool';
+export { RoofTool, type RoofToolOptions } from './tools/RoofTool';
 export { StairTool, type StairToolOptions } from './tools/StairTool';

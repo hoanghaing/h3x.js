@@ -1,4 +1,4 @@
-import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site } from '../core';
+import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '../core';
 import { H3xValidationError, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
@@ -117,6 +117,15 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   }
 
   return null;
+}
+
+/** The room whose drawn (inner) outline contains `p`, if any. */
+export function roomAt(floor: Floor, p: Vec2): Room | undefined {
+  for (const room of Object.values(floor.rooms)) {
+    const shape = closedRoomShape(floor, room);
+    if (shape && inRoomShape(p, shape)) return room;
+  }
+  return undefined;
 }
 
 /** The room's drawn (inner) outline and holes, or undefined for a room that does not close (tolerated on load). */
