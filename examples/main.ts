@@ -167,8 +167,14 @@ const roofModeSelect = document.getElementById('sel-roof-mode') as HTMLSelectEle
 mount(H3xDocument.fromXML(townhouseXml));
 
 floorSelect.addEventListener('change', () => doc.setActiveFloor(floorSelect.value));
-on('btn-floor-above', () => run(addFloor({ position: 'above' }), 'Đã thêm tầng trên'));
-on('btn-floor-below', () => run(addFloor({ position: 'below' }), 'Đã thêm tầng dưới'));
+// A new floor becomes the active one, so the next edit (or "Xóa tầng") acts on it.
+const addFloorAndOpen = (position: 'above' | 'below', ok: string): void => {
+  const cmd = addFloor({ position });
+  run(cmd, ok);
+  if (doc.project.floors.some((f) => f.id === cmd.createdId)) doc.setActiveFloor(cmd.createdId);
+};
+on('btn-floor-above', () => addFloorAndOpen('above', 'Đã thêm tầng trên'));
+on('btn-floor-below', () => addFloorAndOpen('below', 'Đã thêm tầng dưới'));
 on('btn-floor-remove', () => run(removeFloor(doc.activeFloorId), 'Đã xóa tầng'));
 wallHeightInput.addEventListener('change', () =>
   run(setFloorHeight(doc.activeFloorId, Number(wallHeightInput.value)), 'Đã đổi chiều cao tường'),
@@ -337,3 +343,16 @@ window.addEventListener('keydown', (e) => {
   } else return;
   e.preventDefault();
 });
+
+// Handle for poking at the demo from the browser console.
+(window as unknown as { h3x: object }).h3x = {
+  get doc() {
+    return doc;
+  },
+  get plan() {
+    return plan;
+  },
+  get scene() {
+    return scene;
+  },
+};

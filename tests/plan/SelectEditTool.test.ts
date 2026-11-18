@@ -1090,3 +1090,20 @@ describe('SelectEditTool roofs', () => {
     expect(plan.selection).toBeNull();
   });
 });
+
+describe('SelectEditTool openings', () => {
+  it('selects a door by clicking it and deletes it with Delete (one undo step)', () => {
+    const plan = makePlan();
+    const p = { x: 1.65, y: 0 };
+    fire(plan, 'pointermove', p);
+    fire(plan, 'pointerdown', p);
+    fire(plan, 'pointerup', p);
+    expect(plan.selection).toEqual({ kind: 'opening', id: 'o1' });
+    expect(plan.getElement('opening', 'o1')!.classList.contains('h3x-plan-selected')).toBe(true);
+    key(plan, 'Delete');
+    expect(plan.doc.floor.openings.o1).toBeUndefined();
+    expect(plan.selection).toBeNull();
+    plan.doc.undo();
+    expect(plan.doc.floor.openings.o1).toBeDefined();
+  });
+});

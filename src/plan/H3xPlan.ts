@@ -12,7 +12,9 @@ import type {
 import { Emitter } from '../core/document/emitter';
 import {
   removeColumn,
+  removeItem,
   removeNode,
+  removeOpening,
   removeRoof,
   removeStair,
   removeWall,
@@ -400,7 +402,7 @@ export class H3xPlan {
   }
 
   /**
-   * Deletes the selected node, wall, column, stair, roof or site (one undo step) and clears the
+   * Deletes the selected node, wall, column, stair, roof, opening, item or site (one undo step) and clears the
    * selection. Returns false when nothing deletable is selected or the edit is rejected (the
    * rejection is reported as for any edit). Tools call it for Delete / Backspace; editors can
    * call it from a button.
@@ -419,9 +421,13 @@ export class H3xPlan {
               ? removeStair(sel.id)
               : sel.kind === 'roof'
                 ? removeRoof(sel.id)
-                : sel.kind === 'site'
-                  ? setSite(null)
-                  : null;
+                : sel.kind === 'opening'
+                  ? removeOpening(sel.id)
+                  : sel.kind === 'item'
+                    ? removeItem(sel.id)
+                    : sel.kind === 'site'
+                      ? setSite(null)
+                      : null;
     if (!cmd) return false;
     const res = this.doc.tryExecute(cmd);
     if (!res.ok) {

@@ -89,7 +89,7 @@ const ARROWS: Record<string, Vec2> = {
   ArrowDown: { x: 0, y: -1 },
 };
 
-type Selectable = 'node' | 'wall' | 'column' | 'stair' | 'roof' | 'site';
+type Selectable = 'node' | 'wall' | 'column' | 'stair' | 'roof' | 'site' | 'opening' | 'item';
 /** |normal component| above which a wall counts as moving along that axis (push / pull guides). */
 const AXIS_PARALLEL = 1 - 1e-9;
 
@@ -100,11 +100,13 @@ const SELECTABLE: ReadonlySet<string> = new Set<Selectable>([
   'stair',
   'roof',
   'site',
+  'opening',
+  'item',
 ]);
 const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
 
 /**
- * Selects nodes, walls, columns, stairs, roofs and the site; drags nodes, walls, columns, stairs
+ * Selects nodes, walls, columns, stairs, roofs, openings, items and the site; drags nodes, walls, columns, stairs
  * and independent roofs (one undo step per drag; a vertex handle of a selected roof moves that
  * vertex, detaching a follow roof first; a click on an edge of the selected roof asks the host to
  * edit it), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
@@ -168,6 +170,8 @@ export class SelectEditTool implements Tool {
       kind === 'wall' ||
       kind === 'column' ||
       kind === 'stair' ||
+      kind === 'opening' ||
+      kind === 'item' ||
       kind === 'dimension'
     );
   }
