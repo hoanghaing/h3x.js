@@ -1,7 +1,7 @@
 import { GEOM_TOL, MIN_ROOM_AREA } from '../constants';
 import { H3xValidationError } from '../errors';
-import { EPS, add, dot, leftNormal, normalize, scale, sub } from '../geometry/vec';
-import { uncoveredArea } from '../geometry/clip';
+import { EPS, dot, sub } from '../geometry/vec';
+import { polygonOverlapArea, uncoveredArea } from '../geometry/clip';
 import {
   insetEdges,
   insetPolygon,
@@ -9,6 +9,8 @@ import {
   polygonContainsPolygon,
   signedArea,
 } from '../geometry/polygon';
+import { wallOutline } from '../shapes';
+import { computeJoins } from '../walls/joins';
 import type { Floor, Id, Room, Vec2, Wall } from '../types';
 
 interface HalfEdge {
@@ -281,39 +283,52 @@ export function roomShape(
 }
 
 /**
- * Inner area of a room from its inset outlines. Where the room is narrower than its walls an
- * outline (outer or hole) turns inside out: edges reverse, or antiparallel edges throw it
- * beyond the centre line. Its signed area can then be positive and far larger than the room,
- * so it is capped at the floor that the holes and the walls' inner halves leave uncovered.
+ * Whether the inset outlines bound the floor, so that their signed areas add up to it: none is
+ * inside out (reversed edges) or crosses itself, and the holes lie inside the room clear of
+ * each other.
  */
-function insideArea(floor: Floor, room: Room, area: number): number {
-  let broken = false;
-  const covers: Vec2[][] = [];
-  const loops = [room.walls, ...(room.holes ?? [])].map((walls) => {
-    const loop = { ...room, walls };
+function outlinesBoundFloor(floor: Floor, room: Room, outer: Vec2[], holes: Vec2[][]): boolean {
+  const inner = [outer, ...holes];
+  const loops = [room.walls, ...(room.holes ?? [])];
+  for (let k = 0; k < loops.length; k++) {
+    const loop = { ...room, walls: loops[k]! };
     const center = roomPolygon(floor, loop, 'center');
-    const dists = halfThicknesses(floor, loop);
-    const { from, to } = insetEdges(center, dists);
-    const inner = insetPolygon(center, dists);
-    // Insetting shrinks a CCW outline and makes a CW one more negative.
-    if (signedArea(inner) > signedArea(center) + EPS) broken = true;
-    center.forEach((a, i) => {
-      const b = center[(i + 1) % center.length]!;
-      const edge = sub(b, a);
-      if (dot(sub(to[i]!, from[i]!), edge) < 0) broken = true;
-      const inward = scale(leftNormal(normalize(edge)), dists[i]!);
-      covers.push([a, b, add(b, inward), add(a, inward)]);
-    });
-    return center;
-  });
-  if (!broken) return area;
-  const [outer, ...holes] = loops;
-  return Math.min(area, uncoveredArea(outer!, [...holes, ...covers]));
+    const { from, to } = insetEdges(center, halfThicknesses(floor, loop));
+    const reversed = center.some(
+      (a, i) => dot(sub(to[i]!, from[i]!), sub(center[(i + 1) % center.length]!, a)) < 0,
+    );
+    if (reversed || !isSimple(inner[k]!)) return false;
+  }
+  return holes.every(
+    (hole, i) =>
+      polygonContainsPolygon(outer, hole) &&
+      holes.slice(i + 1).every((other) => polygonOverlapArea(hole, other) <= EPS),
+  );
 }
 
-/** Outer area minus hole areas (negative for a flipped outline). */
+/** Floor inside the centre outline that holes and the walls as drawn (computeJoins) leave free. */
+function drawnFloorArea(floor: Floor, room: Room): number {
+  const { outer, holes } = roomShape(floor, room, 'center');
+  const walls: Record<Id, Wall> = {};
+  for (const id of [room.walls, ...(room.holes ?? [])].flat()) walls[id] = floor.walls[id]!;
+  const { corners, junctions } = computeJoins({ ...floor, walls });
+  return uncoveredArea(outer, [
+    ...holes,
+    ...Object.values(corners).map(wallOutline),
+    ...Object.values(junctions).map((j) => j.points),
+  ]);
+}
+
+/**
+ * Outer area minus hole areas (negative for a flipped outline). 'inner' is the floor between
+ * the walls: where a room is narrower than its walls its inset outlines overlap themselves and
+ * their signed area is no area at all, so the floor is then measured against the drawn walls.
+ */
 export function roomArea(floor: Floor, room: Room, kind: 'center' | 'inner' = 'inner'): number {
   const { outer, holes } = roomShape(floor, room, kind);
   const area = signedArea(outer) - holes.reduce((sum, h) => sum + Math.abs(signedArea(h)), 0);
-  return kind === 'inner' && area > 0 ? insideArea(floor, room, area) : area;
+  if (kind === 'center') return area;
+  const centreArea = signedArea(roomPolygon(floor, room, 'center'));
+  if (centreArea <= 0) return Math.min(area, centreArea);
+  return outlinesBoundFloor(floor, room, outer, holes) ? area : drawnFloorArea(floor, room);
 }

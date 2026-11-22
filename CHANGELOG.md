@@ -16,14 +16,16 @@ Editing fixes.
 - **Changed:** an opening width of 0 or less is rejected (`invalid-opening`; a parse error when
   loading XML).
 - The fill at wall junctions is clickable at every zoom.
-- Room outlines follow the wall faces where walls of different thickness meet in a (nearly)
-  straight line: a step, as the walls are drawn. The corner used to be cut diagonally or thrown
-  far away, so a room could lose its area, be drawn kilometres wide, or vanish after saving.
-  **Changed:** the area and outline of such rooms change, and their inner `roomPolygon` has more
-  points than the room has nodes.
-- **Changed:** a space narrower than its walls is no longer a room just because its inset
-  outline turned inside out with a large area (a phantom room). A room stored that way is
-  reported as `room-degenerate`, which also blocks moving its walls until one of them is deleted.
+- Room outlines follow the wall faces where the miter would shoot off: a step where walls of
+  different thickness meet in a (nearly) straight line, a bevel round a sharp spike of wall. A
+  room could lose its area, be drawn kilometres wide, or vanish after saving.
+  **Changed:** the area and outline of such rooms change, their inner `roomPolygon` has more
+  points than the room has nodes, and an item reaching into the thicker wall is `outside-room`.
+- **Changed:** where a room is narrower than its walls, `roomArea(…, 'inner')` is the floor the
+  walls as drawn leave free. Phantom rooms (inside-out outlines with a large area) are no longer
+  detected or accepted, and real rooms that such outlines lost are found again. A phantom already
+  stored in a file is reported as `room-degenerate`: edits of its walls that leave it that narrow
+  are rejected, and the next structural edit removes it (a follow roof on it becomes independent).
 
 Milestone 7: irregular lots and roofs.
 

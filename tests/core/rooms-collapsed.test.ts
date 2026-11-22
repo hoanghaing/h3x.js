@@ -2,7 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { addWall, H3xDocument, moveNode } from '../../src/core';
 import { detectRooms, roomArea, roomPolygon } from '../../src/core/rooms/detect';
-import { signedArea } from '../../src/core/geometry/polygon';
+import { uncoveredArea } from '../../src/core/geometry/clip';
+import { isSimple, signedArea } from '../../src/core/geometry/polygon';
+import { wallOutlines } from '../../src/core/shapes';
 import { computeJoins } from '../../src/core/walls/joins';
 import type { Floor, Vec2 } from '../../src/core/types';
 import { oneRoomFloor } from '../fixtures/floors';
@@ -25,6 +27,18 @@ function ringFloor(pts: Array<[number, number]>, thickness: number[] = []): Floo
   });
   f.rooms = { r: { id: 'r', name: '', walls: pts.map((_, i) => `w${i}`) } };
   return f;
+}
+
+/** Floor of room `r` that the drawn walls (outlines and junction fills) and holes leave free. */
+function drawnFloor(f: Floor): number {
+  const room = f.rooms.r!;
+  const holes = (room.holes ?? []).map((walls) => roomPolygon(f, { ...room, walls }, 'center'));
+  const junctions = Object.values(computeJoins(f).junctions).map((j) => j.points);
+  return uncoveredArea(roomPolygon(f, { ...room, holes: [] }, 'center'), [
+    ...holes,
+    ...Object.values(wallOutlines(f)),
+    ...junctions,
+  ]);
 }
 
 const collapsed: Array<[string, Array<[number, number]>, number[]?]> = [
@@ -288,7 +302,7 @@ describe('holes narrower than their walls', () => {
 });
 
 describe('inner area of nearly collapsed rooms', () => {
-  it.each<[string, Array<[number, number]>, number[], number]>([
+  it.each<[string, Array<[number, number]>, number[]]>([
     [
       'inside out',
       [
@@ -300,7 +314,6 @@ describe('inner area of nearly collapsed rooms', () => {
         [9.47, -0.033],
       ],
       [0.4, 0.1, 0.4, 0.4, 0.4, 0.4],
-      0,
     ],
     [
       'two corners in one place',
@@ -311,20 +324,9 @@ describe('inner area of nearly collapsed rooms', () => {
         [10, 0.04],
       ],
       [0.2, 0.2, 0.2, 0.2],
-      0,
     ],
     [
-      'thrown beyond the centre line',
-      [
-        [0, 0],
-        [6, 1e-8],
-        [2, 0],
-      ],
-      [0.2, 0.4, 0.2],
-      0,
-    ],
-    [
-      'intact: not capped',
+      'intact',
       [
         [1.18, 0.358],
         [-0.58, 0.631],
@@ -333,10 +335,9 @@ describe('inner area of nearly collapsed rooms', () => {
         [0.61, -0.222],
       ],
       [0.1, 0.4, 0.2, 0.1, 0.1],
-      1.011,
     ],
     [
-      'inside out but less than the uncovered floor',
+      'inside out with floor left',
       [
         [8.17, 0.058],
         [2.3, 0.151],
@@ -347,7 +348,6 @@ describe('inner area of nearly collapsed rooms', () => {
         [6.82, -0.075],
       ],
       [0.4, 0.1, 0.4, 0.4, 0.2, 0.4, 0.1],
-      0.588,
     ],
     [
       'each wall covers half its own thickness',
@@ -358,7 +358,6 @@ describe('inner area of nearly collapsed rooms', () => {
         [4.4, -0.164],
       ],
       [0.1, 0.4, 0.1, 0.4],
-      1.885,
     ],
     [
       'crossing wall halves',
@@ -369,10 +368,160 @@ describe('inner area of nearly collapsed rooms', () => {
         [0.47, -0.676],
       ],
       [0.4, 0.1, 0.2, 0.4],
-      1.192,
     ],
-  ])('%s', (_, pts, thickness, area) => {
+  ])('%s', (_, pts, thickness) => {
     const f = ringFloor(pts, thickness);
-    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(area, 2);
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(drawnFloor(f), 6);
+  });
+});
+
+describe('the inner area is the floor the drawn walls leave free', () => {
+  it('stays negative for a flipped outline thrown beyond its centre line', () => {
+    const f = ringFloor(
+      [
+        [0, 0],
+        [6, 1e-8],
+        [2, 0],
+      ],
+      [0.2, 0.4, 0.2],
+    );
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeLessThan(0);
+  });
+
+  it('a room keeps its floor beside a stretch that is all wall', () => {
+    const f = ringFloor(
+      [
+        [0, 0],
+        [6, 0],
+        [7.3, 0],
+        [7.3, 1.1],
+        [6, 1.1],
+        [6, 0.3],
+        [0, 0.3],
+      ],
+      [0.5, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2],
+    );
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(1.2075, 4);
+    expect(detectRooms(f)).toHaveLength(1);
+  });
+
+  it('a sharp block does not take floor from the room around it', () => {
+    const f = ringFloor([
+      [0, 0],
+      [10, 0],
+      [10, 4],
+      [0, 4],
+    ]);
+    const block = [
+      [3, 2],
+      [5, 2.01],
+      [7, 2],
+    ];
+    block.forEach(([x, y], i) => {
+      f.nodes[`b${i}`] = { id: `b${i}`, x: x!, y: y! };
+      f.walls[`h${i}`] = {
+        id: `h${i}`,
+        a: `b${i}`,
+        b: `b${(i + 1) % 3}`,
+        thickness: 0.2,
+        height: 3,
+      };
+    });
+    f.rooms.r!.holes = [['h0', 'h1', 'h2']];
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(drawnFloor(f), 2);
+    expect(detectRooms(f).filter((r) => r.holes.length > 0)).toHaveLength(1);
+  });
+
+  it('stays negative for a flipped room with a collapsed corner', () => {
+    const f = ringFloor([
+      [0, 0],
+      [0, 4],
+      [3.95, 4],
+      [4, 3.95],
+      [4, 0],
+    ]);
+    f.walls.w2!.thickness = 0.6;
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeLessThan(0);
+  });
+
+  const withBlocks = (...blocks: Array<Array<[number, number]>>): Floor => {
+    const f = ringFloor([
+      [0, 0],
+      [10, 0],
+      [10, 4],
+      [0, 4],
+    ]);
+    f.rooms.r!.holes = blocks.map((block, k) =>
+      block.map(([x, y], i) => {
+        f.nodes[`b${k}_${i}`] = { id: `b${k}_${i}`, x, y };
+        f.walls[`h${k}_${i}`] = {
+          id: `h${k}_${i}`,
+          a: `b${k}_${i}`,
+          b: `b${k}_${(i + 1) % block.length}`,
+          thickness: 0.2,
+          height: 3,
+        };
+        return `h${k}_${i}`;
+      }),
+    );
+    return f;
+  };
+  const box = (x: number, y: number, w: number, h: number): Array<[number, number]> => [
+    [x, y],
+    [x, y + h],
+    [x + w, y + h],
+    [x + w, y],
+  ];
+
+  it('a block whose wall merges with the room wall', () => {
+    const f = withBlocks(box(3, 0.15, 2, 1));
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(drawnFloor(f), 6);
+  });
+
+  it('two blocks whose walls merge', () => {
+    const f = withBlocks(box(2, 1, 2, 2), box(4.15, 1, 2, 2));
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(drawnFloor(f), 6);
+  });
+
+  it('the fill of a bevelled block tip is not floor', () => {
+    const f = withBlocks(box(3, 0.15, 2, 1), [
+      [6, 2],
+      [8, 2.3],
+      [8, 1.7],
+    ]);
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(drawnFloor(f), 6);
+  });
+
+  it('matches the drawn walls on random rooms, wide and collapsed', () => {
+    let seed = 7;
+    const random = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    let checked = 0;
+    for (let k = 0; k < 4000; k++) {
+      const n = 3 + Math.floor(random() * 6);
+      const size = 1 + random() * 14;
+      const squash = [1, 0.3, 0.1, 0.03, 0.005][k % 5]!;
+      const pts = Array.from({ length: n }, (_, i): [number, number] => {
+        const t = ((i + random() * 0.9) / n) * 2 * Math.PI;
+        const r = 0.3 + random() * 0.7;
+        return [Math.cos(t) * r * size, Math.sin(t) * r * size * squash];
+      });
+      const v = pts.map(([x, y]) => ({ x, y }));
+      if (signedArea(v) <= 1e-6 || !isSimple(v)) continue;
+      if (v.some((p, i) => Math.hypot(v[(i + 1) % n]!.x - p.x, v[(i + 1) % n]!.y - p.y) < 0.3)) {
+        continue;
+      }
+      const f = ringFloor(
+        pts,
+        pts.map(() => [0.1, 0.2, 0.22, 0.4][Math.floor(random() * 4)]!),
+      );
+      const error = Math.abs(roomArea(f, f.rooms.r!, 'inner') - drawnFloor(f));
+      // At a very sharp tip the square wall ends reach slightly past the mitred outline.
+      expect(error, JSON.stringify(pts)).toBeLessThan(0.02);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(2000);
   });
 });

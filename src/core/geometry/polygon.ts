@@ -22,8 +22,21 @@ export function signedArea(pts: Vec2[]): number {
 export function isSimple(pts: Vec2[]): boolean {
   const n = pts.length;
   if (n < 3) return false;
+  // Edges whose boxes are GEOM_TOL apart cannot meet: skip them before the exact test.
+  const box = pts.map((p, i) => {
+    const q = at(pts, i + 1);
+    return {
+      x0: Math.min(p.x, q.x) - GEOM_TOL,
+      x1: Math.max(p.x, q.x),
+      y0: Math.min(p.y, q.y) - GEOM_TOL,
+      y1: Math.max(p.y, q.y),
+    };
+  });
   for (let i = 0; i < n; i++) {
+    const a = box[i]!;
     for (let j = i + 1; j < n; j++) {
+      const b = box[j]!;
+      if (b.x0 > a.x1 || a.x0 > b.x1 || b.y0 > a.y1 || a.y0 > b.y1) continue;
       if (j === i + 1 || (i === 0 && j === n - 1)) continue;
       if (segmentsIntersect(at(pts, i), at(pts, i + 1), at(pts, j), at(pts, j + 1))) return false;
     }
@@ -33,10 +46,11 @@ export function isSimple(pts: Vec2[]): boolean {
 
 /**
  * Each edge i (pts[i] to pts[i+1]) offset inward by distances[i], between its joins with the
- * neighbouring edges. Input must be CCW (inward = left). Edges meet at a miter point, except
- * where they carry straight on and that point is beyond MITER_LIMIT x the larger distance, or
- * does not exist: a nearly straight corner between different distances. There both end square
- * at the vertex, as the wall outlines do (computeJoins), so from[i] differs from to[i - 1].
+ * neighbouring edges. Input must be CCW (inward = left). Edges meet at a miter point. Where
+ * that point is beyond MITER_LIMIT x the larger distance, or does not exist, two kinds of corner
+ * end square at the vertex instead, as the wall outlines do (computeJoins), so from[i] differs
+ * from to[i - 1]: edges that carry straight on (a step between different distances) and reflex
+ * corners (the bevel round an acute spike).
  */
 export function insetEdges(pts: Vec2[], distances: number[]): { from: Vec2[]; to: Vec2[] } {
   const lines = pts.map((p, i) => {
@@ -60,7 +74,7 @@ export function insetEdges(pts: Vec2[], distances: number[]): { from: Vec2[]; to
     let end = miter ?? { x: l1.p.x, y: l1.p.y }; // parallel edges
     let start = end;
     const limit = MITER_LIMIT * Math.max(l0.d, l1.d);
-    if (dot(l0.dir, l1.dir) > 0 && (!miter || distance(miter, v) > limit)) {
+    if ((dot(l0.dir, l1.dir) > 0 || denom < 0) && (!miter || distance(miter, v) > limit)) {
       const square = { x: v.x + l0.nrm.x * l0.d, y: v.y + l0.nrm.y * l0.d };
       start = { x: l1.p.x, y: l1.p.y };
       end = distance(square, start) > GEOM_TOL ? square : start;
