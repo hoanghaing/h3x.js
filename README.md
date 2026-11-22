@@ -69,14 +69,17 @@ This example is run by the test suite (`tests/core/public-api.test.ts`); keep bo
   `H3xDocument.fromProject(project, { presets? })` (deep-cloned; throws `H3xValidationError`
   with `no-floor` or `bad-reference`).
 - `doc.project`, `doc.floor` (live, read-only), `doc.toXML({ pretty? })`.
-- `doc.execute(cmd, { coalesceKey? })` throws `H3xValidationError` on rejection;
+- `doc.execute(cmd, { coalesceKey?, restart? })` throws `H3xValidationError` on rejection;
   `doc.tryExecute(cmd, opts)` returns `{ ok: true } | { ok: false, issues }`;
   `doc.preview(cmd)` returns the issues without changing anything.
 - `doc.undo()`, `doc.redo()`, `doc.canUndo`, `doc.canRedo`. Commands with the same
   `coalesceKey` merge into one undo step until `doc.endCoalesce()`;
   `doc.cancelCoalesce(key)` instead reverts that open group with no undo or redo trace (returns
   `false` if it is closed or netted out). Commands that change nothing add no undo step and emit
-  no event.
+  no event. For a drag, add `restart: true`: each command then runs on the state from before
+  the open group and replaces it, so the result depends on where the pointer is, not on the path
+  it took (pass a relative command such as `moveWall` the total travel; a rejected step keeps the
+  last good one).
 - `doc.on('change', fn)` receives `{ reason, changes }` (`reason`:
   `'execute' | 'undo' | 'redo' | 'load' | 'cancel'`). `EntityChange` is a discriminated union
   on `kind` (`'node' | 'wall' | 'opening' | 'room' | 'item'`), so `before` / `after` narrow to
@@ -103,8 +106,8 @@ passed as `presets`.
 - Layout: `moveNode(nodeId, to)`, `moveWall(wallId, delta)` (projected on the wall normal),
   `setWallLength(wallId, length, { anchor? })` (`anchor: 'a'` default keeps node `a` fixed and
   moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items stay
-  where they are relative to the fixed end (their distance from node `a`, or from node `b` with
-  `anchor: 'b'`), and are re-fitted into range on the resized wall. These do not re-sync rooms.
+  where they are relative to the end that stays, whichever end that is, and are re-fitted into
+  range on a resized wall. These do not re-sync rooms.
 - Structure: `addWall({ from, to, thickness, height? })` draws a wall; each end is
   `{ node: id }` or `{ at: { x, y } }`. An `at` end within `GEOM_TOL` of a node reuses it, one on
   a wall splits that wall (T-junction); the new wall is cut at every node it passes through and
@@ -112,7 +115,8 @@ passed as `presets`.
   wall touching `from` (the existing one on a no-op) and `endNodeId` the node at `to`.
   Rejections: `invalid-thickness` (thickness, or height when given, not a finite number above
   0), `wall-too-short`, `walls-overlap` (collinear overlap with a wall), `split-too-short` (a
-  crossing too close to a wall end).
+  crossing too close to a wall end), `split-cuts-opening` (the wall would reach into a door or
+  window).
   `splitWall(wallId, at)` (`at` projected onto the wall; the original id keeps the
   half from node `a`; `createdId` is the new node), `removeWall(wallId)` (also deletes its
   openings, wall items and nodes left without walls), `removeNode(nodeId)` (degree 2 merges the
@@ -125,12 +129,15 @@ passed as `presets`.
   per end a free end moves, a single neighbour along the normal slides, otherwise a connector wall
   copying thickness / height makes a square bump-out or recess; a connector below
   `MIN_WALL_LENGTH` is `wall-too-short`; `|distance| < GEOM_TOL` changes nothing).
-  Openings / wall items are re-based and clamped into range. Each is one undo step
-  and re-syncs rooms (rooms keep their id and name where they overlap most). Rejections:
+  Openings / wall items are re-based, stay in place when an end moves, and are clamped into range
+  on a wall that got shorter; a split never moves an opening (`split-cuts-opening`). Each is one
+  undo step and re-syncs rooms (rooms keep their id and name where they overlap most) and the
+  follow roofs over them. Rejections:
   `split-too-short`, `split-cuts-opening`, `merge-drops-opening`, `push-pull-cuts-opening`,
   `invalid-target`.
 - Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
-  `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`.
+  `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`. A width of 0 or less is
+  `invalid-opening` (also in `fromProject`; a parse error in XML).
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
   `removeItem(id)`. `addOpening` / `addItem` expose `createdId`.
 - Columns and site: `addColumn({ x, y, shape, width, depth?, rotation?, height? })` (exposes
@@ -257,7 +264,8 @@ instead. Only entities touched by a change can block it.
 | `site-invalid`                     | `setSite` with fewer than 3 points or a non-finite coordinate                                                             |
 | `split-too-short`                  | a split would leave a wall part below `MIN_WALL_LENGTH`                                                                   |
 | `push-pull-cuts-opening`           | a slid neighbour wall gets too short for an opening / wall item on it                                                     |
-| `split-cuts-opening`               | a split cuts an opening / wall item that cannot fit in the half holding its center                                        |
+| `split-cuts-opening`               | a new wall or split would reach into an opening, or a wall item cannot fit in its half                                    |
+| `invalid-opening`                  | opening width not above 0                                                                                                 |
 | `merge-drops-opening`              | removing a node would merge walls into one too short for its openings / wall items                                        |
 | `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                                                   |
 | `room-open`                        | room walls do not form a closed loop (from room geometry helpers)                                                         |
@@ -285,6 +293,11 @@ new id, an empty name and the same floor finish; when rooms merge, the bigger on
 the others are deleted. This runs over all rooms of the floor, so on the first structural edit
 a room loaded from a file that is not a face of the wall graph is replaced: it is re-fitted to
 the face it overlaps most, or deleted when it overlaps none.
+
+Follow roofs never grow or shrink because rooms change. When a roofed room is split, the roof's
+`rooms` gains the new part. When it merges with a room the roof does not cover, or one of its
+walls is removed so that it opens, the roof becomes independent with the shape it had (several
+bodies become several roofs), in the same undo step. Moving walls still moves the roof.
 
 ### XML
 
