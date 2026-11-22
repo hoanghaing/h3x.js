@@ -63,15 +63,20 @@ export class History {
     this.redoStack = [];
   }
 
+  /** The changes of the open group `key` so far, if there is one. */
+  open(key: string): EntityChange[] | undefined {
+    const top = this.undoStack[this.undoStack.length - 1];
+    return this.sealed || !top || top.key !== key ? undefined : top.changes;
+  }
+
   /**
    * Drop the open keyed group and restore the redo stack it cleared.
    * Returns the group's changes, or undefined if no such group is open.
    */
   cancel(key: string): EntityChange[] | undefined {
-    const top = this.undoStack[this.undoStack.length - 1];
-    if (this.sealed || !top || top.key !== key) return undefined;
-    this.dropGroup();
-    return top.changes;
+    const changes = this.open(key);
+    if (changes) this.dropGroup();
+    return changes;
   }
 
   /** Pops the open group, restoring the redo stack it cleared and the entry it trimmed. */

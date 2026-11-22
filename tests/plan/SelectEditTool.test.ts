@@ -59,6 +59,57 @@ afterEach(() => {
   plans = [];
 });
 
+describe('SelectEditTool drags from the start of the gesture', () => {
+  const planOf = (floor: Floor): H3xPlan => {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 600 });
+    document.body.appendChild(el);
+    const plan = new H3xPlan(el, docOf(floor));
+    plan.fitToContent();
+    plans.push(plan);
+    return plan;
+  };
+  const path = (plan: H3xPlan, ...points: Vec2[]): void => {
+    fire(plan, 'pointerdown', points[0]!);
+    for (const p of points.slice(1)) fire(plan, 'pointermove', p, { altKey: true });
+    fire(plan, 'pointerup', points[points.length - 1]!);
+  };
+
+  it('a node dragged in and back leaves the door where it was', () => {
+    const f = oneRoomFloor();
+    f.openings.o1!.offset = 3;
+    const plan = planOf(f);
+    path(plan, { x: 4, y: 0 }, { x: 3, y: 0 }, { x: 2, y: 0 }, { x: 4, y: 0 });
+    expect(plan.doc.floor.openings.o1!.offset).toBe(3);
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('a wall dragged in and back leaves the window on its neighbour where it was', () => {
+    const f = oneRoomFloor();
+    f.openings.o2 = { ...f.openings.o1!, id: 'o2', wall: 'w2', offset: 3 };
+    const plan = planOf(f);
+    path(plan, { x: 2, y: 4 }, { x: 2, y: 3 }, { x: 2, y: 2 }, { x: 2, y: 4 });
+    expect(plan.doc.floor.openings.o2!.offset).toBe(3);
+    expect(plan.doc.canUndo).toBe(false);
+  });
+
+  it('a node dropped on a target is fitted from the start, not from the path', () => {
+    const f = oneRoomFloor();
+    f.openings.o1!.offset = 3;
+    f.nodes.k = { id: 'k', x: 5, y: 0 };
+    f.nodes.p = { id: 'p', x: 5, y: -2 };
+    f.walls.wk = { ...f.walls.w1!, id: 'wk', a: 'k', b: 'p' };
+    const plan = planOf(f);
+    fire(plan, 'pointerdown', { x: 4, y: 0 });
+    fire(plan, 'pointermove', { x: 2, y: 0 }, { altKey: true });
+    fire(plan, 'pointermove', { x: 5, y: 0 });
+    fire(plan, 'pointerup', { x: 5, y: 0 });
+    expect(plan.doc.floor.nodes.n2).toBeUndefined();
+    expect(plan.doc.floor.openings.o1!.offset).toBe(3);
+  });
+});
+
 interface Mods {
   altKey?: boolean;
   shiftKey?: boolean;

@@ -12,7 +12,7 @@ import { placementValidator, validatePlacements } from '../validate/placement';
 import type { Floor, Id, Issue, PresetResolver, Project } from '../types';
 import { projectFromXML } from '../xml/parse';
 import { projectToXML } from '../xml/serialize';
-import { applyChanges, swapChange } from './changes';
+import { applyChanges, mergeChanges, swapChange } from './changes';
 import type { Command, CommandContext, EntityChange } from './changes';
 import { Emitter } from './emitter';
 import { History, deepEqual } from './history';
@@ -29,6 +29,16 @@ export interface ActiveFloorEvent {
   previous: Id;
 }
 export type Validator = (doc: H3xDocument, changes: EntityChange[]) => Issue[];
+export interface ExecuteOptions {
+  /** Commands sharing a key form one undo step until the group is closed. */
+  coalesceKey?: string;
+  /**
+   * With `coalesceKey`: run the command on the state from before the open group of that key and
+   * replace the group with the result, so a drag depends on where it is, not on the path it took.
+   * A rejected command leaves the group as it was.
+   */
+  restart?: boolean;
+}
 
 const invert = (changes: EntityChange[]): EntityChange[] =>
   changes.slice().reverse().map(swapChange);
@@ -353,6 +363,24 @@ export class H3xDocument {
     return { changes, issues, level };
   }
 
+  /** `attempt`, from the start of the open group when `restart` asks; changes are from the state shown before. */
+  private attemptFrom(cmd: Command, opts: ExecuteOptions): ReturnType<H3xDocument['attempt']> {
+    const key = opts.restart ? opts.coalesceKey : undefined;
+    const open = key === undefined ? undefined : this.history.open(key);
+    if (!open) return this.attempt(cmd);
+    applyChanges(this._project, open, 'backward');
+    let done = false;
+    try {
+      const r = this.attempt(cmd);
+      if (r.issues.length > 0) return r;
+      done = true;
+      const delta = mergeChanges(invert(open), r.changes);
+      return { ...r, changes: delta.filter((c) => !deepEqual(c.before, c.after)) };
+    } finally {
+      if (!done) applyChanges(this._project, open, 'forward');
+    }
+  }
+
   /**
    * Push to history, then emit. A throwing listener does not undo the commit.
    * A no-op (no changes, or every change has before deep-equal to after) leaves
@@ -369,8 +397,8 @@ export class H3xDocument {
    * Throws H3xValidationError (state unchanged) on rejection. Listener errors are
    * rethrown after all listeners ran; the change is already committed by then.
    */
-  execute(cmd: Command, opts: { coalesceKey?: string } = {}): void {
-    const { changes, issues, level } = this.attempt(cmd);
+  execute(cmd: Command, opts: ExecuteOptions = {}): void {
+    const { changes, issues, level } = this.attemptFrom(cmd, opts);
     if (issues.length > 0) throw new H3xValidationError(issues);
     this.commit(changes, level, opts.coalesceKey);
   }
@@ -378,11 +406,11 @@ export class H3xDocument {
   /** Like execute but returns issues instead of throwing. Listener errors still propagate after the commit. */
   tryExecute(
     cmd: Command,
-    opts: { coalesceKey?: string } = {},
+    opts: ExecuteOptions = {},
   ): { ok: true } | { ok: false; issues: Issue[] } {
     let result: ReturnType<H3xDocument['attempt']>;
     try {
-      result = this.attempt(cmd);
+      result = this.attemptFrom(cmd, opts);
     } catch (err) {
       if (err instanceof H3xValidationError) return { ok: false, issues: err.issues };
       throw err;
