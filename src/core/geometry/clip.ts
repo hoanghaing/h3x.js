@@ -58,10 +58,14 @@ export function uncoveredArea(subject: Vec2[], covers: Vec2[][]): number {
   );
   const edges = rings.flat();
   const xs = edges.map(([a]) => a.x);
-  for (let i = 0; i < edges.length; i++) {
-    const [a, b] = edges[i]!;
-    for (let j = i + 1; j < edges.length; j++) {
-      const [c, d] = edges[j]!;
+  const byX = edges
+    .map(([a, b]) => (a.x <= b.x ? ([a, b] as const) : ([b, a] as const)))
+    .sort(([a], [c]) => a.x - c.x);
+  for (let i = 0; i < byX.length; i++) {
+    const [a, b] = byX[i]!;
+    for (let j = i + 1; j < byX.length; j++) {
+      const [c, d] = byX[j]!;
+      if (c.x > b.x) break;
       const denom = (b.x - a.x) * (d.y - c.y) - (b.y - a.y) * (d.x - c.x);
       if (denom === 0) continue;
       const t = ((c.x - a.x) * (d.y - c.y) - (c.y - a.y) * (d.x - c.x)) / denom;

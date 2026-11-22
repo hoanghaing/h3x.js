@@ -62,6 +62,37 @@ describe('uncoveredArea', () => {
     ];
     expect(uncoveredArea(sq(0, 0, 4), [[...tri].reverse()])).toBeCloseTo(8, 9);
   });
+  it('handles two spans on one line', () => {
+    const u = [
+      { x: 0, y: 0 },
+      { x: 3, y: 0 },
+      { x: 3, y: 3 },
+      { x: 2, y: 3 },
+      { x: 2, y: 1 },
+      { x: 1, y: 1 },
+      { x: 1, y: 3 },
+      { x: 0, y: 3 },
+    ];
+    const turned = u.map((p) => ({ x: p.y, y: p.x }));
+    expect(uncoveredArea(turned, [])).toBeCloseTo(7, 9);
+    expect(uncoveredArea(turned, [sq(1, 0, 0.5), sq(0, 5, 2)])).toBeCloseTo(6.75, 9);
+  });
+  it('splits slabs where covers cross', () => {
+    const a = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+      { x: 4, y: 4 },
+    ];
+    const b = [
+      { x: 0, y: 4 },
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+    ];
+    expect(uncoveredArea(sq(0, 0, 4), [a, b])).toBeCloseTo(4, 9);
+  });
+  it('holds far from the origin', () => {
+    expect(uncoveredArea(sq(1e5, 1e5, 4), [sq(1e5, 1e5, 2)])).toBeCloseTo(12, 6);
+  });
   it('is 0 when fully covered', () => {
     expect(uncoveredArea(sq(1, 1), [sq(0, 0, 3)])).toBe(0);
   });

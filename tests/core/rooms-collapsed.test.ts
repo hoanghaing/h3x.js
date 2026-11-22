@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { addWall, H3xDocument, moveNode } from '../../src/core';
-import { detectRooms, roomArea } from '../../src/core/rooms/detect';
+import { detectRooms, roomArea, roomPolygon } from '../../src/core/rooms/detect';
+import { signedArea } from '../../src/core/geometry/polygon';
+import { computeJoins } from '../../src/core/walls/joins';
 import type { Floor, Vec2 } from '../../src/core/types';
 import { oneRoomFloor } from '../fixtures/floors';
 
@@ -70,6 +72,29 @@ const collapsed: Array<[string, Array<[number, number]>, number[]?]> = [
       [5, 0.02],
     ],
   ],
+  [
+    'strip along collinear walls of unequal thickness',
+    [
+      [0, 0],
+      [0.3, 0],
+      [20.3, 0],
+      [20.6, 0],
+      [20.6, 0.34],
+      [0, 0.34],
+    ],
+    [0.1, 0.5, 0.1, 0.2, 0.2, 0.2],
+  ],
+  [
+    'strip under a thick wall with a thin continuation',
+    [
+      [0, 0],
+      [20, 0],
+      [20.3, 0],
+      [20.3, 0.5],
+      [0, 0.5],
+    ],
+    [0.9, 0.1, 0.1, 0.1, 0.1],
+  ],
 ];
 
 describe('rooms narrower than their walls', () => {
@@ -79,7 +104,7 @@ describe('rooms narrower than their walls', () => {
 
   it.each(collapsed)('%s: a stored room has no inner area', (_, pts, thickness) => {
     const f = ringFloor(pts, thickness);
-    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(0, 9);
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeLessThan(0.999);
   });
 
   it('a collapsed spike does not add to the area of the room it hangs off', () => {
@@ -155,5 +180,199 @@ describe('rooms narrower than their walls', () => {
       .validateLayout()
       .map((i) => i.code);
     expect(codes).toContain('room-degenerate');
+  });
+});
+
+describe('walls of unequal thickness in one straight line', () => {
+  /** A 10 x 3 room whose bottom side is a 0.4 and a 0.1 wall meeting at (5, bend). */
+  const split = (bend: number): Floor =>
+    ringFloor(
+      [
+        [0, 0],
+        [5, bend],
+        [10, 0],
+        [10, 3],
+        [0, 3],
+      ],
+      [0.4, 0.1, 0.2, 0.2, 0.2],
+    );
+  // 9.8 wide, inner faces at y 0.2 up to x = 5 and 0.05 after it, up to y 2.9.
+  const area = 4.9 * 2.7 + 4.9 * 2.85;
+
+  it.each([0, 1e-4, -1e-4, 1e-12, -1e-12])('bend %s: the room follows the wall faces', (bend) => {
+    const f = split(bend);
+    expect(detectRooms(f)).toHaveLength(1);
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(area, 2);
+    const outline = roomPolygon(f, f.rooms.r!, 'inner');
+    expect(signedArea(outline)).toBeCloseTo(area, 2);
+    const faces = Object.values(computeJoins(f).corners).flatMap((c) => Object.values(c) as Vec2[]);
+    for (const p of outline) {
+      const gap = Math.min(...faces.map((q) => Math.hypot(p.x - q.x, p.y - q.y)));
+      expect(gap).toBeLessThan(1e-6);
+    }
+  });
+
+  it('keeps rotated rooms through rounding to 4 decimals', () => {
+    for (let deg = 0; deg < 360; deg += 1) {
+      const t = (deg * Math.PI) / 180;
+      const pts = [
+        [0, 0],
+        [2.3, 0],
+        [6, 0],
+        [6, 4],
+        [0, 4],
+      ].map(([x, y]): [number, number] => [
+        +(x! * Math.cos(t) - y! * Math.sin(t)).toFixed(4),
+        +(x! * Math.sin(t) + y! * Math.cos(t)).toFixed(4),
+      ]);
+      const f = ringFloor(pts, [0.2, 0.1, 0.2, 0.2, 0.2]);
+      const want = 2.2 * 3.8 + 3.6 * 3.85;
+      expect(detectRooms(f), `${deg} degrees`).toHaveLength(1);
+      expect(signedArea(roomPolygon(f, f.rooms.r!, 'inner')), `${deg} degrees`).toBeCloseTo(
+        want,
+        1,
+      );
+    }
+  });
+});
+
+describe('holes narrower than their walls', () => {
+  function withBlock(outer: Array<[number, number]>, block: Array<[number, number]>): Floor {
+    const f = ringFloor(outer);
+    block.forEach(([x, y], i) => {
+      f.nodes[`b${i}`] = { id: `b${i}`, x, y };
+      f.walls[`h${i}`] = {
+        id: `h${i}`,
+        a: `b${i}`,
+        b: `b${(i + 1) % block.length}`,
+        thickness: 0.2,
+        height: 3,
+      };
+    });
+    f.rooms.r!.holes = [block.map((_, i) => `h${i}`)];
+    return f;
+  }
+  const square: Array<[number, number]> = [
+    [0, 0],
+    [12, 0],
+    [12, 12],
+    [0, 12],
+  ];
+
+  it('a notched block filling a room leaves no room around it', () => {
+    const f = withBlock(square, [
+      [0.19, 0.19],
+      [0.19, 11.81],
+      [11.81, 11.81],
+      [11.81, 6.005],
+      [3.81, 6],
+      [11.81, 5.995],
+      [11.81, 0.19],
+    ]);
+    expect(detectRooms(f).filter((r) => r.holes.length > 0)).toEqual([]);
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeLessThan(0.999);
+  });
+
+  it('a notch in a block does not add floor to the room around it', () => {
+    const f = withBlock(square, [
+      [2, 2],
+      [2, 10],
+      [10, 10],
+      [10, 6.01],
+      [3, 6],
+      [10, 5.99],
+      [10, 2],
+    ]);
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeLessThanOrEqual(11.8 * 11.8 - 8.2 * 8.2 + 0.2);
+  });
+});
+
+describe('inner area of nearly collapsed rooms', () => {
+  it.each<[string, Array<[number, number]>, number[], number]>([
+    [
+      'inside out',
+      [
+        [3.67, 0.041],
+        [1.2, 0.172],
+        [-7.79, 0.104],
+        [-4.13, -0.055],
+        [-1.28, -0.09],
+        [9.47, -0.033],
+      ],
+      [0.4, 0.1, 0.4, 0.4, 0.4, 0.4],
+      0,
+    ],
+    [
+      'two corners in one place',
+      [
+        [0, 0],
+        [20, 0],
+        [10, 0.04],
+        [10, 0.04],
+      ],
+      [0.2, 0.2, 0.2, 0.2],
+      0,
+    ],
+    [
+      'thrown beyond the centre line',
+      [
+        [0, 0],
+        [6, 1e-8],
+        [2, 0],
+      ],
+      [0.2, 0.4, 0.2],
+      0,
+    ],
+    [
+      'intact: not capped',
+      [
+        [1.18, 0.358],
+        [-0.58, 0.631],
+        [-1.04, -0.066],
+        [-1.26, -0.277],
+        [0.61, -0.222],
+      ],
+      [0.1, 0.4, 0.2, 0.1, 0.1],
+      1.011,
+    ],
+    [
+      'inside out but less than the uncovered floor',
+      [
+        [8.17, 0.058],
+        [2.3, 0.151],
+        [-5.57, 0.21],
+        [-7.52, -0.035],
+        [-2.38, -0.209],
+        [2.09, -0.168],
+        [6.82, -0.075],
+      ],
+      [0.4, 0.1, 0.4, 0.4, 0.2, 0.4, 0.1],
+      0.588,
+    ],
+    [
+      'each wall covers half its own thickness',
+      [
+        [9.64, 0.051],
+        [-5.63, 0.12],
+        [-7.65, -0.224],
+        [4.4, -0.164],
+      ],
+      [0.1, 0.4, 0.1, 0.4],
+      1.885,
+    ],
+    [
+      'crossing wall halves',
+      [
+        [4.5, 0.316],
+        [-2.99, 0.077],
+        [-2.28, -0.167],
+        [0.47, -0.676],
+      ],
+      [0.4, 0.1, 0.2, 0.4],
+      1.192,
+    ],
+  ])('%s', (_, pts, thickness, area) => {
+    const f = ringFloor(pts, thickness);
+    expect(roomArea(f, f.rooms.r!, 'inner')).toBeCloseTo(area, 2);
   });
 });

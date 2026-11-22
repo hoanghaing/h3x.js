@@ -16,9 +16,14 @@ Editing fixes.
 - **Changed:** an opening width of 0 or less is rejected (`invalid-opening`; a parse error when
   loading XML).
 - The fill at wall junctions is clickable at every zoom.
-- A space narrower than its walls is no longer detected or accepted as a room: its inner area
-  could come out positive and huge (a phantom room, e.g. thousands of m² after saving a sliver
-  of walls). A room stored that way is reported as `room-degenerate`.
+- Room outlines follow the wall faces where walls of different thickness meet in a (nearly)
+  straight line: a step, as the walls are drawn. The corner used to be cut diagonally or thrown
+  far away, so a room could lose its area, be drawn kilometres wide, or vanish after saving.
+  **Changed:** the area and outline of such rooms change, and their inner `roomPolygon` has more
+  points than the room has nodes.
+- **Changed:** a space narrower than its walls is no longer a room just because its inset
+  outline turned inside out with a large area (a phantom room). A room stored that way is
+  reported as `room-degenerate`, which also blocks moving its walls until one of them is deleted.
 
 Milestone 7: irregular lots and roofs.
 
