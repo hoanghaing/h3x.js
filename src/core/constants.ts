@@ -13,3 +13,5 @@ export const FORMAT_VERSION = 1;
  * save / load round trip, and far below anything visible in a floor plan.
  */
 export const GEOM_TOL = 1e-3;
+/** A miter farther than MITER_LIMIT x (half thickness or growth distance) from its vertex is bevelled. */
+export const MITER_LIMIT = 4;

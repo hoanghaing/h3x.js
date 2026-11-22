@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+Milestone 7: irregular lots and roofs.
+
+- Irregular lots: slab outlines, wall joins and roof outlines use a miter limit so acute corners are bevelled; `floorOutline(floor, roomIds?)` returns the outer
+  wall faces of the union of rooms; `DrawWallTool` and `RoofTool` snap to site vertices and edges.
+- Core: `Floor.roofs` and `Roof` (follow rooms or independent points / holes; per-edge `gable`,
+  `slope:p` or `slope:p/breakHeight/upperPitch`; `wallEdges`, `holeEdges`; materials `tile`,
+  `metal`, `concrete`, `glass`, `polycarbonate`; `supports="posts"`); XML `<roof>` (see
+  `docs/xml-format.md`); `ROOF_PRESETS` (`thai`, `japanese`, `metal`, `traditional`, `gable`,
+  `hip`, `shed`, `mansard`, `gambrel`, `flat`, `glass-frame`, `poly-frame`).
+- Commands: `addRoof`, `updateRoof` (`setRoofParams`), `setRoofEdge`, `detachRoof`,
+  `fitRoofToWalls`, `removeRoof`; new blocking code `invalid-roof`.
+- Geometry: `roofGeometry`, `roofFaceArea`, `gableProfile` (weighted straight skeleton with
+  per-edge pitch, broken slopes, overhangs and rakes); `validateLayout` warns with
+  `roof-invalid-outline`, `roof-no-walls` and `roof-build-failed` (the roof is then drawn flat).
+- Walls: low walls (parapets) close height steps in joins and get the `-wall-low` plan class;
+  gable walls are raised to the roof underside in 3D.
+- 3D: roof meshes (`h3xKind: 'roof'`, `h3x-roof-<id>`), frame bars and posts for light roofs,
+  `scene.getRoofMeshes(id, floorId?)`, `viewer.setRoofsVisible(visible)`.
+- Plan: roofs layer (outline, overhang, ridge / hip / valley lines, slope arrows, light hatch,
+  posts), real-outline hit testing, `plan.setRoofsVisible(visible)`, `RoofTool` (follow / draw),
+  roof editing in `SelectEditTool` (vertex drag detaches a follow roof, edge click fires
+  `roofEdgeRequest`, Delete) and the `roofdetached` event; new plan issue `roof-no-room`.
+- Example page: roof tool with preset and mode pickers, roofs visibility toggle and a sample
+  four-storey townhouse on a trapezoid lot (`examples/layouts/townhouse-trapezoid.xml`).
+- Roadmap reordered: M8 objects and openings, M9 editing fundamentals, M10 2D documentation,
+  M11 quantities, M12 views, M13 h3xEditor, M14 packaging and docs.
+
 Milestone 6: stairs.
 
 - Core: `Floor.stairs` and `Stair` (`straight`, `L`, `U`, `spiral`; `landing` or `winder` turns;

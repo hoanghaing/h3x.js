@@ -1,6 +1,8 @@
 import { Box3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildSlabGeometry } from '../../src/three';
+import { MITER_LIMIT } from '../../src/core/constants';
+import { irregularFixtures, courtyardFloor } from '../fixtures/irregular';
 import { oneRoomFloor, twoRoomFloor } from '../fixtures/floors';
 
 function rect4x5() {
@@ -56,5 +58,42 @@ describe('buildSlabGeometry', () => {
   it('returns null for a floor with no rooms', () => {
     const f = { ...oneRoomFloor(), rooms: {} };
     expect(buildSlabGeometry(f)).toBeNull();
+  });
+});
+
+describe('buildSlabGeometry on irregular lots', () => {
+  for (const [name, make] of Object.entries(irregularFixtures)) {
+    it(`${name}: stays within the grown centre-line bounds`, () => {
+      const floor = make();
+      const g = buildSlabGeometry(floor)!;
+      expect(g).not.toBeNull();
+      g.computeBoundingBox();
+      const box = g.boundingBox as Box3;
+      const pts = Object.values(floor.nodes);
+      const m = 0.1 * MITER_LIMIT + 1e-6;
+      expect(box.min.x).toBeGreaterThanOrEqual(Math.min(...pts.map((p) => p.x)) - m);
+      expect(box.max.x).toBeLessThanOrEqual(Math.max(...pts.map((p) => p.x)) + m);
+      expect(box.min.z).toBeGreaterThanOrEqual(-Math.max(...pts.map((p) => p.y)) - m);
+      expect(box.max.z).toBeLessThanOrEqual(-Math.min(...pts.map((p) => p.y)) + m);
+    });
+  }
+
+  it('courtyardFloor keeps the light well open', () => {
+    const g = buildSlabGeometry(courtyardFloor())!;
+    const pos = g.getAttribute('position');
+    const nrm = g.getAttribute('normal');
+    const c = { x: 4, z: -4.5 };
+    for (let i = 0; i + 2 < pos.count; i += 3) {
+      if (nrm.getY(i) < 0.5) continue;
+      const at = (k: number) => ({ x: pos.getX(i + k), z: pos.getZ(i + k) });
+      const s = (j: number, k: number) => {
+        const p = at(j);
+        const q = at(k);
+        return (q.x - p.x) * (c.z - p.z) - (q.z - p.z) * (c.x - p.x);
+      };
+      const [s1, s2, s3] = [s(0, 1), s(1, 2), s(2, 0)];
+      const inside = (s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0);
+      expect(inside).toBe(false);
+    }
   });
 });

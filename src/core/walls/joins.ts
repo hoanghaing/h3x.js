@@ -1,6 +1,6 @@
 import type { Floor, Id, Vec2 } from '../types';
-import { GEOM_TOL } from '../constants';
-import { EPS, cross, distance, leftNormal, normalize, sub } from '../geometry/vec';
+import { GEOM_TOL, MITER_LIMIT } from '../constants';
+import { EPS, cross, distance, dot, leftNormal, normalize, sub } from '../geometry/vec';
 
 /** Wall outline corners in plan space. start = node a, left = left of a→b. */
 export interface WallCorners {
@@ -23,16 +23,34 @@ export interface Junction {
   bevels: [Vec2, Vec2][];
   /** Tallest incident wall height (the cap sits at elevation + height). */
   height: number;
+  /** Cap height of the fan triangle (node, points[k], points[k + 1]); lower walls cap their corner lower. */
+  heights: number[];
+  /** Face height of each entry of `bevels`. */
+  bevelHeights: number[];
+}
+
+/**
+ * A vertical face closing a height step at a wall end: from `from` up to `to` along the plan
+ * segment a–b, facing `normal` (a unit plan vector).
+ */
+export interface Riser {
+  a: Vec2;
+  b: Vec2;
+  from: number;
+  to: number;
+  normal: Vec2;
 }
 
 export interface Joins {
   corners: Record<Id, WallCorners>;
+  /** Height steps between a wall end and the cap beside it, keyed by node id. */
+  risers: Record<Id, Riser[]>;
   /** Keyed by node id; only nodes with an uncovered area are present. */
   junctions: Record<Id, Junction>;
 }
 
 /** A join point farther than MITER_LIMIT × half-thickness from its node falls back to a square end. */
-export const MITER_LIMIT = 4;
+export { MITER_LIMIT };
 
 interface Incident {
   corners: WallCorners;
@@ -52,10 +70,79 @@ function fanArea2(node: Vec2, pts: Vec2[]): number {
   return s;
 }
 
+function sameEdge(p: Vec2, q: Vec2, a: Vec2, b: Vec2): boolean {
+  return (
+    (distance(p, a) <= GEOM_TOL && distance(q, b) <= GEOM_TOL) ||
+    (distance(p, b) <= GEOM_TOL && distance(q, a) <= GEOM_TOL)
+  );
+}
+
+/**
+ * Cap height per fan edge. An edge that is a wall's end edge takes that wall's height, except a
+ * square (butt) end, which meets the through walls and takes their tallest height; a gap edge
+ * between two ends takes the taller of the two.
+ */
+const endOf = (i: Incident): [Vec2, Vec2] => [
+  i.corners[i.atStart ? 'startLeft' : 'endRight'],
+  i.corners[i.atStart ? 'startRight' : 'endLeft'],
+];
+
+/** A square end that stops short of the node (it butts into another wall). */
+const isButt = (i: Incident): boolean => {
+  const [l, r] = endOf(i);
+  return distance(l, r) > GEOM_TOL && Math.abs(dot(sub(r, l), i.d)) <= GEOM_TOL;
+};
+
+function edgeHeights(list: Incident[], edges: [Vec2, Vec2][]): number[] {
+  const through = list.filter((i) => !isButt(i));
+  const throughMax = through.length ? Math.max(...through.map((i) => i.height)) : undefined;
+  return edges.map(([p, q]) => {
+    const owner = list.find((i) => sameEdge(p, q, ...endOf(i)));
+    if (owner) return isButt(owner) && throughMax !== undefined ? throughMax : owner.height;
+    const touching = list.filter((i) =>
+      endOf(i).some((c) => distance(c, p) <= GEOM_TOL || distance(c, q) <= GEOM_TOL),
+    );
+    return Math.max(...(touching.length ? touching : list).map((i) => i.height));
+  });
+}
+
+/** Faces closing the step between each wall end and the cap beside it (a mitre partner or the fill). */
+function endRisers(list: Incident[], fan: { edge: [Vec2, Vec2]; height: number }[]): Riser[] {
+  const out: Riser[] = [];
+  for (const i of list) {
+    const [l, r] = endOf(i);
+    if (distance(l, r) <= GEOM_TOL) continue;
+    const e = normalize(sub(r, l));
+    let normal = { x: -e.y, y: e.x };
+    if (dot(normal, i.d) > 0) normal = { x: -normal.x, y: -normal.y };
+    const partners = list.filter((j) => j !== i && sameEdge(l, r, ...endOf(j)));
+    if (partners.length) {
+      const c = Math.max(...partners.map((j) => j.height));
+      if (i.height > c + GEOM_TOL) out.push({ a: l, b: r, from: c, to: i.height, normal });
+      continue;
+    }
+    const f = fan.find((x) => sameEdge(l, r, ...x.edge));
+    if (!f) continue;
+    if (i.height > f.height + GEOM_TOL) {
+      out.push({ a: l, b: r, from: f.height, to: i.height, normal });
+    } else if (f.height > i.height + GEOM_TOL) {
+      out.push({
+        a: l,
+        b: r,
+        from: i.height,
+        to: f.height,
+        normal: { x: -normal.x, y: -normal.y },
+      });
+    }
+  }
+  return out;
+}
+
 /** Wall corners plus the junction areas left uncovered between wall ends. */
 export function computeJoins(floor: Floor): Joins {
   const corners: Record<Id, WallCorners> = {};
   const junctions: Record<Id, Junction> = {};
+  const risers: Record<Id, Riser[]> = {};
   const incident: Record<Id, Incident[]> = {};
 
   for (const w of Object.values(floor.walls)) {
@@ -146,15 +233,30 @@ export function computeJoins(floor: Floor): Joins {
     const head = points[0];
     const tail = points[points.length - 1];
     if (head && tail && points.length > 1 && distance(head, tail) <= GEOM_TOL) points.pop();
-    if (points.length < 3 || fanArea2(n, points) / 2 < EPS) continue;
+    const hole = points.length >= 3 && fanArea2(n, points) / 2 >= EPS;
+    const heights = hole
+      ? edgeHeights(
+          list,
+          points.map((p, k): [Vec2, Vec2] => [p, points[(k + 1) % points.length]!]),
+        )
+      : [];
+    const fan = heights.map((height, k) => ({
+      edge: [points[k]!, points[(k + 1) % points.length]!] as [Vec2, Vec2],
+      height,
+    }));
+    const steps = endRisers(list, fan);
+    if (steps.length) risers[nodeId] = steps;
+    if (!hole) continue;
     junctions[nodeId] = {
       node: { x: n.x, y: n.y },
       points,
       bevels,
       height: Math.max(...list.map((i) => i.height)),
+      heights,
+      bevelHeights: edgeHeights(list, bevels),
     };
   }
-  return { corners, junctions };
+  return { corners, junctions, risers };
 }
 
 /** Wall outline corners in plan space, keyed by wall id. */

@@ -5,13 +5,27 @@ import type {
   Id,
   Issue,
   PresetResolver,
+  RoofEdge,
+  RoofGeometry,
   Vec2,
 } from '../core';
 import { Emitter } from '../core/document/emitter';
-import { setWallLength, stairRise } from '../core';
+import {
+  removeColumn,
+  removeItem,
+  removeNode,
+  removeOpening,
+  removeRoof,
+  removeStair,
+  removeWall,
+  setSite,
+  setWallLength,
+  stairRise,
+} from '../core';
 import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
 import { PlanInput } from './input';
+import { roofHandles } from './roofEdit';
 import { hitTest, type HitScene, type HitTarget } from './hit';
 import { snapDraw, snapPoint, type SnapResult } from './snap';
 import type { Tool, ToolContext } from './tools/Tool';
@@ -29,6 +43,7 @@ import {
   renderDropTarget,
   renderGuides,
   renderPreview,
+  renderRoofHandles,
   syncDimensions,
   type PreviewState,
 } from './overlay';
@@ -85,6 +100,29 @@ export interface LengthEditRequest {
   anchorRect: Rect;
 }
 
+/** Asks the host to edit one roof edge (an outline edge of an independent roof, or a follow roof's wall). */
+export interface RoofEdgeRequest {
+  roofId: Id;
+  /**
+   * Index of the edge in its ring. For follow roofs `wallId` is authoritative and `index` is
+   * within the first body's outer ring (the ring the vertex handles cover).
+   */
+  index: number;
+  /** Set when the edge belongs to a hole of the roof. */
+  hole?: number;
+  /** Set for follow roofs: the wall the edge stands on. */
+  wallId?: Id;
+  current: RoofEdge;
+  /** Where the edge was clicked, in viewport pixels. */
+  at: ScreenPoint;
+}
+
+/** Fired when a follow roof was turned independent by editing; `newIds` are roofs split off it. */
+export interface RoofDetached {
+  roofId: Id;
+  newIds: Id[];
+}
+
 /** Asks the host for the length of the wall segment being drawn. */
 export interface SegmentLengthRequest {
   /** Start of the segment. */
@@ -110,6 +148,7 @@ export class H3xPlan {
   private readonly prefix: string;
   private readonly presets: PresetResolver | undefined;
   private readonly stairLabels: StairLabels;
+  private _roofsVisible = true;
   private readonly root: SVGGElement;
   private readonly dom: PlanDom;
   private readonly grid: { major: SVGPathElement; minor: SVGPathElement } | undefined;
@@ -117,7 +156,7 @@ export class H3xPlan {
   private readonly underlay: SVGGElement;
   /** Which dimensions show; editing state is supplied here by later tools. */
   private readonly dimensionState: DimensionState = { selection: null, draggingNode: null };
-  private joins: Joins = { corners: {}, junctions: {} };
+  private joins: Joins = { corners: {}, junctions: {}, risers: {} };
   private _view: View;
   private readonly unsubscribe: () => void;
   private readonly unsubscribeActive: () => void;
@@ -135,6 +174,8 @@ export class H3xPlan {
   private readonly lengthEmitter = new Emitter<LengthEditRequest>();
   private readonly issuesEmitter = new Emitter<PlanIssues>();
   private readonly segmentEmitter = new Emitter<SegmentLengthRequest>();
+  private readonly roofEdgeEmitter = new Emitter<RoofEdgeRequest>();
+  private readonly roofDetachedEmitter = new Emitter<RoofDetached>();
   private preview: PreviewState | null = null;
   private dropTarget: Vec2 | null = null;
 
@@ -152,6 +193,7 @@ export class H3xPlan {
       joins: new Map(),
       dimensions: new Map(),
       dimensionRects: new Map(),
+      roofGeometry: new Map(),
     };
     this.presets = opts.presets ?? doc.presets;
     this.stairLabels = { ...DEFAULT_STAIR_LABELS, ...opts.stairLabels };
@@ -226,6 +268,7 @@ export class H3xPlan {
           ...(extra ? { extra } : {}),
           ...(o?.structure === false ? { structure: false } : {}),
           ...(o?.exclude ? { exclude: o.exclude } : {}),
+          ...(doc.project.site && o?.site !== false ? { site: doc.project.site.points } : {}),
         });
       },
       showGuides: (g) => this.showGuides(g),
@@ -264,6 +307,8 @@ export class H3xPlan {
       presets: this.presets,
       site: this.doc.project.site,
       stairRise: this.stairRise(),
+      roofsVisible: this._roofsVisible,
+      roofGeometry: this.dom.roofGeometry,
     };
     return hitTest(scene, s);
   }
@@ -284,6 +329,13 @@ export class H3xPlan {
     if (this.disposed) return;
     this.dropTarget = at ? { x: at.x, y: at.y } : null;
     renderDropTarget(this.dom.layers.overlay, this._view, this.prefix, this.dropTarget);
+  }
+
+  /** Shows or hides the roofs layer; hidden roofs are not hit. Default shown. */
+  setRoofsVisible(visible: boolean): void {
+    if (this.disposed) return;
+    this._roofsVisible = visible;
+    setAttr(this.dom.layers.roofs, 'display', visible ? 'inline' : 'none');
   }
 
   /** The current view (a copy). */
@@ -349,6 +401,44 @@ export class H3xPlan {
     this.selectionEmitter.emit(next);
   }
 
+  /**
+   * Deletes the selected node, wall, column, stair, roof, opening, item or site (one undo step) and clears the
+   * selection. Returns false when nothing deletable is selected or the edit is rejected (the
+   * rejection is reported as for any edit). Tools call it for Delete / Backspace; editors can
+   * call it from a button.
+   */
+  deleteSelection(): boolean {
+    const sel = this._selection;
+    if (!sel) return false;
+    const cmd =
+      sel.kind === 'node'
+        ? removeNode(sel.id)
+        : sel.kind === 'wall'
+          ? removeWall(sel.id)
+          : sel.kind === 'column'
+            ? removeColumn(sel.id)
+            : sel.kind === 'stair'
+              ? removeStair(sel.id)
+              : sel.kind === 'roof'
+                ? removeRoof(sel.id)
+                : sel.kind === 'opening'
+                  ? removeOpening(sel.id)
+                  : sel.kind === 'item'
+                    ? removeItem(sel.id)
+                    : sel.kind === 'site'
+                      ? setSite(null)
+                      : null;
+    if (!cmd) return false;
+    const res = this.doc.tryExecute(cmd);
+    if (!res.ok) {
+      this.reportRejected(res.issues);
+      return false;
+    }
+    this.reportRejected([]);
+    this.select(null);
+    return true;
+  }
+
   get issues(): PlanIssues {
     return { rejected: [...this.rejected], standing: [...this.standing] };
   }
@@ -382,15 +472,29 @@ export class H3xPlan {
   on(type: 'selectionchange', fn: (s: Selection | null) => void): () => void;
   on(type: 'lengthEditRequest', fn: (e: LengthEditRequest) => void): () => void;
   on(type: 'issues', fn: (e: PlanIssues) => void): () => void;
+  /** Fires when the user clicks an edge of the selected roof; answer with `setRoofEdge`. */
+  on(type: 'roofEdgeRequest', fn: (e: RoofEdgeRequest) => void): () => void;
+  /** Fires when dragging a vertex of a follow roof detached it from the walls. */
+  on(type: 'roofdetached', fn: (e: RoofDetached) => void): () => void;
   /** Fires when a drawing tool starts a new segment; answer with `setPendingSegmentLength`. */
   on(type: 'segmentLengthRequest', fn: (e: SegmentLengthRequest) => void): () => void;
   on(
-    type: 'selectionchange' | 'lengthEditRequest' | 'issues' | 'segmentLengthRequest',
+    type:
+      | 'selectionchange'
+      | 'lengthEditRequest'
+      | 'issues'
+      | 'segmentLengthRequest'
+      | 'roofEdgeRequest'
+      | 'roofdetached',
     fn: ((s: Selection | null) => void) &
       ((e: LengthEditRequest) => void) &
       ((e: PlanIssues) => void) &
-      ((e: SegmentLengthRequest) => void),
+      ((e: SegmentLengthRequest) => void) &
+      ((e: RoofEdgeRequest) => void) &
+      ((e: RoofDetached) => void),
   ): () => void {
+    if (type === 'roofEdgeRequest') return this.roofEdgeEmitter.on(fn);
+    if (type === 'roofdetached') return this.roofDetachedEmitter.on(fn);
     if (type === 'selectionchange') return this.selectionEmitter.on(fn);
     if (type === 'lengthEditRequest') return this.lengthEmitter.on(fn);
     if (type === 'segmentLengthRequest') return this.segmentEmitter.on(fn);
@@ -410,6 +514,21 @@ export class H3xPlan {
   /** @internal Asks the host for a segment length (used by drawing tools). */
   emitSegmentLengthRequest(e: SegmentLengthRequest): void {
     this.segmentEmitter.emit(e);
+  }
+
+  /** @internal Asks the host to edit a roof edge (used by tools). */
+  emitRoofEdgeRequest(e: RoofEdgeRequest): void {
+    this.roofEdgeEmitter.emit(e);
+  }
+
+  /** @internal Tells the host a follow roof was detached (used by tools). */
+  emitRoofDetached(e: RoofDetached): void {
+    this.roofDetachedEmitter.emit(e);
+  }
+
+  /** @internal The geometry cached when a roof was last drawn, if any. */
+  cachedRoofGeometry(id: Id): RoofGeometry | undefined {
+    return this.dom.roofGeometry.get(id);
   }
 
   /** @internal Asks the host to open a length editor for a wall (used by tools). */
@@ -465,12 +584,13 @@ export class H3xPlan {
     }
     if (scaleChanged) {
       // Screen-space children (labels, handles) are counter-scaled.
-      for (const kind of ['node', 'room', 'stair'] as const) {
+      for (const kind of ['node', 'room', 'stair', 'roof'] as const) {
         for (const id of this.dom.elements[kind].keys()) this.syncEntity(kind, id);
       }
       this.refreshUnderlay(); // stair labels below
     }
     this.refreshDimensions();
+    this.refreshRoofHandles();
     if (this.preview) renderPreview(this.dom.layers.overlay, next, this.prefix, this.preview);
     if (this.dropTarget)
       renderDropTarget(this.dom.layers.overlay, next, this.prefix, this.dropTarget);
@@ -494,7 +614,10 @@ export class H3xPlan {
     const heights = e.changes.some((c) => c.kind === 'floor');
     if (heights || (below && e.changes.some((c) => floorOf(c) === below))) this.refreshUnderlay();
     // Storey heights set the rise of the active floor's stairs.
-    if (heights) for (const id of this.dom.elements.stair.keys()) this.syncEntity('stair', id);
+    if (heights) {
+      for (const id of this.dom.elements.stair.keys()) this.syncEntity('stair', id);
+      for (const id of this.dom.elements.roof.keys()) this.syncEntity('roof', id);
+    }
     if (own.length === 0) {
       this.refreshMarks();
       return;
@@ -569,6 +692,15 @@ export class H3xPlan {
         g.classList.toggle(`${this.prefix}-rejected`, rejected.has(id));
       }
     }
+    this.refreshRoofHandles();
+  }
+
+  /** Vertex handles of the selected roof, in the overlay. */
+  private refreshRoofHandles(): void {
+    const sel = this._selection;
+    const roof = sel?.kind === 'roof' ? this.doc.floor.roofs[sel.id] : undefined;
+    const points = roof ? roofHandles(roof, this.doc.floor).map((h) => h.at) : [];
+    renderRoofHandles(this.dom.layers.overlay, this._view, this.prefix, points);
   }
 
   private syncEntity(kind: PlanKind, id: Id): void {
@@ -586,6 +718,8 @@ export class H3xPlan {
       corners: this.joins.corners,
       presets: this.presets,
       site: this.doc.project.site,
+      prefix: this.prefix,
+      roofGeometry: this.dom.roofGeometry,
       stairs: {
         rise: this.stairRise(),
         labels: this.stairLabels,

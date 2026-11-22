@@ -99,6 +99,56 @@ export interface Stair {
   /** Width of each flight; ignored for spiral. */
   flightWidth: number;
 }
+export type RoofMaterial = 'tile' | 'metal' | 'concrete' | 'glass' | 'polycarbonate';
+export type RoofEdge =
+  | {
+      kind: 'slope';
+      /** Degrees, 0 < pitch < 90. */
+      pitch: number;
+      /** Metres above the eaves where the slope changes to `upperPitch` (broken roof). */
+      breakHeight?: number;
+      upperPitch?: number;
+    }
+  | { kind: 'gable' };
+export interface Roof {
+  id: Id;
+  /** 'pitched' uses edges; 'flat' is a horizontal slab with an optional parapet. */
+  kind: 'pitched' | 'flat';
+  /** Informational: the preset the roof was created from. */
+  preset?: string;
+  /** true = the outline follows the walls of `rooms`. */
+  follow: boolean;
+  /** Independent mode: CCW outline at wall-top level (outer wall faces); holes CW. */
+  points?: Vec2[];
+  holes?: Vec2[][];
+  /** Independent mode: one spec per outline edge (edge i = points[i] to points[i + 1]). */
+  edges?: RoofEdge[];
+  /** Independent mode: specs per hole edge; missing = slope at `pitch`. */
+  holeEdges?: RoofEdge[][];
+  /** Follow mode: the rooms whose union is the outline. */
+  rooms?: Id[];
+  /** Follow mode: overrides keyed by wall id; other edges use `pitch`. */
+  wallEdges?: Record<Id, RoofEdge>;
+  /** Default slope, degrees. */
+  pitch: number;
+  /** Default break for every slope edge (mansard). */
+  breakHeight?: number;
+  upperPitch?: number;
+  /** Metres above floor elevation + wall height. */
+  base: number;
+  /** Eaves overhang, metres horizontal from the outline. */
+  overhang: number;
+  /** Rake overhang at gable edges, metres. */
+  gableOverhang: number;
+  thickness: number;
+  material: RoofMaterial;
+  /** Flat only: parapet height, metres. */
+  parapet?: number;
+  /** Automatic steel posts. */
+  supports?: 'posts';
+  postSize?: number;
+  postSpacing?: number;
+}
 export interface Site {
   id: 'site';
   /** Counter-clockwise ground outline. */
@@ -118,6 +168,7 @@ export interface Floor {
   items: Record<Id, Item>;
   columns: Record<Id, Column>;
   stairs: Record<Id, Stair>;
+  roofs: Record<Id, Roof>;
 }
 export type FloorProps = Pick<Floor, 'id' | 'level' | 'elevation' | 'wallHeight' | 'slabThickness'>;
 export interface ProjectMeta {
@@ -139,7 +190,7 @@ export interface PresetInfo {
 }
 export type PresetResolver = (presetId: string) => PresetInfo | undefined;
 export type EntityKind =
-  'node' | 'wall' | 'opening' | 'room' | 'item' | 'column' | 'stair' | 'site' | 'floor';
+  'node' | 'wall' | 'opening' | 'room' | 'item' | 'column' | 'stair' | 'roof' | 'site' | 'floor';
 export interface Issue {
   code: string;
   ids: Id[];

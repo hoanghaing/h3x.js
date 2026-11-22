@@ -19,7 +19,8 @@ export function assertFreeId(ctx: Pick<CommandContext, 'floor'>, id: Id): void {
     f.rooms[id] ||
     f.items[id] ||
     f.columns[id] ||
-    f.stairs[id]
+    f.stairs[id] ||
+    f.roofs[id]
   ) {
     throw fail('duplicate-id', [id], 'Id ' + id + ' already exists in the floor');
   }

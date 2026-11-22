@@ -1,6 +1,7 @@
 import { FORMAT_VERSION, XML_DECIMALS } from '../constants';
 import { H3xValidationError } from '../errors';
-import type { Column, Floor, Item, Project, Site, Stair } from '../types';
+import { formatRoofEdge } from '../roofs/edges';
+import type { Column, Floor, Item, Project, Roof, Site, Stair, Vec2 } from '../types';
 
 export function fmt(n: number): string {
   const v = Number(n.toFixed(XML_DECIMALS));
@@ -96,6 +97,49 @@ function stairEl(s: Stair): string {
   ]);
 }
 
+const pts = (ps: Vec2[]): string => ps.map((p) => `${fmt(p.x)},${fmt(p.y)}`).join(' ');
+
+/** Overrides naming a wall / room missing from the floor are dropped (lazy cleanup). */
+function roofEl(r: Roof, f: Floor): string {
+  const attrs: Array<[string, AttrValue]> = [
+    ['id', r.id],
+    ['kind', r.kind],
+    ['preset', r.preset],
+    ['follow', r.follow ? '1' : '0'],
+  ];
+  if (r.follow) {
+    attrs.push(['rooms', (r.rooms ?? []).filter((id) => f.rooms[id]).join(' ')]);
+    const kept = Object.entries(r.wallEdges ?? {})
+      .filter(([w]) => f.walls[w])
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    if (kept.length > 0) {
+      attrs.push(['wallEdges', kept.map(([w, e]) => `${w}:${formatRoofEdge(e)}`).join(' ')]);
+    }
+  } else {
+    attrs.push(['points', pts(r.points ?? [])]);
+    if (r.holes?.length) attrs.push(['holes', r.holes.map(pts).join(';')]);
+    if (r.edges) attrs.push(['edges', r.edges.map(formatRoofEdge).join(' ')]);
+    if (r.holeEdges?.length) {
+      attrs.push(['holeEdges', r.holeEdges.map((h) => h.map(formatRoofEdge).join(' ')).join(';')]);
+    }
+  }
+  attrs.push(
+    ['pitch', r.pitch === 30 ? undefined : r.pitch],
+    ['breakHeight', r.breakHeight],
+    ['upperPitch', r.upperPitch],
+    ['base', r.base === 0 ? undefined : r.base],
+    ['overhang', r.overhang === 0.5 ? undefined : r.overhang],
+    ['gableOverhang', r.gableOverhang === 0.3 ? undefined : r.gableOverhang],
+    ['thickness', r.thickness === 0.1 ? undefined : r.thickness],
+    ['material', r.material === 'tile' ? undefined : r.material],
+    ['parapet', r.parapet],
+    ['supports', r.supports],
+    ['postSize', r.postSize],
+    ['postSpacing', r.postSpacing],
+  );
+  return el('roof', attrs);
+}
+
 function siteEl(s: Site): string {
   for (const p of s.points) {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
@@ -155,6 +199,7 @@ function floorEl(f: Floor): string {
     ...byId(f.items).map(itemEl),
     ...byId(f.columns).map(columnEl),
     ...byId(f.stairs).map(stairEl),
+    ...byId(f.roofs).map((r) => roofEl(r, f)),
   ];
   return el(
     'floor',

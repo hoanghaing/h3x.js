@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<h3x version="1" unit="m">
+  <meta name="Nhà phố trên khu đất hình thang, sân thượng + tum"/>
+  <site points="-0.33,-0.3 6.3,-0.3 6.3,14.3 1.13,14.3"/>
+  <floor id="f1" level="0" elevation="0.45" wallHeight="3.4" slabThickness="0.15">
+    <node id="a" x="0" y="0"/><node id="b" x="6" y="0"/><node id="e" x="6" y="14"/><node id="d" x="1.4" y="14"/>
+    <wall id="wf" a="a" b="b" thickness="0.2" height="3.4"/>
+    <wall id="wr" a="b" b="e" thickness="0.2" height="3.4"/>
+    <wall id="wb" a="e" b="d" thickness="0.2" height="3.4"/>
+    <wall id="wl" a="d" b="a" thickness="0.2" height="3.4"/>
+    <opening id="d-front" wall="wf" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
+    <opening id="win-r1" wall="wr" preset="window-01" offset="3" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-r2" wall="wr" preset="window-01" offset="9" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-l1" wall="wl" preset="window-01" offset="3" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-l2" wall="wl" preset="window-01" offset="9" width="1.2" height="1.4" sill="0.9"/>
+    <room id="rm" walls="wf wr wb wl"/>
+  </floor>
+  <floor id="f2" level="1" wallHeight="3.3" slabThickness="0.15">
+    <node id="a" x="0" y="0"/><node id="b" x="6" y="0"/><node id="e" x="6" y="14"/><node id="d" x="1.4" y="14"/>
+    <wall id="wf" a="a" b="b" thickness="0.2" height="3.3"/>
+    <wall id="wr" a="b" b="e" thickness="0.2" height="3.3"/>
+    <wall id="wb" a="e" b="d" thickness="0.2" height="3.3"/>
+    <wall id="wl" a="d" b="a" thickness="0.2" height="3.3"/>
+    <opening id="win-f" wall="wf" preset="window-01" offset="2.4" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-r1" wall="wr" preset="window-01" offset="3" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-r2" wall="wr" preset="window-01" offset="9" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-l1" wall="wl" preset="window-01" offset="3" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-l2" wall="wl" preset="window-01" offset="9" width="1.2" height="1.4" sill="0.9"/>
+    <room id="rm" walls="wf wr wb wl"/>
+  </floor>
+  <floor id="f3" level="2" wallHeight="3.3" slabThickness="0.15">
+    <node id="a" x="0" y="0"/><node id="b" x="6" y="0"/><node id="e" x="6" y="14"/><node id="d" x="1.4" y="14"/>
+    <wall id="wf" a="a" b="b" thickness="0.2" height="3.3"/>
+    <wall id="wr" a="b" b="e" thickness="0.2" height="3.3"/>
+    <wall id="wb" a="e" b="d" thickness="0.2" height="3.3"/>
+    <wall id="wl" a="d" b="a" thickness="0.2" height="3.3"/>
+    <opening id="win-f" wall="wf" preset="window-01" offset="2.4" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-r1" wall="wr" preset="window-01" offset="3" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-r2" wall="wr" preset="window-01" offset="9" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-l1" wall="wl" preset="window-01" offset="3" width="1.2" height="1.4" sill="0.9"/>
+    <opening id="win-l2" wall="wl" preset="window-01" offset="9" width="1.2" height="1.4" sill="0.9"/>
+    <room id="rm" walls="wf wr wb wl"/>
+  </floor>
+  <floor id="f4" level="3" wallHeight="3" slabThickness="0.12">
+    <node id="a" x="0" y="0"/><node id="b" x="6" y="0"/><node id="c" x="6" y="10"/>
+    <node id="e" x="6" y="14"/><node id="d" x="1.4" y="14"/><node id="f" x="1" y="10"/>
+    <!-- Terrace: 1.1 m parapets along the open sides. -->
+    <wall id="wab" a="a" b="b" thickness="0.1" height="1.1"/>
+    <wall id="wbc" a="b" b="c" thickness="0.1" height="1.1"/>
+    <wall id="wfa" a="f" b="a" thickness="0.1" height="1.1"/>
+    <!-- Tum (stair housing): full-height walls. -->
+    <wall id="wce" a="c" b="e" thickness="0.2" height="3"/>
+    <wall id="wed" a="e" b="d" thickness="0.2" height="3"/>
+    <wall id="wdf" a="d" b="f" thickness="0.2" height="3"/>
+    <wall id="wfc" a="f" b="c" thickness="0.2" height="3"/>
+    <opening id="d-tum" wall="wfc" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
+    <room id="rm-terrace" walls="wab wbc wfc wfa" name="Terrace"/>
+    <room id="rm-tum" walls="wfc wce wed wdf" name="Tum"/>
+    <!-- Metal tum roof follows the tum room; its three outer walls are gables. -->
+    <roof id="roof-tum" kind="pitched" preset="metal" follow="1" rooms="rm-tum" pitch="12" overhang="0.4" thickness="0.05" material="metal" wallEdges="wce:gable wed:gable wdf:gable"/>
+    <!-- Independent glass roof on posts over part of the terrace, lowered 0.6 m. -->
+    <roof id="roof-glass" kind="pitched" preset="glass-frame" follow="0" points="1.5,1.5 5.5,1.5 5.5,7.5 1.5,7.5" edges="gable slope:10 gable gable" pitch="10" base="-0.6" overhang="0.2" thickness="0.02" material="glass" supports="posts"/>
+  </floor>
+</h3x>

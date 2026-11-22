@@ -65,6 +65,10 @@ export function dirtyEntities(
   for (const it of Object.values(floor.items)) {
     if (it.mount === 'wall' && dirtyWalls.has(it.wall)) dirty.item.add(it.id);
   }
+  // Follow-mode roofs read the walls and rooms of their floor; re-draw them with any of those.
+  const structural =
+    dirtyWalls.size > 0 || dirty.node.size > 0 || dirty.room.size > 0 || dirty.opening.size > 0;
+  if (structural) for (const r of Object.values(floor.roofs)) dirty.roof.add(r.id);
   return dirty;
 }
 
@@ -76,6 +80,7 @@ export function syncEntity(kind: PlanKind, id: Id, dom: PlanDom, ctx: RenderCont
   if (!entity) {
     g?.remove();
     els.delete(id);
+    if (kind === 'roof') dom.roofGeometry.delete(id);
     return;
   }
   if (!g) {

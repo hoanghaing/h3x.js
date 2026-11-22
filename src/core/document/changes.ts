@@ -10,6 +10,7 @@ import type {
   PresetResolver,
   Stair,
   Project,
+  Roof,
   Room,
   Site,
   Wall,
@@ -23,6 +24,7 @@ interface EntityByKind {
   item: Item;
   column: Column;
   stair: Stair;
+  roof: Roof;
   site: Site;
   floor: FloorProps;
 }
@@ -68,6 +70,7 @@ const COLLECTION = {
   item: 'items',
   column: 'columns',
   stair: 'stairs',
+  roof: 'roofs',
 } as const;
 
 const byLevel = (a: Floor, b: Floor): number => a.level - b.level;
@@ -91,6 +94,7 @@ function putFloor(project: Project, id: Id, snap: FloorProps | null): void {
       items: {},
       columns: {},
       stairs: {},
+      roofs: {},
     });
   }
   project.floors.sort(byLevel); // stable: equal levels keep their order

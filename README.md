@@ -172,6 +172,55 @@ A stair links its floor to the floor above; the slab and room floors above get a
   the frame drawn around a stair is its outline (class `h3x-plan-stair-outline`); the `stairLabels` option (default
   `{ up: 'UP', down: 'DN' }`) sets the walking-line labels.
 
+### Irregular lots and roofs
+
+Lots do not have to be rectangles. Slab outlines, wall joins and roof outlines use a miter limit
+(4 times the offset), so an acute corner is bevelled instead of growing a spike;
+`floorOutline(floor, roomIds?)` returns the outer wall faces of the union of rooms, with
+courtyards as hole rings. A wall can be low (a
+parapet): give it a `height` below the storey height; it still bounds rooms.
+
+A floor holds `roofs`. A roof is either **follow** (`follow: true`, outline from the walls of
+`rooms`, tracking wall edits) or **independent** (`points`, optional `holes`, one `edges` spec
+per outline edge). Each edge is `{ kind: 'gable' }` or
+`{ kind: 'slope', pitch, breakHeight?, upperPitch? }` (degrees; a break height gives a two-pitch
+mansard / gambrel slope). Lengths are meters, pitch is in degrees. The roof underside bears on the
+wall tops (`floor.elevation + wallHeight + base`); `overhang` (default 0.5) extends the eaves and
+`gableOverhang` (default 0.3) the rakes. `kind: 'flat'` gives a slab with an optional `parapet`.
+`material` is `tile`, `metal`, `concrete`, `glass` or `polycarbonate`; `supports: 'posts'` adds
+steel posts under a light roof. See [docs/xml-format.md](docs/xml-format.md) for every field.
+
+- Presets: `ROOF_PRESETS` (`thai`, `japanese`, `metal`, `traditional`, `gable`, `hip`, `shed`,
+  `mansard`, `gambrel`, `flat`, `glass-frame`, `poly-frame`) give initial values only; every value
+  stays editable. `presetEdges(id, ring)` and `presetWallEdges(id, ring)` return the edge specs a
+  preset gives to an outline.
+- Commands: `addRoof({ preset?, rooms?, points?, ...fields })` (`createdId`; follow mode unless
+  `points` are given), `updateRoof(id, patch)` (alias `setRoofParams`; `null` removes an optional
+  field such as `supports`; `follow` cannot change there),
+  `setRoofEdge(id, { index, hole? } | { wallId }, edge)`, `detachRoof(id)` (turns a follow roof
+  independent; extra disjoint outlines become new roofs, listed in the command's `newIds`),
+  `fitRoofToWalls(id, rooms?)` and `removeRoof(id)`. Bad input is `invalid-roof`
+  (`validateRoofParams`); `fromProject` and `fromXML` reject such a roof too.
+- Geometry: `roofGeometry(roof, floor)` returns `{ ok, bodies }` with every face (polygons in 3D),
+  the ridge / hip / valley / eave / rake lines, the overhang outline, posts and parapets;
+  `roofFaceArea(face)` gives a face's area and `gableProfile(floor, wallId)` the top profile of a
+  gable wall. A roof the algorithm cannot build is drawn flat and reported.
+- Warnings from `validateLayout()`: `roof-invalid-outline`, `roof-no-walls` and
+  `roof-build-failed` (see [docs/validation.md](docs/validation.md)).
+- 3D: roofs are built per floor (`h3xKind: 'roof'`, meshes `h3x-roof-<id>`, plus `-frame` bars on
+  light roofs and `-posts`); `scene.getRoofMeshes(id, floorId?)` lists them and
+  `viewer.setRoofsVisible(visible)` shows or hides all roofs. Gable walls are raised to the roof
+  underside.
+- Plan: roofs are drawn above the walls (overhang outline dashed, ridge / hip / valley lines,
+  downhill arrows with pitch, a light hatch for glass / polycarbonate, posts), hit-tested on their
+  real outline, and `plan.setRoofsVisible(visible)` toggles them. `new RoofTool({ preset?, mode?
+})` adds a roof: `'follow'` (default) on a click inside a room (`roof-no-room` outside any),
+  `'draw'` by clicking a polygon. `SelectEditTool` edits a selected roof: drag a vertex (a follow
+  roof detaches first and fires `roofdetached` with `{ roofId, newIds }`), click an edge to fire
+  `roofEdgeRequest` with `{ roofId, index, hole?, wallId?, current, at }` (the editor shows its
+  own input and runs `setRoofEdge`), drag an independent roof to move it, **Delete** removes it.
+  Drawing walls and roofs snaps to site vertices and site edges.
+
 ### Validation and issue codes
 
 Validators return `Issue { code, ids, message }`. Layout edits are never blocked by furniture:
@@ -186,6 +235,10 @@ instead. Only entities touched by a change can block it.
 | `column-size`                      | column width or depth not above 0 or above 2 m, or height (when set) not above 0                                          |
 | `columns-overlap`                  | two columns overlap (reported only)                                                                                       |
 | `site-not-simple`                  | site outline self-intersects (reported only)                                                                              |
+| `invalid-roof`                     | a roof has a bad kind, material, preset, pitch, size, outline or edge spec                                                |
+| `roof-invalid-outline`             | independent roof outline not simple, or a hole outside / crossing (reported only)                                         |
+| `roof-no-walls`                    | follow roof whose rooms give no outline (reported only)                                                                   |
+| `roof-build-failed`                | roof geometry could not be built; drawn flat (reported only)                                                              |
 | `opening-out-of-wall`              | opening does not fit in its wall's usable range                                                                           |
 | `opening-overlap`                  | two openings on one wall overlap                                                                                          |
 | `opening-too-tall`                 | sill + height above the wall height                                                                                       |
@@ -439,7 +492,11 @@ toolbar (select, draw wall, draw site, columns, stair, clear, sample houses), co
 selected stair (type, turn, hand, flight width, rotate 90°), demo inputs wired to
 `lengthEditRequest` and `segmentLengthRequest`, and a floor bar (floor picker, add above / below,
 remove, wall height, slab thickness, ground elevation and view mode). It opens a sample
-three-storey townhouse with a basement (`examples/layouts/townhouse-3f.xml`) (`pnpm dev`).
+three-storey townhouse with a basement (`examples/layouts/townhouse-3f.xml`) (`pnpm dev`). A second
+sample, a four-storey townhouse on a trapezoid lot (`examples/layouts/townhouse-trapezoid.xml`),
+has a terrace with 1.1 m parapets, a stair housing with a metal roof and a glass roof on posts
+over part of the terrace; the toolbar has a roof tool with preset and mode pickers and a roofs
+visibility toggle.
 
 ## Tolerance
 

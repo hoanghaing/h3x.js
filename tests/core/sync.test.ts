@@ -25,6 +25,7 @@ function floor(
     items: {},
     columns: {},
     stairs: {},
+    roofs: {},
   };
 }
 

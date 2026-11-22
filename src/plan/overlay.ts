@@ -97,6 +97,32 @@ export function renderDropTarget(
   );
 }
 
+/** Half-side (px) of a roof vertex handle. */
+const ROOF_HANDLE_HALF_PX = 4;
+
+/** Replaces the overlay layer's roof vertex handles (screen-sized squares); `[]` clears. */
+export function renderRoofHandles(
+  layer: SVGGElement,
+  view: View,
+  prefix: string,
+  points: readonly Vec2[],
+): void {
+  for (const el of Array.from(layer.querySelectorAll(`.${prefix}-roof-handle`))) el.remove();
+  for (const p of points) {
+    layer.appendChild(
+      svgEl('rect', {
+        class: `${prefix}-roof-handle`,
+        x: String(-ROOF_HANDLE_HALF_PX),
+        y: String(-ROOF_HANDLE_HALF_PX),
+        width: String(ROOF_HANDLE_HALF_PX * 2),
+        height: String(ROOF_HANDLE_HALF_PX * 2),
+        transform: screenSpaceTransform(view, p),
+        ...NON_SCALING,
+      }),
+    );
+  }
+}
+
 /** Re-derives which walls show a length label, their geometry and screen rects. */
 export function syncDimensions(
   floor: Readonly<Floor>,
