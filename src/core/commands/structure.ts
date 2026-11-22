@@ -1,6 +1,6 @@
 import type { Command } from '../document/changes';
 import { createId } from '../ids';
-import { structural } from '../topology/draft';
+import { structural, wallsAt } from '../topology/draft';
 import {
   addWallIn,
   dropNodeIn,
@@ -14,6 +14,9 @@ import type { NewWall } from '../topology/ops';
 import type { Id, Vec2 } from '../types';
 import { assertFreeId } from './shared';
 
+/** For `structural`: drawing, splitting and deleting move no wall. */
+const wallsStay = (): boolean => true;
+
 /**
  * Draws a wall (see the topology rules): ends snap to nodes or split walls, crossings
  * split both walls, rooms re-sync. After a run `createdId` is the wall touching `from`
@@ -24,11 +27,15 @@ export function addWall(input: NewWall): Command & { createdId: Id; endNodeId: I
   let createdId = createId();
   let endNodeId = createId();
   const ids = { wall: createdId, endNode: endNodeId };
-  const cmd = structural('addWall', (draft, ctx) => {
-    const r = addWallIn(draft, input, ids, ctx.presets);
-    createdId = r.wallId;
-    endNodeId = r.endNodeId;
-  });
+  const cmd = structural(
+    'addWall',
+    (draft, ctx) => {
+      const r = addWallIn(draft, input, ids, ctx.presets);
+      createdId = r.wallId;
+      endNodeId = r.endNodeId;
+    },
+    wallsStay,
+  );
   return {
     ...cmd,
     get createdId() {
@@ -44,22 +51,31 @@ export function addWall(input: NewWall): Command & { createdId: Id; endNodeId: I
 export function splitWall(wallId: Id, at: Vec2): Command & { createdId: Id } {
   const nodeId = createId();
   const newWallId = createId();
-  const cmd = structural('splitWall', (draft, ctx) => {
-    assertFreeId(ctx, nodeId);
-    assertFreeId(ctx, newWallId);
-    splitAt(draft, wallId, at, newWallId, nodeId, ctx.presets);
-  });
+  const cmd = structural(
+    'splitWall',
+    (draft, ctx) => {
+      assertFreeId(ctx, nodeId);
+      assertFreeId(ctx, newWallId);
+      splitAt(draft, wallId, at, newWallId, nodeId, ctx.presets);
+    },
+    wallsStay,
+  );
   return { ...cmd, createdId: nodeId };
 }
 
 /** Deletes a wall with its openings / wall items and orphaned nodes; rooms re-sync. */
 export function removeWall(wallId: Id): Command {
-  return structural('removeWall', (draft) => removeWallIn(draft, wallId));
+  return structural('removeWall', (draft) => removeWallIn(draft, wallId), wallsStay);
 }
 
 /** Degree 2 merges the two walls; otherwise deletes the node and its walls. Rooms re-sync. */
 export function removeNode(nodeId: Id): Command {
-  return structural('removeNode', (draft, ctx) => removeNodeIn(draft, nodeId, ctx.presets));
+  return structural(
+    'removeNode',
+    (draft, ctx) => removeNodeIn(draft, nodeId, ctx.presets),
+    // Two walls merge into one straight wall, which moves them.
+    (before) => wallsAt(before, nodeId).length !== 2,
+  );
 }
 
 /**

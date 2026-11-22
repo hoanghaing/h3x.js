@@ -297,7 +297,8 @@ the face it overlaps most, or deleted when it overlaps none.
 Follow roofs never grow or shrink because rooms change. When a roofed room is split, the roof's
 `rooms` gains the new part. When it merges with a room the roof does not cover, or one of its
 walls is removed so that it opens, the roof becomes independent with the shape it had (several
-bodies become several roofs), in the same undo step. Moving walls still moves the roof.
+bodies become several roofs), in the same undo step. The same happens when drawing or deleting
+walls cuts out or absorbs a space too small to be a room. Moving walls still moves the roof.
 
 ### XML
 

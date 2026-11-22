@@ -29,14 +29,16 @@ function encloses(outer: Shape, inner: Shape): boolean {
  * - a merge of roofed rooms drops the deleted ids;
  * - a merge with a room the roof does not cover, or a roofed room that is opened, detaches the
  *   roof with the shape it had, unless the covered area is the same.
- * Edits that only move walls change no room ids, so roofs keep following them. Mutates
- * `after.roofs`.
+ * With `wallsStay` (the edit moves no wall: draw, split, delete) any change of the covered area
+ * detaches too, e.g. cutting out or absorbing a space too small to be a room. Other edits move
+ * walls, and roofs follow those. Mutates `after.roofs`.
  */
 export function syncRoofs(
   before: Readonly<Floor>,
   after: Floor,
   changes: readonly EntityChange[],
   newId: (roof: Id, k: number) => Id,
+  wallsStay: boolean,
 ): void {
   const follows = Object.values(before.roofs).filter((r) => r.follow && r.rooms?.length);
   if (follows.length === 0) return;
@@ -53,7 +55,8 @@ export function syncRoofs(
       deleted.push(c.id);
     }
   }
-  if (created.length === 0 && deleted.length === 0) return;
+  if (changes.length === 0) return;
+  if (!wallsStay && created.length === 0 && deleted.length === 0) return;
 
   const next: Floor = { ...after, rooms };
   const was = new Map<Id, Shape | null>();
@@ -110,7 +113,7 @@ export function syncRoofs(
       return had.has(id) !== (into !== undefined && members.includes(into));
     });
     if (
-      mergedAcross &&
+      (wallsStay || mergedAcross) &&
       Math.abs(coveredArea(before, old.rooms!) - coveredArea(next, covering)) > AREA_TOL
     ) {
       const kept = detachedRoofs(old, before, (k) => newId(old.id, k));

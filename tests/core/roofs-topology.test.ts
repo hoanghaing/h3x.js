@@ -202,6 +202,43 @@ describe('a follow roof when rooms merge', () => {
   });
 });
 
+describe('a follow roof beside a space too small to be a room', () => {
+  /** A 4 x 4 house with a 0.9 x 0.9 shaft in its corner, outside room r1. */
+  function withShaft(): Floor {
+    const f = bare();
+    f.nodes.s1 = { id: 's1', x: 3.1, y: 4 };
+    f.nodes.s2 = { id: 's2', x: 3.1, y: 3.1 };
+    f.nodes.s3 = { id: 's3', x: 4, y: 3.1 };
+    f.walls.w2!.b = 's3';
+    f.walls.w2b = { ...f.walls.w2!, id: 'w2b', a: 's3', b: 'n3' };
+    f.walls.w3!.b = 's1';
+    f.walls.w3b = { ...f.walls.w3!, id: 'w3b', a: 's1', b: 'n4' };
+    f.walls.s12 = { ...f.walls.w1!, id: 's12', a: 's1', b: 's2' };
+    f.walls.s23 = { ...f.walls.w1!, id: 's23', a: 's2', b: 's3' };
+    f.rooms.r1!.walls = ['w1', 'w2', 's23', 's12', 'w3b', 'w4'];
+    return f;
+  }
+
+  it('cutting a shaft out of the room leaves the roof whole', () => {
+    const { doc, id } = setup(bare(), ['r1']);
+    const before = surface(doc);
+    doc.execute(wall({ x: 3.1, y: 4 }, { x: 3.1, y: 3.1 }));
+    doc.execute(wall({ x: 3.1, y: 3.1 }, { x: 4, y: 3.1 }));
+    expect(doc.floor.roofs[id]!.follow).toBe(false);
+    expect(surface(doc)).toBeCloseTo(before, 4);
+  });
+
+  it.each([
+    ['removeWall', () => removeWall('s12')],
+    ['removeNode with three walls', () => removeNode('s1')],
+  ])('%s of the shaft does not grow or lose the roof', (_, cmd) => {
+    const { doc } = setup(withShaft(), ['r1']);
+    const before = surface(doc);
+    doc.execute(cmd());
+    expect(surface(doc)).toBeCloseTo(before, 4);
+  });
+});
+
 it('a push / pull still makes the roof follow its walls', () => {
   const { doc, id } = setup(twoRoomFloor(), ['r2']);
   doc.execute(pushPullWall('w3', -1)); // outward

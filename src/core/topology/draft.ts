@@ -61,11 +61,13 @@ const NON_ROOM = new Set<FloorKind>(['node', 'wall', 'opening', 'item', 'column'
 /**
  * A command that mutates a clone of the floor. Rooms in the draft are ignored:
  * room changes come from `syncRooms(ctx.floor, draft)` and follow roofs are re-mapped to them
- * (`syncRoofs`), so the whole edit is one change list (one undo step).
+ * (`syncRoofs`), so the whole edit is one change list (one undo step). `wallsStay`: the edit
+ * moves no wall, so what follow roofs cover must not change.
  */
 export function structural(
   label: string,
   mutate: (draft: Floor, ctx: CommandContext) => void,
+  wallsStay: (before: Readonly<Floor>) => boolean = () => false,
 ): Command {
   /** Ids of the extra roofs a detach makes: the same every time this command runs. */
   const roofIds = new Map<string, Id>();
@@ -80,7 +82,7 @@ export function structural(
       const draft = structuredClone(ctx.floor) as Floor;
       mutate(draft, ctx);
       const rooms = syncRooms(ctx.floor, draft);
-      syncRoofs(ctx.floor, draft, rooms, roofIdFor);
+      syncRoofs(ctx.floor, draft, rooms, roofIdFor, wallsStay(ctx.floor));
       return [...diffKinds(ctx.floor, draft, NON_ROOM), ...rooms];
     },
   };
