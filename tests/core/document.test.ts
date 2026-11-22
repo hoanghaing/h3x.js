@@ -7,7 +7,8 @@ import type { EntityChange } from '../../src/core/document/changes';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Item, Opening, PlanNode, Project, Room, Wall } from '../../src/core/types';
 import { moveNode } from '../../src/core/commands/layout';
-import { addItem, moveOpening } from '../../src/core/commands/objects';
+import { addItem } from '../../src/core/commands/objects';
+import { moveOpening } from '../../src/core/commands/openings';
 import { setWallFinish } from '../../src/core/commands/finishes';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
 

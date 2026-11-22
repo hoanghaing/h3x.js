@@ -1,0 +1,538 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest';
+import {
+  H3xDocument,
+  addOpening,
+  applyOpeningPreset,
+  moveOpening,
+  openingClearances,
+  openingGeometry,
+  resizeOpening,
+  setOpeningDistance,
+  updateOpening,
+  wallOutlines,
+  type Floor,
+  type Hinge,
+  type Opening,
+  type PresetResolver,
+  type Vec2,
+} from '../../src/core';
+import { pointInPolygon } from '../../src/core/geometry/polygon';
+import { closestPointOnSegment } from '../../src/core/geometry/segment';
+import { add, distance, leftNormal, normalize, scale, sub } from '../../src/core/geometry/vec';
+import { ctxFor, oneRoomFloor } from '../fixtures/floors';
+import { irregularFixtures } from '../fixtures/irregular';
+import { openingFloor } from '../fixtures/openings';
+
+const ENDS = ['a', 'b'] as const;
+
+const mk = (floor: Floor = oneRoomFloor(), presets?: PresetResolver): H3xDocument =>
+  H3xDocument.fromProject(
+    { version: 1, unit: 'm', meta: { name: 't', created: '' }, floors: [floor] },
+    { presets },
+  );
+
+const rad = (deg: number): number => (deg * Math.PI) / 180;
+const TILT = rad(37);
+/** A point given along and across the measured wall of `meeting`, on the plan. */
+const tilted = (x: number, y: number): Vec2 => ({
+  x: x * Math.cos(TILT) - y * Math.sin(TILT),
+  y: x * Math.sin(TILT) + y * Math.cos(TILT),
+});
+
+type Arm = [deg: number, thickness: number];
+
+/**
+ * A slanted 6 m wall whose `end` is the node n, `arms` meeting it there (their angle from it),
+ * and a 1 m opening centred 3 m from n.
+ */
+function meeting(arms: Arm[], { end = 'a' as Hinge, thickness = 0.2 } = {}): Floor {
+  const f = openingFloor({ width: 1, offset: 3 });
+  f.nodes = { n: { id: 'n', x: 0, y: 0 }, far: { id: 'far', ...tilted(6, 0) } };
+  const a = end === 'a' ? 'n' : 'far';
+  const b = end === 'a' ? 'far' : 'n';
+  f.walls = { w: { id: 'w', a, b, thickness, height: 3.2 } };
+  arms.forEach(([deg, t], i) => {
+    const id = `m${i}`;
+    f.nodes[id] = { id, ...tilted(4 * Math.cos(rad(deg)), 4 * Math.sin(rad(deg))) };
+    f.walls[id] = { id, a: 'n', b: id, thickness: t, height: 3.2 };
+  });
+  return f;
+}
+
+/** The opening of `meeting` starts this far from its node. */
+const JAMB = 2.5;
+
+/** Where the inner face lines of two walls meeting at `deg` cross, along the first from the node. */
+const crossing = (deg: number, own: number, other: number): number =>
+  (other / 2 + (own / 2) * Math.cos(rad(deg))) / Math.sin(rad(deg));
+
+const faceAt = (f: Floor, end: Hinge): number => openingClearances(f, f.openings.o1!)[end].face;
+
+function expectPoint(actual: Vec2, expected: Vec2) {
+  expect(distance(actual, expected)).toBeLessThan(1e-9);
+}
+
+/**
+ * The drawn outlines as the judge: `until` is on one of them, `face` is how far it is from the
+ * jamb, and up to there neither face of the wall is inside a meeting wall.
+ */
+function expectMatchesOutlines(f: Floor, o: Opening) {
+  const outlines = wallOutlines(f);
+  const wall = f.walls[o.wall]!;
+  const a = f.nodes[wall.a]!;
+  const dir = normalize(sub(f.nodes[wall.b]!, a));
+  const half = scale(leftNormal(dir), wall.thickness / 2);
+  const clearances = openingClearances(f, o);
+  for (const end of ENDS) {
+    const { face, jamb, until } = clearances[end];
+    const node = wall[end];
+    const meets = Object.values(f.walls).filter(
+      (w) => w.id !== wall.id && (w.a === node || w.b === node),
+    );
+    const onOutline = [wall, ...meets].some(({ id }) => {
+      const ring = outlines[id]!;
+      return ring.some(
+        (p, i) => distance(until, closestPointOnSegment(until, p, ring[(i + 1) % 4]!).point) < 1e-7,
+      );
+    });
+    expect(onOutline, `${wall.id} ${end}`).toBe(true);
+    expect(distance(jamb, until)).toBeCloseTo(face, 8);
+
+    const out = scale(dir, end === 'a' ? -1 : 1);
+    const along = o.offset + (end === 'a' ? -o.width : o.width) / 2;
+    for (const side of [1, -1]) {
+      const start = add(add(a, scale(dir, along)), scale(half, side));
+      for (let k = 0; k <= 10; k++) {
+        // 1 cm short: pointInPolygon counts 1 mm around an outline as inside.
+        const p = add(start, scale(out, ((face - 0.01) * k) / 10));
+        for (const { id } of meets) expect(pointInPolygon(p, outlines[id]!), id).toBe(false);
+      }
+    }
+  }
+}
+
+describe('updateOpening', () => {
+  it.each<[string, Partial<Omit<Opening, 'id'>>]>([
+    ['offset', { offset: 2 }],
+    ['width', { width: 1.1 }],
+    ['height', { height: 2.3 }],
+    ['sill', { sill: 0.1 }],
+    ['wall', { wall: 'w3' }],
+    ['preset', { preset: 'door-double-01' }],
+    ['type', { type: 'door-sliding' }],
+    ['hinge', { hinge: 'b' }],
+    ['swing', { swing: 'right' }],
+    ['leaves', { leaves: 1 }],
+    ['split', { split: 0.6 }],
+  ])('patches %s and undoes it in one step', (_, patch) => {
+    const doc = mk();
+    const before = structuredClone(doc.floor.openings.o1);
+    doc.execute(updateOpening('o1', patch));
+    expect(doc.floor.openings.o1).toEqual({ ...before, ...patch });
+    expect(doc.undo()).toBe(true);
+    expect(doc.floor.openings.o1).toEqual(before);
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('patches several fields in one step', () => {
+    const doc = mk();
+    doc.execute(updateOpening('o1', { wall: 'w2', offset: 2.5, width: 1, hinge: 'b' }));
+    expect(doc.floor.openings.o1).toMatchObject({ wall: 'w2', offset: 2.5, width: 1, hinge: 'b' });
+    doc.undo();
+    expect(doc.floor.openings).toEqual(oneRoomFloor().openings);
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('moving an opening leaves hinge, swing and type untouched', () => {
+    const f = oneRoomFloor();
+    Object.assign(f.openings.o1!, { hinge: 'b', swing: 'right', type: 'door-folding' });
+    const doc = mk(f);
+    doc.execute(moveOpening('o1', { offset: 2 }));
+    expect(doc.floor.openings.o1).toEqual({ ...f.openings.o1, offset: 2 });
+  });
+
+  it('never changes the id', () => {
+    const doc = mk();
+    doc.execute(updateOpening('o1', { id: 'other', offset: 2 } as Partial<Opening>));
+    expect(doc.floor.openings.o1).toMatchObject({ id: 'o1', offset: 2 });
+  });
+
+  it('makes no undo step when nothing changes', () => {
+    const doc = mk();
+    doc.execute(updateOpening('o1', { offset: 1.2, hinge: undefined }));
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('is not-found for an unknown opening or wall', () => {
+    const doc = mk();
+    for (const cmd of [updateOpening('no', { sill: 1 }), updateOpening('o1', { wall: 'no' })]) {
+      expect(doc.tryExecute(cmd)).toMatchObject({ ok: false, issues: [{ code: 'not-found' }] });
+    }
+  });
+
+  it('repairs a loaded opening with height 0', () => {
+    const f = oneRoomFloor();
+    f.openings.o1!.height = 0;
+    const doc = H3xDocument.fromXML(mk(f).toXML());
+    expect(doc.floor.openings.o1!.height).toBe(0);
+    doc.execute(updateOpening('o1', { height: 2.1 }));
+    expect(doc.floor.openings.o1!.height).toBe(2.1);
+  });
+});
+
+describe('addOpening', () => {
+  it('takes every field as an override of the preset', () => {
+    const doc = mk();
+    const over = {
+      width: 1.1,
+      height: 2,
+      sill: 0.2,
+      type: 'door-double',
+      hinge: 'b',
+      swing: 'right',
+      leaves: 2,
+      split: 0.7,
+    } as const;
+    const cmd = addOpening({ wall: 'w3', preset: 'door-single-01', offset: 2, ...over });
+    doc.execute(cmd);
+    expect(doc.floor.openings[cmd.createdId]).toEqual({
+      id: cmd.createdId,
+      wall: 'w3',
+      preset: 'door-single-01',
+      offset: 2,
+      ...over,
+    });
+  });
+});
+
+describe('resizeOpening', () => {
+  it.each([
+    [{ x: 4, y: 3 }, 'a', 1.6],
+    [{ x: 4, y: 3 }, 'b', 0.7],
+    [{ x: -3.1, y: 2.3 }, 'a', 0.8333333],
+    [{ x: -1.7, y: -4.4 }, 'b', 1.4444444],
+  ] as const)('on a wall to %o, moving %s to width %f keeps the other jamb', (b, end, width) => {
+    const doc = mk(openingFloor({ offset: 1.987654321 }, { b }));
+    const cut = () => openingGeometry(doc.floor, doc.floor.openings.o1!)!.cut;
+    const before = cut();
+    doc.execute(resizeOpening('o1', { end, width }));
+    const after = cut();
+    const still = end === 'a' ? [1, 2] : [0, 3];
+    for (const i of still) expectPoint(after[i]!, before[i]!);
+    expect(distance(after[0], after[1])).toBeCloseTo(width, 8);
+    doc.undo();
+    expect(cut()).toEqual(before);
+  });
+
+  it('is not-found for an unknown opening', () => {
+    expect(mk().tryExecute(resizeOpening('no', { end: 'a', width: 1 }))).toMatchObject({
+      ok: false,
+      issues: [{ code: 'not-found' }],
+    });
+  });
+
+  it('gives the same result when a drag replays it from the start', () => {
+    const doc = mk(openingFloor());
+    const drag = { coalesceKey: 'drag', restart: true };
+    for (const width of [0.5, 2, 1.5]) doc.execute(resizeOpening('o1', { end: 'b', width }), drag);
+    expect(doc.floor.openings.o1).toMatchObject({ offset: 2.15, width: 1.5 });
+    doc.undo();
+    expect(doc.floor.openings.o1).toMatchObject({ offset: 2, width: 1.2 });
+  });
+});
+
+describe('openingClearances', () => {
+  describe.each([45, 60, 80, 90, 120])('a wall meeting at %i degrees', (deg) => {
+    it.each([
+      [0.2, 0.2],
+      [0.2, 0.35],
+      [0.2, 0.15],
+      [0.3, 0.2],
+    ])('%f thick, met by one %f thick', (own, other) => {
+      const x = crossing(deg, own, other);
+      for (const end of ENDS) {
+        for (const mirror of [1, -1]) {
+          const f = meeting([[mirror * deg, other]], { end, thickness: own });
+          const c = openingClearances(f, f.openings.o1!)[end];
+          expect(c.face).toBeCloseTo(JAMB - x, 8);
+          expect(c.axis).toBeCloseTo(JAMB, 8);
+          expectPoint(c.jamb, tilted(JAMB, (mirror * own) / 2));
+          expectPoint(c.until, tilted(x, (mirror * own) / 2));
+          expectMatchesOutlines(f, f.openings.o1!);
+        }
+      }
+    });
+  });
+
+  it.each([
+    [20, 0.2],
+    [15, 0.3],
+    [10, 0.1],
+  ])('at %i degrees, past the miter limit, stops at the drawn wall %f thick', (deg, other) => {
+    for (const end of ENDS) {
+      const f = meeting([[deg, other]], { end });
+      expect(faceAt(f, end)).toBeCloseTo(JAMB - crossing(deg, 0.2, other), 8);
+      expectMatchesOutlines(f, f.openings.o1!);
+    }
+  });
+
+  it('stops at the square end of a thicker wall almost in line', () => {
+    for (const end of ENDS) {
+      const f = meeting([[170, 0.4]], { end, thickness: 0.1 });
+      expect(faceAt(f, end)).toBeCloseTo(JAMB - 0.05 * Math.tan(rad(10)), 8);
+    }
+  });
+
+  it.each<[string, Arm[], number]>([
+    ['a free end', [], 0],
+    ['a straight continuation', [[180, 0.2]], 0],
+    ['a thicker continuation', [[180, 0.4]], 0],
+    ['a thinner continuation', [[180, 0.1]], 0],
+    [
+      'the stem of a T',
+      [
+        [90, 0.3],
+        [-90, 0.3],
+      ],
+      0.15,
+    ],
+    [
+      'the bar of a T',
+      [
+        [180, 0.2],
+        [90, 0.3],
+      ],
+      0.15,
+    ],
+    [
+      'an X',
+      [
+        [90, 0.3],
+        [180, 0.2],
+        [-90, 0.3],
+      ],
+      0.15,
+    ],
+    [
+      'a skew X',
+      [
+        [60, 0.3],
+        [180, 0.2],
+        [-120, 0.3],
+      ],
+      crossing(60, 0.2, 0.3),
+    ],
+    [
+      'a Y with thin arms',
+      [
+        [135, 0.04],
+        [-135, 0.04],
+      ],
+      crossing(135, 0.2, 0.04),
+    ],
+  ])('at %s', (_, arms, x) => {
+    for (const end of ENDS) {
+      const f = meeting(arms, { end });
+      expect(faceAt(f, end)).toBeCloseTo(JAMB - x, 8);
+      expectMatchesOutlines(f, f.openings.o1!);
+    }
+  });
+
+  it.each(Object.entries(irregularFixtures))('matches the outlines of %s', (_, make) => {
+    const f = make();
+    const base = openingFloor().openings.o1!;
+    for (const wall of Object.values(f.walls)) {
+      const offset = distance(f.nodes[wall.a]!, f.nodes[wall.b]!) / 2;
+      expectMatchesOutlines(f, { ...base, wall: wall.id, offset, width: 0.2 });
+    }
+  });
+
+  it('a neighbour opening ends the clear distance, not the distance to the node', () => {
+    const f = openingFloor({ width: 1, offset: 5 }, { b: { x: 10, y: 0 } });
+    const other = (id: string, offset: number, width: number) =>
+      (f.openings[id] = { ...f.openings.o1!, id, offset, width });
+    other('far', 1, 0.8);
+    other('before', 2.5, 1); // its nearer jamb: 3
+    other('after', 8, 2); // its nearer jamb: 7
+    const c = openingClearances(f, f.openings.o1!);
+    expect(c.a).toMatchObject({ face: 1.5, axis: 4.5 });
+    expect(c.b).toMatchObject({ face: 1.5, axis: 4.5 });
+    expect([c.a.jamb.x, c.a.until.x, c.b.jamb.x, c.b.until.x]).toEqual([4.5, 3, 5.5, 7]);
+    for (const p of [c.a.jamb, c.a.until, c.b.jamb, c.b.until]) {
+      expect(Math.abs(p.y)).toBe(0.1);
+    }
+  });
+
+  it('ignores the openings of other walls', () => {
+    const f = oneRoomFloor();
+    f.openings.o2 = { ...f.openings.o1!, id: 'o2', wall: 'w2', offset: 0.6 };
+    expect(openingClearances(f, f.openings.o1!).a.face).toBeCloseTo(0.65, 9);
+  });
+
+  it('measures to another wall that crosses the face beyond the joined corners', () => {
+    const f = meeting([
+      [150, 0.3],
+      [320, 0.1],
+    ]);
+    // The thicker wall's end edge runs from (0.1268, 0.1) to (0.4123, -0.4113), so it crosses
+    // the right face at 0.2385; the wall's own corner there is at 0.1970.
+    expect(faceAt(f, 'a')).toBeCloseTo(JAMB - 0.2385, 3);
+    expectMatchesOutlines(f, f.openings.o1!);
+  });
+
+  it('is negative where an opening reaches into a meeting wall', () => {
+    const f = oneRoomFloor();
+    f.openings.o1!.offset = 0.5;
+    expect(openingClearances(f, f.openings.o1!).a.face).toBeCloseTo(-0.05, 9);
+  });
+
+  it('is not-found without the wall', () => {
+    const f = oneRoomFloor();
+    expect(() => openingClearances(f, { ...f.openings.o1!, wall: 'no' })).toThrow('does not exist');
+  });
+});
+
+describe('setOpeningDistance', () => {
+  /** A 10 m wall met by one 0.4 thick at a and one 0.3 thick at b, with o1 1 m wide at 5. */
+  function row(neighbours: boolean): Floor {
+    const f = openingFloor({ width: 1, offset: 5 }, { b: { x: 10, y: 0 } });
+    f.nodes.p = { id: 'p', x: 0, y: 3 };
+    f.nodes.q = { id: 'q', x: 10, y: 3 };
+    f.walls.wp = { id: 'wp', a: 'a', b: 'p', thickness: 0.4, height: 3.2 };
+    f.walls.wq = { id: 'wq', a: 'q', b: 'b', thickness: 0.3, height: 3.2 };
+    if (neighbours) {
+      f.openings.before = { ...f.openings.o1!, id: 'before', offset: 2.5 }; // up to 3
+      f.openings.after = { ...f.openings.o1!, id: 'after', offset: 7.5 }; // from 7
+    }
+    return f;
+  }
+
+  it.each([
+    ['a', 'face', false, 1.7], // 0.2 + 1 + 0.5
+    ['b', 'face', false, 8.35], // 10 - 0.15 - 1 - 0.5
+    ['a', 'axis', false, 1.5],
+    ['b', 'axis', false, 8.5],
+    ['a', 'face', true, 4.5], // 3 + 1 + 0.5
+    ['b', 'face', true, 5.5], // 7 - 1 - 0.5
+  ] as const)('1 m at %s, from %s, neighbours %s: centre %f', (end, from, neighbours, offset) => {
+    const doc = mk(row(neighbours));
+    doc.execute(setOpeningDistance('o1', { end, distance: 1, from }));
+    expect(doc.floor.openings.o1!.offset).toBeCloseTo(offset, 9);
+    expect(doc.floor.openings.o1!.width).toBe(1);
+    doc.undo();
+    expect(doc.floor.openings.o1!.offset).toBe(5);
+  });
+
+  it.each([
+    ['a', 4.2],
+    ['b', 5.8],
+  ] as const)('measures the axis at %s whatever stands between', (end, offset) => {
+    const doc = mk(row(true));
+    doc.execute(setOpeningDistance('o1', { end, distance: 3.7, from: 'axis' }));
+    expect(doc.floor.openings.o1!.offset).toBeCloseTo(offset, 9);
+  });
+
+  it.each([45, 60, 80, 90, 120])('0 at a wall meeting at %i degrees is on its face', (deg) => {
+    const x = crossing(deg, 0.2, 0.35);
+    for (const end of ENDS) {
+      const f = meeting([[deg, 0.35]], { end });
+      // The command alone: how near a meeting wall an opening may stand is for the validators.
+      const cmd = setOpeningDistance('o1', { end, distance: 0, from: 'face' });
+      const after = cmd.run(ctxFor(f))[0]!.after as Opening;
+      expect(after.offset).toBeCloseTo(end === 'a' ? x + 0.5 : 6 - x - 0.5, 8);
+    }
+  });
+
+  it.each(['face', 'axis'] as const)('rejects a negative distance from the %s', (from) => {
+    for (const distance of [-0.01, NaN]) {
+      const doc = mk(row(false));
+      expect(doc.tryExecute(setOpeningDistance('o1', { end: 'a', distance, from }))).toMatchObject({
+        ok: false,
+        issues: [{ code: 'invalid-opening' }],
+      });
+      expect(doc.canUndo).toBe(false);
+    }
+  });
+
+  it('rejects a clear distance with the next opening on the other side in the way', () => {
+    const f = row(true);
+    f.openings.before!.offset = 1.5;
+    f.openings.o1!.offset = 3;
+    f.openings.after!.offset = 5;
+    const cmd = setOpeningDistance('o1', { end: 'a', distance: 5, from: 'face' });
+    expect(mk(f).tryExecute(cmd)).toMatchObject({
+      ok: false,
+      issues: [{ code: 'opening-overlap', ids: ['o1', 'after'] }],
+    });
+  });
+
+  it('gives the same result when a drag replays it from the start', () => {
+    const doc = mk(row(false));
+    const drag = { coalesceKey: 'drag', restart: true };
+    for (const distance of [2, 0.5, 1]) {
+      doc.execute(setOpeningDistance('o1', { end: 'a', distance, from: 'face' }), drag);
+    }
+    expect(doc.floor.openings.o1!.offset).toBeCloseTo(1.7, 9);
+    doc.undo();
+    expect(doc.floor.openings.o1!.offset).toBe(5);
+  });
+});
+
+describe('applyOpeningPreset', () => {
+  it('keeps id, wall, centre and orientation', () => {
+    const f = oneRoomFloor();
+    Object.assign(f.openings.o1!, { offset: 2, hinge: 'b', swing: 'right', leaves: 1 });
+    const doc = mk(f);
+    doc.execute(applyOpeningPreset('o1', 'door-double-unequal-01'));
+    expect(doc.floor.openings.o1).toEqual({
+      id: 'o1',
+      wall: 'w1',
+      preset: 'door-double-unequal-01',
+      offset: 2,
+      width: 1.2,
+      height: 2.2,
+      sill: 0,
+      type: 'door-double',
+      hinge: 'b',
+      swing: 'right',
+      split: 0.67,
+    });
+    doc.undo();
+    expect(doc.floor.openings.o1).toEqual(f.openings.o1);
+    expect(doc.canUndo).toBe(false);
+  });
+
+  it('takes the orientation and the sill a preset gives', () => {
+    const doc = mk(oneRoomFloor(), () => ({
+      mount: 'opening',
+      footprint: { w: 0.8, d: 0.05, h: 1.2 },
+      sill: 1,
+      opening: { hinge: 'b', swing: 'right' },
+    }));
+    doc.execute(applyOpeningPreset('o1', 'host-window'));
+    expect(doc.floor.openings.o1).toMatchObject({
+      type: 'window-fixed',
+      hinge: 'b',
+      swing: 'right',
+      width: 0.8,
+      sill: 1,
+    });
+  });
+
+  it('rejects an unknown opening or preset, and a preset of another mount', () => {
+    const doc = mk(oneRoomFloor(), (id) =>
+      id === 'sofa' ? { mount: 'floor', footprint: { w: 2, d: 1, h: 1 } } : undefined,
+    );
+    for (const [id, preset, code] of [
+      ['no', 'window-01', 'not-found'],
+      ['o1', 'no', 'unknown-preset'],
+      ['o1', 'sofa', 'unknown-preset'],
+    ] as const) {
+      expect(doc.tryExecute(applyOpeningPreset(id, preset))).toMatchObject({
+        ok: false,
+        issues: [{ code }],
+      });
+    }
+  });
+});

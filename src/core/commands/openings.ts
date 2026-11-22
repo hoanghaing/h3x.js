@@ -1,0 +1,191 @@
+import type { Command, CommandContext, EntityChange } from '../document/changes';
+import { deepEqual } from '../document/history';
+import { tidy } from '../geometry/vec';
+import { createId } from '../ids';
+import { openingClearances } from '../openings/clearance';
+import { defaultOpeningType } from '../openings/normalize';
+import { openingSpan } from '../shapes';
+import type { Hinge, Id, Opening } from '../types';
+import { assertFreeId, fail, notFound, presetFor, type Created } from './shared';
+
+type OpeningPatch = Partial<Omit<Opening, 'id'>>;
+
+const OPENING_KEYS = [
+  'wall',
+  'preset',
+  'offset',
+  'width',
+  'height',
+  'sill',
+  'type',
+  'hinge',
+  'swing',
+  'leaves',
+  'split',
+] as const satisfies readonly (keyof OpeningPatch)[];
+
+/** `o` with the defined fields of `patch`. */
+function patched(o: Opening, patch: OpeningPatch): Opening {
+  const after: Record<string, unknown> = { ...o };
+  for (const k of OPENING_KEYS) if (patch[k] !== undefined) after[k] = patch[k];
+  return after as unknown as Opening;
+}
+
+function getOpening(ctx: CommandContext, id: Id): Opening {
+  const o = ctx.floor.openings[id];
+  if (!o) throw notFound('Opening', id);
+  return o;
+}
+
+function changed(o: Opening, after: Opening): EntityChange[] {
+  if (deepEqual(o, after)) return [];
+  return [{ kind: 'opening', id: o.id, before: structuredClone(o), after }];
+}
+
+/**
+ * An opening as its preset makes it, then `over`. Orientation the preset does not give stays as
+ * in `base`.
+ */
+function fromPreset(
+  ctx: CommandContext,
+  base: Pick<Opening, 'id' | 'wall' | 'preset' | 'offset' | 'hinge' | 'swing'>,
+  over: OpeningPatch = {},
+): Opening {
+  const { id, preset } = base;
+  const info = presetFor(ctx, preset, [id]);
+  if (info.mount !== 'opening') {
+    throw fail('unknown-preset', [id], `Preset ${preset} is not an opening preset`);
+  }
+  const sill = over.sill ?? info.sill ?? 0;
+  const made: Opening = {
+    id,
+    wall: base.wall,
+    preset,
+    offset: base.offset,
+    width: info.footprint.w,
+    height: info.footprint.h,
+    sill,
+    type: info.opening?.type ?? defaultOpeningType(sill),
+    hinge: info.opening?.hinge ?? base.hinge,
+    swing: info.opening?.swing ?? base.swing,
+  };
+  if (info.opening?.leaves !== undefined) made.leaves = info.opening.leaves;
+  if (info.opening?.split !== undefined) made.split = info.opening.split;
+  const after = patched(made, over);
+  if (!(after.width > 0)) {
+    throw fail('invalid-opening', [id], `Opening ${id} width must be above 0`);
+  }
+  return after;
+}
+
+/** Adds an opening as `preset` makes it; any other field given overrides the preset. */
+export function addOpening(
+  input: { wall: Id; preset: string; offset: number } & Partial<
+    Omit<Opening, 'id' | 'wall' | 'preset' | 'offset'>
+  >,
+): Created {
+  const id = createId();
+  return {
+    label: 'addOpening',
+    createdId: id,
+    run: (ctx) => {
+      assertFreeId(ctx, id);
+      if (!ctx.floor.walls[input.wall]) throw notFound('Wall', input.wall);
+      const { wall, preset, offset } = input;
+      const after = fromPreset(ctx, { id, wall, preset, offset, hinge: 'a', swing: 'left' }, input);
+      return [{ kind: 'opening', id, before: null, after }];
+    },
+  };
+}
+
+/**
+ * Sets any field but the id, also the wall, in one step. A field left undefined keeps its value;
+ * a new `preset` is only a name here (`applyOpeningPreset` applies one).
+ */
+export function updateOpening(id: Id, patch: OpeningPatch): Command {
+  return {
+    label: 'updateOpening',
+    run: (ctx) => {
+      const o = getOpening(ctx, id);
+      const after = patched(o, patch);
+      if (!ctx.floor.walls[after.wall]) throw notFound('Wall', after.wall);
+      return changed(o, after);
+    },
+  };
+}
+
+/** The same command as `updateOpening`. */
+export const moveOpening = updateOpening;
+
+/** Sets the width by moving the jamb at `end`; the other jamb stays still. */
+export function resizeOpening(id: Id, { end, width }: { end: Hinge; width: number }): Command {
+  return {
+    label: 'resizeOpening',
+    run: (ctx) => {
+      const o = getOpening(ctx, id);
+      const { lo, hi } = openingSpan(o);
+      const offset = tidy(end === 'a' ? hi - width / 2 : lo + width / 2);
+      return changed(o, { ...o, offset, width });
+    },
+  };
+}
+
+/**
+ * Moves an opening along its wall until the distance beside the jamb at `end` (see
+ * `openingClearances`) is `distance`. `invalid-opening` for a negative distance;
+ * `opening-overlap` for a clear distance with another opening in the way.
+ */
+export function setOpeningDistance(
+  id: Id,
+  { end, distance, from }: { end: Hinge; distance: number; from: 'face' | 'axis' },
+): Command {
+  return {
+    label: 'setOpeningDistance',
+    run: (ctx) => {
+      const o = getOpening(ctx, id);
+      if (!(distance >= 0)) {
+        throw fail('invalid-opening', [id], `Opening ${id} distance must be 0 or more`);
+      }
+      const by = distance - openingClearances(ctx.floor, o)[end][from];
+      const offset = tidy(end === 'a' ? o.offset + by : o.offset - by);
+      if (from === 'face') {
+        // Past another opening, that one would end the clear distance, short of what was asked.
+        const inTheWay = Object.values(ctx.floor.openings).find(
+          (p) => p.wall === o.wall && (p.offset - o.offset) * (p.offset - offset) < 0,
+        );
+        if (inTheWay) {
+          throw fail(
+            'opening-overlap',
+            [id, inTheWay.id],
+            `Opening ${inTheWay.id} is in the way of a clear distance of ${distance} m`,
+          );
+        }
+      }
+      return changed(o, { ...o, offset });
+    },
+  };
+}
+
+/**
+ * Makes an opening what `preset` describes, keeping its id, wall, centre and any orientation the
+ * preset does not give.
+ */
+export function applyOpeningPreset(id: Id, preset: string): Command {
+  return {
+    label: 'applyOpeningPreset',
+    run: (ctx) => {
+      const o = getOpening(ctx, id);
+      return changed(o, fromPreset(ctx, { ...o, preset }));
+    },
+  };
+}
+
+export function removeOpening(id: Id): Command {
+  return {
+    label: 'removeOpening',
+    run: (ctx) => {
+      const o = getOpening(ctx, id);
+      return [{ kind: 'opening', id, before: structuredClone(o), after: null }];
+    },
+  };
+}

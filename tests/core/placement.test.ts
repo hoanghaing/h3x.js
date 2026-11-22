@@ -1,14 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
-import {
-  addItem,
-  addOpening,
-  moveItem,
-  moveOpening,
-  removeItem,
-  removeOpening,
-} from '../../src/core/commands/objects';
+import { addItem, moveItem, removeItem } from '../../src/core/commands/objects';
+import { addOpening, moveOpening, removeOpening } from '../../src/core/commands/openings';
 import { moveNode, moveWall, setWallLength } from '../../src/core/commands/layout';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Floor, Project } from '../../src/core/types';

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
-import { removeOpening } from '../../src/core/commands/objects';
+import { removeOpening } from '../../src/core/commands/openings';
 import { pushPullWall, splitWall } from '../../src/core/commands/structure';
 import { H3xValidationError } from '../../src/core/errors';
 import { openingRange } from '../../src/core/validate/layout';

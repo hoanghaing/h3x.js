@@ -261,12 +261,18 @@ export function computeJoins(floor: Floor): Joins {
 
 /** One wall's corners: they depend only on the walls meeting at its two nodes. */
 export function cornersOfWall(floor: Readonly<Floor>, wall: Wall): WallCorners {
-  const ends = [wall.a, wall.b];
+  return cornersOfWalls(floor, [wall])[0]!;
+}
+
+/** The corners of each of `of`, in that order, from one pass over the walls meeting them. */
+export function cornersOfWalls(floor: Readonly<Floor>, of: readonly Wall[]): WallCorners[] {
+  const ends = new Set(of.flatMap((w) => [w.a, w.b]));
   const walls: Floor['walls'] = {};
   for (const [id, w] of Object.entries(floor.walls)) {
-    if (ends.includes(w.a) || ends.includes(w.b)) walls[id] = w;
+    if (ends.has(w.a) || ends.has(w.b)) walls[id] = w;
   }
-  return computeJoins({ ...floor, walls }).corners[wall.id]!;
+  const { corners } = computeJoins({ ...floor, walls });
+  return of.map((w) => corners[w.id]!);
 }
 
 /** Wall outline corners in plan space, keyed by wall id. */

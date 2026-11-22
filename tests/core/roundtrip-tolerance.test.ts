@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
 import { moveNode, setWallLength } from '../../src/core/commands/layout';
-import { addItem, moveItem, moveOpening } from '../../src/core/commands/objects';
+import { addItem, moveItem } from '../../src/core/commands/objects';
+import { moveOpening } from '../../src/core/commands/openings';
 import { GEOM_TOL } from '../../src/core/constants';
 import type { Floor, Project } from '../../src/core/types';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
@@ -58,7 +59,8 @@ describe('validation is stable across an XML round trip', () => {
       expect(doc.tryExecute(moveNode('n2', { x: 1.3, y })).ok).toBe(true);
       expect(codes(doc)).toEqual([]);
       const back = expectStable(doc);
-      expect(back.tryExecute(moveOpening('o1', { sill: 0 })).ok).toBe(true);
+      expect(back.tryExecute(moveOpening('o1', { hinge: 'b', swing: 'right' })).ok).toBe(true);
+      expect(back.floor.openings.o1).toMatchObject({ hinge: 'b', swing: 'right' });
     }
   });
 
@@ -69,7 +71,8 @@ describe('validation is stable across an XML round trip', () => {
     expect(doc.tryExecute(setWallLength('w1', 1.5)).ok).toBe(true);
     expect(codes(doc)).toEqual([]);
     const back = expectStable(doc);
-    expect(back.tryExecute(moveOpening('o1', { sill: 0 })).ok).toBe(true);
+    expect(back.tryExecute(moveOpening('o1', { hinge: 'b', swing: 'right' })).ok).toBe(true);
+    expect(back.floor.openings.o1).toMatchObject({ hinge: 'b', swing: 'right' });
   });
 
   it('(c) wall item clamped at a wall end', () => {
