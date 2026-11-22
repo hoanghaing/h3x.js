@@ -12,6 +12,7 @@ import {
   setOpeningDistance,
   updateOpening,
   wallOutlines,
+  type Command,
   type Floor,
   type Hinge,
   type Opening,
@@ -536,6 +537,64 @@ describe('setOpeningDistance', () => {
     expect(doc.floor.openings.o1!.offset).toBeCloseTo(1.7, 9);
     doc.undo();
     expect(doc.floor.openings.o1!.offset).toBe(5);
+  });
+});
+
+// 23 steps of a 0.05 grid, and a third: neither is round to 1e-9, as stored offsets need not be.
+describe.each([23 * 0.05, 4 / 3])('an opening at %f that is not moved', (offset) => {
+  type Edit = (end: Hinge, o: Opening, f: Floor, more?: number) => Command;
+  const resize: Edit = (end, o, _, more = 0) => resizeOpening('o1', { end, width: o.width + more });
+  const dimension =
+    (from: 'face' | 'axis'): Edit =>
+    (end, o, f, more = 0) => {
+      const distance = openingClearances(f, o)[end][from] + more;
+      return setOpeningDistance('o1', { end, distance, from });
+    };
+
+  describe.each([
+    ['resizeOpening', resize],
+    ['setOpeningDistance from the face', dimension('face')],
+    ['setOpeningDistance from the axis', dimension('axis')],
+  ] as const)('%s', (_, edit) => {
+    /** A document with an edit to redo, so that a needless step shows on both stacks. */
+    function start() {
+      const floor = openingFloor({ offset });
+      const doc = mk(floor);
+      doc.execute(updateOpening('o1', { sill: 0.1 }));
+      doc.undo();
+      return { doc, floor, o: floor.openings.o1! };
+    }
+
+    function expectUntouched(doc: H3xDocument, o: Opening) {
+      expect(doc.floor.openings.o1).toEqual(o);
+      expect(doc.canUndo).toBe(false);
+      expect(doc.canRedo).toBe(true);
+    }
+
+    it.each(ENDS)('to the value it has at %s changes nothing', (end) => {
+      const { doc, floor, o } = start();
+      let events = 0;
+      doc.on('change', () => events++);
+      doc.execute(edit(end, o, floor));
+      expectUntouched(doc, o);
+      expect(events).toBe(0);
+    });
+
+    it.each(ENDS)('dragged out and back at %s leaves no step', (end) => {
+      const { doc, floor, o } = start();
+      const drag = { coalesceKey: 'drag', restart: true };
+      doc.execute(edit(end, o, floor, 0.2), drag);
+      expect(doc.canUndo).toBe(true);
+      doc.execute(edit(end, o, floor), drag);
+      expectUntouched(doc, o);
+    });
+  });
+
+  it.each(ENDS)('keeps it for a width that differs only by rounding at %s', (end) => {
+    const doc = mk(openingFloor({ offset }));
+    doc.execute(resizeOpening('o1', { end, width: 1.2 + 4e-16 }));
+    expect(doc.floor.openings.o1).toMatchObject({ offset, width: 1.2 });
+    expect(doc.canUndo).toBe(false);
   });
 });
 

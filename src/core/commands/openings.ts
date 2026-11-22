@@ -1,6 +1,6 @@
 import type { Command, CommandContext, EntityChange } from '../document/changes';
 import { deepEqual } from '../document/history';
-import { tidy } from '../geometry/vec';
+import { EPS, tidy } from '../geometry/vec';
 import { createId } from '../ids';
 import { openingClearances } from '../openings/clearance';
 import { defaultOpeningType } from '../openings/normalize';
@@ -123,6 +123,8 @@ export function resizeOpening(id: Id, { end, width }: { end: Hinge; width: numbe
     label: 'resizeOpening',
     run: (ctx) => {
       const o = getOpening(ctx, id);
+      // Before rounding: a stored offset need not be round, and rounding it would move the opening.
+      if (Math.abs(width - o.width) <= EPS) return [];
       const { lo, hi } = openingSpan(o);
       const offset = tidy(end === 'a' ? hi - width / 2 : lo + width / 2);
       return changed(o, { ...o, offset, width });
@@ -147,6 +149,7 @@ export function setOpeningDistance(
         throw fail('invalid-opening', [id], `Opening ${id} distance must be 0 or more`);
       }
       const by = distance - openingClearances(ctx.floor, o)[end][from];
+      if (Math.abs(by) <= EPS) return []; // already there, so do not round it
       const offset = tidy(end === 'a' ? o.offset + by : o.offset - by);
       if (from === 'face') {
         // Past another opening, that one would end the clear distance, short of what was asked.
