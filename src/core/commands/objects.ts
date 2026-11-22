@@ -29,6 +29,9 @@ export function addOpening(input: {
       if (info.mount !== 'opening') {
         throw fail('unknown-preset', [id], `Preset ${input.preset} is not an opening preset`);
       }
+      if (!(info.footprint.w > 0)) {
+        throw fail('invalid-opening', [id], `Opening ${id} width must be above 0`);
+      }
       const after: Opening = {
         id,
         wall: input.wall,

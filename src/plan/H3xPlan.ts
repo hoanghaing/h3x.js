@@ -303,6 +303,7 @@ export class H3xPlan {
       floor: this.doc.floor,
       view: this._view,
       corners: this.joins.corners,
+      junctions: this.joins.junctions,
       dimensions: [...this.dom.dimensionRects].map(([wallId, rect]) => ({ wallId, rect })),
       presets: this.presets,
       site: this.doc.project.site,

@@ -1,10 +1,11 @@
 import type { Command, EntityChange } from '../document/changes';
 import { deepEqual } from '../document/history';
 import { H3xValidationError } from '../errors';
-import { floorOutline, type OutlineRing } from '../floors/outline';
+import { floorOutline } from '../floors/outline';
 import { pointInPolygon, signedArea } from '../geometry/polygon';
 import { createId } from '../ids';
 import { roomPolygon } from '../rooms/detect';
+import { defaultEdge, detachedRoofs } from '../roofs/detach';
 import { ROOF_PRESETS, presetEdges, presetWallEdges, type RoofPresetId } from '../roofs/presets';
 import type { Floor, Id, Issue, Roof, RoofEdge, Vec2 } from '../types';
 import { assertFreeId, fail, notFound } from './shared';
@@ -253,7 +254,6 @@ export function updateRoof(id: Id, patch: RoofPatch): Command {
 }
 export const setRoofParams = updateRoof;
 
-const defaultEdge = (r: Roof): RoofEdge => ({ kind: 'slope', pitch: r.pitch });
 const defaultEdges = (n: number, r: Roof): RoofEdge[] =>
   Array.from({ length: n }, () => defaultEdge(r));
 
@@ -316,36 +316,14 @@ export function detachRoof(id: Id): Command & { newIds: Id[] } {
     run: (ctx) => {
       const r = getRoof(ctx.floor, id);
       if (!r.follow) return [];
-      const rings = floorOutline(ctx.floor, r.rooms ?? []);
-      const outers = rings.filter((x) => !x.hole);
-      if (outers.length === 0) {
-        throw fail('invalid-roof', [id], 'The roof has no outline to detach');
+      const [first, ...others] = detachedRoofs(r, ctx.floor, (k) => (newIds[k] ??= createId()));
+      if (!first) throw fail('invalid-roof', [id], 'The roof has no outline to detach');
+      const out: EntityChange[] = [{ kind: 'roof', id, before: structuredClone(r), after: first }];
+      for (const roof of others) {
+        assertFreeId(ctx, roof.id);
+        out.push({ kind: 'roof', id: roof.id, before: null, after: roof });
       }
-      const holes = rings.filter((x) => x.hole);
-      const edgesOf = (ring: OutlineRing): RoofEdge[] =>
-        ring.walls.map((w) => structuredClone(r.wallEdges?.[w] ?? defaultEdge(r)));
-      const build = (outer: OutlineRing, rid: Id): Roof => {
-        const roof: Roof = { ...structuredClone(r), id: rid, follow: false };
-        delete roof.rooms;
-        delete roof.wallEdges;
-        const mine = holes.filter((h) => pointInPolygon(h.points[0]!, outer.points));
-        roof.points = structuredClone(outer.points);
-        roof.edges = edgesOf(outer);
-        if (mine.length > 0) {
-          roof.holes = mine.map((h) => structuredClone(h.points));
-          roof.holeEdges = mine.map(edgesOf);
-        }
-        return roof;
-      };
-      const out: EntityChange[] = [
-        { kind: 'roof', id, before: structuredClone(r), after: build(outers[0]!, id) },
-      ];
-      outers.slice(1).forEach((outer, i) => {
-        const nid = (newIds[i] ??= createId());
-        assertFreeId(ctx, nid);
-        out.push({ kind: 'roof', id: nid, before: null, after: build(outer, nid) });
-      });
-      newIds.length = outers.length - 1;
+      newIds.length = others.length;
       for (const c of out) if (c.kind === 'roof' && c.after) check(c.after);
       return out;
     },

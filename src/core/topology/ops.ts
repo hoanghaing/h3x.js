@@ -3,7 +3,8 @@ import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
 import { closestPointOnSegment } from '../geometry/segment';
 import { EPS, add, cross, distance, dot, leftNormal, scale, sub, tidy } from '../geometry/vec';
 import { createId } from '../ids';
-import { clampIntoRange, openingRange, wallUsableRange } from '../validate/layout';
+import { openingSpan } from '../shapes';
+import { clampIntoRange, inRange, openingRange, wallUsableRange } from '../validate/layout';
 import type { Floor, Id, PresetResolver, Vec2, Wall } from '../types';
 import { wallsAt } from './draft';
 
@@ -28,27 +29,82 @@ function fitOn(
   code: string,
   why: string,
 ): void {
-  const clamp = (id: Id, offset: number, r: { lo: number; hi: number }): number => {
-    const next = clampIntoRange(offset, r);
-    if (next === null) throw fail(code, [id], `${id} ${why}`);
-    return next;
-  };
   for (const o of Object.values(draft.openings)) {
     if (!wallIds.includes(o.wall)) continue;
-    o.offset = clamp(o.id, o.offset, openingRange(draft, o));
+    o.offset = clampOrFail(o.id, o.offset, openingRange(draft, o), code, why);
   }
+  fitItemsOn(draft, wallIds, presets, code, why);
+}
+
+/** `fitOn` for wall items only. */
+function fitItemsOn(
+  draft: Floor,
+  wallIds: Id[],
+  presets: PresetResolver | undefined,
+  code: string,
+  why: string,
+): void {
   for (const it of Object.values(draft.items)) {
     if (it.mount !== 'wall' || !wallIds.includes(it.wall)) continue;
     const width = presets?.(it.preset)?.footprint.w ?? 0;
-    it.offset = clamp(it.id, it.offset, wallUsableRange(draft, it.wall, { width }));
+    const range = wallUsableRange(draft, it.wall, { width });
+    it.offset = clampOrFail(it.id, it.offset, range, code, why);
+  }
+}
+
+function clampOrFail(
+  id: Id,
+  offset: number,
+  range: { lo: number; hi: number },
+  code: string,
+  why: string,
+): number {
+  const next = clampIntoRange(offset, range);
+  if (next === null) throw fail(code, [id], `${id} ${why}`);
+  return next;
+}
+
+const cutsOpening = (id: Id, wall: Id): Error =>
+  fail('split-cuts-opening', [id, wall], `A wall there would cut into opening ${id}`);
+
+/** The openings that fit their wall, with that wall's id, to compare after an edit. */
+function fittingOpenings(draft: Floor): Map<Id, Id> {
+  const out = new Map<Id, Id>();
+  for (const o of Object.values(draft.openings)) {
+    if (draft.walls[o.wall] && inRange(o.offset, openingRange(draft, o))) out.set(o.id, o.wall);
+  }
+  return out;
+}
+
+/**
+ * Openings are never pushed by a wall meeting theirs: `split-cuts-opening` for one that was
+ * fitting and no longer does (`walls`: only openings now on those walls).
+ */
+function requireStillFitting(draft: Floor, fitting: Map<Id, Id>, walls?: Id[]): void {
+  for (const [id, wall] of fitting) {
+    const o = draft.openings[id];
+    if (!o || (walls && !walls.includes(o.wall))) continue;
+    if (!inRange(o.offset, openingRange(draft, o))) throw cutsOpening(id, wall);
+  }
+}
+
+/** Adds `by` to every offset on `wallId`: keeps its contents in place when its end `a` moves. */
+function shiftOn(draft: Floor, wallId: Id, by: number): void {
+  if (Math.abs(by) < EPS) return;
+  for (const o of Object.values(draft.openings)) {
+    if (o.wall === wallId) o.offset = tidy(o.offset + by);
+  }
+  for (const it of Object.values(draft.items)) {
+    if (it.mount === 'wall' && it.wall === wallId) it.offset = tidy(it.offset + by);
   }
 }
 
 /**
  * Splits `wallId` at the projection of `at`. The original wall keeps the half from
  * `a`; the half to the old `b` becomes `newWallId` (same thickness, height,
- * finishes). Openings / wall items follow the half holding their center.
- * Returns the new node id.
+ * finishes). Openings / wall items follow the half holding their center. An opening is never
+ * moved: a split inside one, or too close to one, is `split-cuts-opening`. Wall items are
+ * clamped into their half. Returns the new node id.
  */
 export function splitAt(
   draft: Floor,
@@ -71,6 +127,12 @@ export function splitAt(
       `Splitting wall ${wallId} there leaves a part below ${MIN_WALL_LENGTH} m`,
     );
   }
+  for (const o of Object.values(draft.openings)) {
+    if (o.wall !== wallId) continue;
+    const { lo, hi } = openingSpan(o);
+    if (s > lo + GEOM_TOL && s < hi - GEOM_TOL) throw cutsOpening(o.id, wallId);
+  }
+  const fitting = fittingOpenings(draft);
   const p = add(a, scale(dir, s / len));
   draft.nodes[newNodeId] = { id: newNodeId, x: tidy(p.x), y: tidy(p.y) };
   draft.walls[newWallId] = { ...structuredClone(w), id: newWallId, a: newNodeId, b: w.b };
@@ -91,7 +153,9 @@ export function splitAt(
       it.offset = tidy(it.offset - s);
     }
   }
-  fitOn(draft, [wallId, newWallId], presets, 'split-cuts-opening', 'does not fit after the split');
+  const halves = [wallId, newWallId];
+  requireStillFitting(draft, fitting, halves);
+  fitItemsOn(draft, halves, presets, 'split-cuts-opening', 'does not fit after the split');
   return newNodeId;
 }
 
@@ -198,8 +262,9 @@ function attachments(draft: Floor, wallId: Id): number {
  * Re-attaches the walls of `drop` to `keep` and deletes `drop`. A wall that would join
  * `keep` to itself is deleted (with its openings / items); of two walls then joining the
  * same nodes, the one with more openings + wall items survives (ties: smaller id) and the
- * other's openings / items are deleted. Openings / wall items on re-attached walls are
- * clamped to the new length, `merge-drops-opening` when one cannot fit. Same node:
+ * other's openings / items are deleted. Openings / wall items on re-attached walls keep their
+ * distance from the end that stays and are clamped to the new length, `merge-drops-opening`
+ * when one cannot fit. Same node:
  * `invalid-target`.
  */
 export function mergeNodesIn(draft: Floor, keep: Id, drop: Id, presets?: PresetResolver): void {
@@ -208,6 +273,8 @@ export function mergeNodesIn(draft: Floor, keep: Id, drop: Id, presets?: PresetR
   if (keep === drop) {
     throw fail('invalid-target', [keep], `Cannot merge node ${keep} with itself`);
   }
+  const from = draft.nodes[drop]!;
+  const to = draft.nodes[keep]!;
   const moved: Id[] = [];
   for (const w of wallsAt(draft, drop)) {
     const far = w.a === drop ? w.b : w.a;
@@ -215,8 +282,11 @@ export function mergeNodesIn(draft: Floor, keep: Id, drop: Id, presets?: PresetR
       dropWall(draft, w.id);
       continue;
     }
-    if (w.a === drop) w.a = keep;
-    else w.b = keep;
+    if (w.a === drop) {
+      w.a = keep;
+      const other = draft.nodes[far]!;
+      shiftOn(draft, w.id, distance(to, other) - distance(from, other));
+    } else w.b = keep;
     moved.push(w.id);
   }
   delete draft.nodes[drop];
@@ -270,8 +340,10 @@ export function dropNodeIn(
   }
   assertFreeId({ floor: draft }, ids.wall);
   assertFreeId({ floor: draft }, ids.node);
+  const fitting = fittingOpenings(draft);
   const t = splitAt(draft, target.wall, target.at, ids.wall, ids.node, presets);
   mergeNodesIn(draft, t, nodeId, presets);
+  requireStillFitting(draft, fitting, [target.wall, ids.wall]);
 }
 
 /** A wall end: an existing node, or a point (snapped to a node, or splitting a wall, when on one). */
@@ -319,7 +391,8 @@ const offLine = (c: Vec2, p: Vec2, q: Vec2): number =>
  * wall, crossed walls are split too. `ids.wall` names the piece touching `from`,
  * `ids.endNode` a new node at `to`. Ends already joined by a wall: no change, that wall
  * is returned. Throws `invalid-thickness` (thickness, or height when given, not finite or
- * not above 0), `wall-too-short`, `walls-overlap` (collinear overlap), `not-found`.
+ * not above 0), `wall-too-short`, `walls-overlap` (collinear overlap), `split-cuts-opening`
+ * (the new wall would reach into an opening), `not-found`.
  */
 export function addWallIn(
   draft: Floor,
@@ -392,6 +465,7 @@ export function addWallIn(
   if (!stops.some((s) => distance(s.p, q) < GEOM_TOL)) stops.push({ t: 1, p: q });
   stops.sort((s1, s2) => s1.t - s2.t);
 
+  const fitting = fittingOpenings(draft);
   const last = stops.length - 1;
   const nodeIds = stops.map((s, i) => {
     if (s.node) return s.node;
@@ -413,6 +487,7 @@ export function addWallIn(
       height: spec.height ?? draft.wallHeight,
     };
   }
+  requireStillFitting(draft, fitting);
   return { wallId: ids.wall, endNodeId: nodeIds[last]! };
 }
 
@@ -471,6 +546,7 @@ export function pushPullIn(
           );
         }
         draft.nodes[nodeId] = { ...p, ...moved };
+        if (other.a === nodeId) shiftOn(draft, other.id, distance(moved, far) - len);
         resized.push(other.id);
         continue;
       }

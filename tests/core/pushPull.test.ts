@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
+import { removeOpening } from '../../src/core/commands/objects';
 import { pushPullWall, splitWall } from '../../src/core/commands/structure';
 import { H3xValidationError } from '../../src/core/errors';
 import { openingRange } from '../../src/core/validate/layout';
@@ -73,8 +74,9 @@ function thickMiddleFloor(): Floor {
   return f;
 }
 
-/** w1 split at x=1 and x=3; returns the middle segment. */
+/** w1 split at x=1 and x=3 (its door removed: it stands at x=1); returns the middle segment. */
 function splitTwice(doc: H3xDocument): Wall {
+  doc.execute(removeOpening('o1'));
   doc.execute(splitWall('w1', { x: 1, y: 0 }));
   const second = Object.values(doc.floor.walls).find((w) => w.a === doc.floor.walls.w1!.b)!;
   doc.execute(splitWall(second.id, { x: 3, y: 0 }));
@@ -109,13 +111,13 @@ describe('pushPullWall', () => {
   });
 
   it('re-fits an opening on a slid neighbour that survives the shortening', () => {
-    const doc = mk(withOpeningOnW2(3.3));
+    // w2 starts at w1: pulling w1 in by 1 m removes the stretch the door stands on.
+    const doc = mk(withOpeningOnW2(0.7));
     doc.execute(pushPullWall('w1', 1));
     const o = doc.floor.openings.o2!;
     expect(o.wall).toBe('w2');
-    const { hi } = openingRange(doc.floor, o);
-    expect(o.offset).toBeLessThan(3.3);
-    expect(o.offset).toBeCloseTo(hi, 6);
+    const { lo } = openingRange(doc.floor, o);
+    expect(o.offset).toBeCloseTo(lo, 6);
   });
 
   it('rejects with push-pull-cuts-opening when a slid neighbour cannot hold its opening', () => {

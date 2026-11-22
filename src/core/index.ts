@@ -10,6 +10,7 @@ export type {
   Command,
   CommandContext,
   EntityChange,
+  ExecuteOptions,
   Validator,
 } from './document/H3xDocument';
 

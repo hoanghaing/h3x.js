@@ -8,13 +8,13 @@ import type { Floor, Id, Room, Vec2 } from '../types';
 import { detectRooms, roomShape } from './detect';
 import type { DetectedRoom } from './detect';
 
-interface Shape {
+export interface Shape {
   outer: Vec2[];
   holes: Vec2[][];
 }
 
 /** Center shape of a room, or null when its loops are open (it then matches no face). */
-function shapeOf(floor: Readonly<Floor>, room: Room): Shape | null {
+export function shapeOf(floor: Readonly<Floor>, room: Room): Shape | null {
   try {
     return roomShape(floor, room, 'center');
   } catch (err) {
@@ -24,7 +24,7 @@ function shapeOf(floor: Readonly<Floor>, room: Room): Shape | null {
 }
 
 /** Overlap of two rooms with holes subtracted (holes are disjoint and inside their outer ring). */
-function netOverlap(a: Shape, b: Shape): number {
+export function netOverlap(a: Shape, b: Shape): number {
   let ov = polygonOverlapArea(a.outer, b.outer);
   for (const h of a.holes) ov -= polygonOverlapArea(h, b.outer);
   for (const h of b.holes) ov -= polygonOverlapArea(a.outer, h);
@@ -32,7 +32,7 @@ function netOverlap(a: Shape, b: Shape): number {
   return ov;
 }
 
-const netArea = (s: Shape): number =>
+export const netArea = (s: Shape): number =>
   Math.abs(signedArea(s.outer)) - s.holes.reduce((sum, h) => sum + Math.abs(signedArea(h)), 0);
 
 /** True when `b` is `a` with a different start (same direction). */

@@ -6,15 +6,11 @@ import type { Id, Vec2, WallItem } from '../types';
 import { fail, notFound } from './shared';
 
 /**
- * Node moves plus re-fit of openings / wall items on walls whose length changed. `shift` first
- * adds `by` to the offsets of the openings and wall items on one wall (to keep them fixed
- * relative to node b when node a moves).
+ * Node moves plus re-fit of openings / wall items on walls whose length changed. They keep their
+ * distance from the end that stays: offsets are measured from node a, so when only a moves they
+ * first shift by the change of length.
  */
-function applyMoves(
-  ctx: CommandContext,
-  moves: Map<Id, Vec2>,
-  shift?: { wall: Id; by: number },
-): EntityChange[] {
+function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
   const { floor } = ctx;
   const changes: EntityChange[] = [];
   const pos = (id: Id): Vec2 | undefined => moves.get(id) ?? floor.nodes[id];
@@ -32,8 +28,9 @@ function applyMoves(
     const b1 = pos(w.b);
     if (!a0 || !b0 || !a1 || !b1) continue;
     const len = distance(a1, b1);
-    if (Math.abs(distance(a0, b0) - len) < EPS) continue;
-    const by = shift?.wall === w.id ? shift.by : 0;
+    const len0 = distance(a0, b0);
+    if (Math.abs(len0 - len) < EPS) continue;
+    const by = moves.has(w.a) && !moves.has(w.b) ? len - len0 : 0;
     for (const o of Object.values(floor.openings)) {
       if (o.wall !== w.id) continue;
       const start = by === 0 ? o.offset : tidy(o.offset + by);
@@ -116,8 +113,7 @@ export function setWallLength(wallId: Id, length: number, opts?: { anchor?: 'a' 
       const [fixed, moving, movingId] = anchorB ? [b, a, w.a] : [a, b, w.b];
       const dir = scale(sub(moving, fixed), 1 / cur);
       const moves = new Map([[movingId, add(fixed, scale(dir, length))]]);
-      // Offsets are measured from node a; with b fixed, shift them so contents stay put.
-      return applyMoves(ctx, moves, anchorB ? { wall: wallId, by: length - cur } : undefined);
+      return applyMoves(ctx, moves);
     },
   };
 }

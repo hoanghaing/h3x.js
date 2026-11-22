@@ -111,7 +111,8 @@ const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
  * vertex, detaching a follow roof first; a click on an edge of the selected roof asks the host to
  * edit it), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
  * another node or a wall joins it, double-click on a wall inserts a point, Delete / Backspace
- * removes the selection.
+ * removes the selection. Node and wall drags compute each step from the start of the drag, so
+ * dragging back puts openings back too.
  */
 export class SelectEditTool implements Tool {
   private readonly threshold: number;
@@ -360,7 +361,7 @@ export class SelectEditTool implements Tool {
       this.clearRejection();
       return;
     }
-    ctx.showGuides(this.run(moveNode(g.id, r.point), g.key) ? r.guides : []);
+    ctx.showGuides(this.run(moveNode(g.id, r.point), g.key, true) ? r.guides : []);
   }
 
   private stepColumn(g: Gesture, p: Vec2, free: boolean): void {
@@ -487,9 +488,10 @@ export class SelectEditTool implements Tool {
     const a = floor.nodes[floor.walls[g.id]?.a ?? ''];
     if (!a) return;
     const wanted = this.gridOffset(g, p, free);
-    // Against the wall's current offset (moveWall is relative), so errors do not accumulate.
-    const delta = wanted - dot(sub(a, g.start), g.normal);
-    if (delta !== 0) this.run(moveWall(g.id, scale(g.normal, delta)), g.key);
+    // moveWall is relative: the total travel, run from the start of the drag.
+    if (wanted !== dot(sub(a, g.start), g.normal)) {
+      this.run(moveWall(g.id, scale(g.normal, wanted)), g.key, true);
+    }
   }
 
   /**
@@ -560,7 +562,7 @@ export class SelectEditTool implements Tool {
     if (g.kind === 'node' && g.drop) {
       const target =
         'node' in g.drop ? { node: g.drop.node } : { wall: g.drop.wall, at: g.drop.at };
-      if (this.run(dropNode(g.id, target), g.key)) {
+      if (this.run(dropNode(g.id, target), g.key, true)) {
         const drop = g.drop;
         // A wall drop keeps the new junction node, found at the drop point.
         const kept =
@@ -576,9 +578,9 @@ export class SelectEditTool implements Tool {
   }
 
   /** Runs one of the tool's own commands; flashes a rejection, clears it after a success. */
-  private run(cmd: Command, coalesceKey?: string): boolean {
+  private run(cmd: Command, coalesceKey?: string, restart = false): boolean {
     const ctx = this.ctx!;
-    const res = this.issue(() => ctx.doc.tryExecute(cmd, { coalesceKey }));
+    const res = this.issue(() => ctx.doc.tryExecute(cmd, { coalesceKey, restart }));
     if (!res.ok) {
       this.reject(res.issues);
       return false;

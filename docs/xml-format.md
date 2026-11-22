@@ -106,7 +106,7 @@ A door or window cut into a wall.
 | `wall`    | id      | yes      | -       | Must reference a wall.                                              |
 | `preset`  | string  | yes      | -       | Preset id, resolved by the host.                                    |
 | `offset`  | number  | yes      | -       | Distance of the opening's **center** from node `a`, along the wall. |
-| `width`   | number  | yes      | -       | Meters.                                                             |
+| `width`   | number  | yes      | -       | Meters, above 0 (otherwise a parse error).                          |
 | `height`  | number  | yes      | -       | Meters.                                                             |
 | `sill`    | number  | no       | `0`     | Height of the bottom edge above the floor, meters.                  |
 | `flip`    | boolean | no       | false   | Mirrors the opening; written as `1` only when true.                 |

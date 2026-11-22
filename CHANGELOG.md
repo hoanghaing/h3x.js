@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+Editing fixes.
+
+- Openings and wall items stay in place when either end of their wall moves (`moveNode`,
+  `moveWall`, `pushPullWall`, `mergeNodes`); they used to slide when node `a` moved.
+- Node and wall drags compute every step from the start of the drag, so dragging back restores
+  openings; new option `restart` on `execute` / `tryExecute` (with `coalesceKey`).
+- **Changed:** a wall drawn, dropped or split into a door or window is rejected
+  (`split-cuts-opening`, the opening flashes red); it used to push the opening aside.
+- **Changed:** follow roofs keep what they cover when rooms change: a split room stays roofed on
+  both sides; merging with an unroofed room or opening the roofed room turns the roof into an
+  independent one of the same shape.
+- **Changed:** an opening width of 0 or less is rejected (`invalid-opening`; a parse error when
+  loading XML).
+- The fill at wall junctions is clickable at every zoom.
+
 Milestone 7: irregular lots and roofs.
 
 - Irregular lots: slab outlines, wall joins and roof outlines use a miter limit so acute corners are bevelled; `floorOutline(floor, roomIds?)` returns the outer
