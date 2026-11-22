@@ -184,7 +184,11 @@ function floorEl(f: Floor): string {
         ['width', o.width],
         ['height', o.height],
         ['sill', o.sill],
-        ['flip', o.flip ? '1' : undefined],
+        ['type', o.type],
+        ['hinge', o.hinge === 'a' ? undefined : o.hinge],
+        ['swing', o.swing === 'left' ? undefined : o.swing],
+        ['leaves', o.leaves],
+        ['split', o.split],
       ]),
     ),
     ...byId(f.rooms).map((r) =>

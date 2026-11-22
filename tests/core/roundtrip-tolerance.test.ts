@@ -58,7 +58,7 @@ describe('validation is stable across an XML round trip', () => {
       expect(doc.tryExecute(moveNode('n2', { x: 1.3, y })).ok).toBe(true);
       expect(codes(doc)).toEqual([]);
       const back = expectStable(doc);
-      expect(back.tryExecute(moveOpening('o1', { flip: true })).ok).toBe(true);
+      expect(back.tryExecute(moveOpening('o1', { sill: 0 })).ok).toBe(true);
     }
   });
 
@@ -69,7 +69,7 @@ describe('validation is stable across an XML round trip', () => {
     expect(doc.tryExecute(setWallLength('w1', 1.5)).ok).toBe(true);
     expect(codes(doc)).toEqual([]);
     const back = expectStable(doc);
-    expect(back.tryExecute(moveOpening('o1', { flip: true })).ok).toBe(true);
+    expect(back.tryExecute(moveOpening('o1', { sill: 0 })).ok).toBe(true);
   });
 
   it('(c) wall item clamped at a wall end', () => {

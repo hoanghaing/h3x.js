@@ -118,9 +118,9 @@ describe('openingShape', () => {
     expect(s.lines).toBeUndefined();
   });
 
-  it('mirrors the door when flipped', () => {
+  it('mirrors the door when hinged at the other end', () => {
     const floor = oneRoomFloor();
-    const o = { ...floor.openings['o1']!, flip: true };
+    const o = { ...floor.openings['o1']!, hinge: 'b' as const, swing: 'right' as const };
     const s = openingShape(floor, o);
     expect(s.leaf![0].x).toBeCloseTo(1.65);
     expect(s.leaf![1].y).toBeCloseTo(-0.9);
@@ -130,9 +130,13 @@ describe('openingShape', () => {
   it.each([
     [false, { x: 0.75, y: 0.9 }, { x: 1.65, y: 0 }, { x: 0.75, y: 0 }],
     [true, { x: 1.65, y: -0.9 }, { x: 0.75, y: 0 }, { x: 1.65, y: 0 }],
-  ])('arc geometry for flip=%s', (flip, from, to, center) => {
+  ])('arc geometry for mirrored=%s', (mirrored, from, to, center) => {
     const floor = oneRoomFloor();
-    const s = openingShape(floor, { ...floor.openings['o1']!, flip });
+    const s = openingShape(floor, {
+      ...floor.openings['o1']!,
+      hinge: mirrored ? 'b' : 'a',
+      swing: mirrored ? 'right' : 'left',
+    });
     const arc = s.arc!;
     expect(arc.from.x).toBeCloseTo(from.x);
     expect(arc.from.y).toBeCloseTo(from.y);

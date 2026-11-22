@@ -17,6 +17,23 @@ export interface Wall {
   finishLeft?: string;
   finishRight?: string;
 }
+export type OpeningType =
+  | 'door-swing'
+  | 'door-double'
+  | 'door-sliding'
+  | 'door-folding'
+  | 'door-rolling'
+  | 'opening'
+  | 'window-casement'
+  | 'window-sliding'
+  | 'window-awning'
+  | 'window-fixed';
+/** The wall end (`a` or `b`) nearer the hinge. */
+export type Hinge = 'a' | 'b';
+/** The side of the wall `a -> b` an opening opens to. */
+export type Swing = 'left' | 'right';
+/** An opening parameter that applies to some types only. */
+export type OpeningParam = 'hinge' | 'swing' | 'leaves' | 'split';
 export interface Opening {
   id: Id;
   wall: Id;
@@ -25,7 +42,13 @@ export interface Opening {
   width: number;
   height: number;
   sill: number;
-  flip: boolean;
+  type: OpeningType;
+  hinge: Hinge;
+  swing: Swing;
+  /** Leaf count; the type's default when absent. */
+  leaves?: number;
+  /** Share of the larger leaf of a double door, 0.5 <= split < 1. */
+  split?: number;
 }
 export interface Room {
   id: Id;
@@ -187,6 +210,8 @@ export interface PresetInfo {
   footprint: Footprint;
   layer?: 'covering';
   sill?: number;
+  /** Initial type and parameters of an opening preset. */
+  opening?: Partial<Pick<Opening, 'type' | OpeningParam>>;
 }
 export type PresetResolver = (presetId: string) => PresetInfo | undefined;
 export type EntityKind =

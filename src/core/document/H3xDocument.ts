@@ -9,6 +9,9 @@ import { validateStairParams } from '../commands/stairs';
 import { validateRoofParams } from '../commands/roofs';
 import { checkRefs } from '../validate/refs';
 import { placementValidator, validatePlacements } from '../validate/placement';
+import { createPresetResolver } from '../openings/presets';
+import { normalizeOpening, type RawOpening } from '../openings/normalize';
+import { validateOpeningParams } from '../openings/params';
 import type { Floor, Id, Issue, PresetResolver, Project } from '../types';
 import { projectFromXML } from '../xml/parse';
 import { projectToXML } from '../xml/serialize';
@@ -61,7 +64,7 @@ function numberIssues(changes: EntityChange[]): Issue[] {
 }
 
 export class H3xDocument {
-  readonly presets?: PresetResolver;
+  readonly presets: PresetResolver;
   private readonly _project: Project;
   private readonly history = new History();
   private readonly emitter = new Emitter<ChangeEvent>();
@@ -74,7 +77,7 @@ export class H3xDocument {
     this._project = project;
     // normalizeFloors guarantees a level-0 floor.
     this._activeFloorId = (project.floors.find((f) => f.level === 0) ?? project.floors[0]!).id;
-    this.presets = presets;
+    this.presets = createPresetResolver(presets);
     this.validators.push(layoutValidator, placementValidator);
   }
 
@@ -141,6 +144,11 @@ export class H3xDocument {
       (f as { roofs?: Floor['roofs'] }).roofs ??= {};
       const roofIssues = Object.values(f.roofs).flatMap(validateRoofParams);
       if (roofIssues.length > 0) throw new H3xValidationError(roofIssues);
+      for (const [id, o] of Object.entries(f.openings)) {
+        f.openings[id] = normalizeOpening(o as RawOpening);
+      }
+      const paramIssues = Object.values(f.openings).flatMap(validateOpeningParams);
+      if (paramIssues.length > 0) throw new H3xValidationError(paramIssues);
       const badWidths = Object.values(f.openings).filter((o) => !(o.width > 0));
       if (badWidths.length > 0) {
         throw new H3xValidationError(

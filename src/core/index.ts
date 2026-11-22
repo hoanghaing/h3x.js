@@ -34,6 +34,15 @@ export {
   removeItem,
 } from './commands/objects';
 export type { NewItem } from './commands/objects';
+export {
+  openingParams,
+  openingLeaves,
+  validateOpeningParams,
+  mirrorOrientation,
+  nextOrientation,
+} from './openings/params';
+export { normalizeOpening } from './openings/normalize';
+export { OPENING_PRESETS, createPresetResolver } from './openings/presets';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
 export { addStair, updateStair, removeStair, validateStairParams } from './commands/stairs';
 export {

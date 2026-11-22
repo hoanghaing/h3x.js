@@ -82,7 +82,9 @@ describe('buildWallGeometry', () => {
       width: 1.2,
       height: 1.4,
       sill: 0.9,
-      flip: false,
+      type: 'door-swing',
+      hinge: 'a',
+      swing: 'left',
     };
     const before = build(f, 'w3');
     f.openings.o2 = win;
@@ -127,7 +129,14 @@ describe('buildWallGeometry', () => {
 
   it('touching doors are both cut', () => {
     const f = isolatedFloor();
-    const door = { preset: 'door-single-01', wall: 'w', sill: 0, flip: false } as const;
+    const door = {
+      preset: 'door-single-01',
+      wall: 'w',
+      sill: 0,
+      type: 'door-swing',
+      hinge: 'a',
+      swing: 'left',
+    } as const;
     f.openings.d1 = { ...door, id: 'd1', offset: 1.0, width: 0.8, height: 2.1 };
     f.openings.d2 = { ...door, id: 'd2', offset: 1.8, width: 0.8, height: 2.0 };
     const g = build(f, 'w');
@@ -137,7 +146,14 @@ describe('buildWallGeometry', () => {
 
   it('touching windows are both cut', () => {
     const f = isolatedFloor();
-    const win = { preset: 'window-01', wall: 'w', sill: 0.9, flip: false } as const;
+    const win = {
+      preset: 'window-01',
+      wall: 'w',
+      sill: 0.9,
+      type: 'window-fixed',
+      hinge: 'a',
+      swing: 'left',
+    } as const;
     f.openings.o1 = { ...win, id: 'o1', offset: 1.0, width: 0.8, height: 1.4 };
     f.openings.o2 = { ...win, id: 'o2', offset: 1.8, width: 0.8, height: 1.4 };
     const g = build(f, 'w');
@@ -225,7 +241,9 @@ describe('buildWallGeometry: gable walls', () => {
       width: 1.2,
       height: 1.4,
       sill: 0.9,
-      flip: false,
+      type: 'door-swing',
+      hinge: 'a',
+      swing: 'left',
     };
     const after = build(f, 'w2');
     expectNear(area(before, 'left') - area(after, 'left'), 1.2 * 1.4, 1e-4);

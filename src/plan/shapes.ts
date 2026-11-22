@@ -126,10 +126,10 @@ export function openingShape(floor: Floor, o: Opening): OpeningShape {
     return { kind: 'window', gap, lines };
   }
 
-  const hinge = o.flip ? far : near;
-  const side = o.flip ? -1 : 1;
+  const hinge = o.hinge === 'b' ? far : near;
+  const side = o.swing === 'right' ? -1 : 1;
   const leafEnd = add(hinge, scale(n, side * o.width));
-  const closed = o.flip ? near : far;
+  const closed = o.hinge === 'b' ? near : far;
   return {
     kind: 'door',
     gap,

@@ -15,7 +15,9 @@ describe('dirtyEntities', () => {
         width: 0.9,
         height: 2.1,
         sill: 0,
-        flip: false,
+        type: 'door-swing',
+        hinge: 'a',
+        swing: 'left',
       },
     };
     const n2 = floor.nodes['n2']!;

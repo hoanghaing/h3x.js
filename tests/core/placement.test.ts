@@ -177,8 +177,8 @@ describe('wall items and openings', () => {
     expect(codes(doc.tryExecute(moveOpening('o1', { offset: 0.1 })))).toContain(
       'opening-out-of-wall',
     );
-    expect(doc.tryExecute(moveOpening('o1', { offset: 2, flip: true })).ok).toBe(true);
-    expect(doc.floor.openings.o1!.flip).toBe(true);
+    expect(doc.tryExecute(moveOpening('o1', { offset: 2 })).ok).toBe(true);
+    expect(doc.floor.openings.o1!.offset).toBe(2);
     doc.execute(removeOpening('o1'));
     expect(doc.floor.openings.o1).toBeUndefined();
   });

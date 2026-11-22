@@ -52,7 +52,9 @@ const opening = (id: string, wall: string, offset: number, width = 0.9): Opening
   width,
   height: 2.1,
   sill: 0,
-  flip: false,
+  type: 'door-swing',
+  hinge: 'a',
+  swing: 'left',
 });
 
 function withOpeningOnW2(offset: number): Floor {

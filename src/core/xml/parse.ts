@@ -6,6 +6,8 @@ import { normalizeRoomOrientation } from '../rooms/normalize';
 import { checkRefs } from '../validate/refs';
 import { validateStairParams } from '../commands/stairs';
 import { validateRoofParams } from '../commands/roofs';
+import { normalizeOpening, type RawOpening } from '../openings/normalize';
+import { validateOpeningParams } from '../openings/params';
 import { parseRoofEdge } from '../roofs/edges';
 import { signedArea } from '../geometry/polygon';
 import type {
@@ -13,8 +15,9 @@ import type {
   Stair,
   Floor,
   Id,
+  Hinge,
   Item,
-  Opening,
+  OpeningType,
   PlanNode,
   Project,
   Roof,
@@ -22,6 +25,7 @@ import type {
   RoofMaterial,
   Room,
   Site,
+  Swing,
   Vec2,
   Wall,
 } from '../types';
@@ -350,7 +354,7 @@ function parseFloor(fe: Element): Floor {
       }
       case 'opening': {
         const flip = e.getAttribute('flip');
-        const o: Opening = {
+        const raw: RawOpening = {
           id: req(e, 'id'),
           wall: req(e, 'wall'),
           preset: req(e, 'preset'),
@@ -360,12 +364,24 @@ function parseFloor(fe: Element): Floor {
           sill: num(e, 'sill', 0),
           flip: flip === '1' || flip === 'true',
         };
+        // The new attributes are cast; validateOpeningParams below rejects a bad value.
+        const type = opt(e, 'type');
+        const hinge = opt(e, 'hinge');
+        const swing = opt(e, 'swing');
+        if (type !== undefined) raw.type = type as OpeningType;
+        if (hinge !== undefined) raw.hinge = hinge as Hinge;
+        if (swing !== undefined) raw.swing = swing as Swing;
+        if (e.hasAttribute('leaves')) raw.leaves = num(e, 'leaves');
+        if (e.hasAttribute('split')) raw.split = num(e, 'split');
+        const o = normalizeOpening(raw);
         if (!(o.width > 0)) {
           throw new H3xParseError(`<opening> attribute "width" must be above 0: "${o.width}"`, {
             element: 'opening',
             attribute: 'width',
           });
         }
+        const [bad] = validateOpeningParams(o);
+        if (bad) throw new H3xParseError(bad.message, { element: 'opening' });
         add(floor.openings, o, 'opening');
         break;
       }

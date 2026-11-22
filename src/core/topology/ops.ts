@@ -3,6 +3,7 @@ import { GEOM_TOL, MIN_WALL_LENGTH } from '../constants';
 import { closestPointOnSegment } from '../geometry/segment';
 import { EPS, add, cross, distance, dot, leftNormal, scale, sub, tidy } from '../geometry/vec';
 import { createId } from '../ids';
+import { mirrorOrientation } from '../openings/params';
 import { openingSpan } from '../shapes';
 import { clampIntoRange, inRange, openingRange, wallUsableRange } from '../validate/layout';
 import type { Floor, Id, PresetResolver, Vec2, Wall } from '../types';
@@ -231,8 +232,8 @@ function mergeAt(
     else if (o.wall === other.id) {
       o.wall = keep.id;
       o.offset = tidy(fromOther(o.offset));
-      // flip is relative to the wall direction (hinge end and swing side), so it mirrors too.
-      if (reversed) o.flip = !o.flip;
+      // Hinge end and swing side are relative to the wall direction, so they mirror too.
+      if (reversed) Object.assign(o, mirrorOrientation(o));
     }
   }
   for (const it of Object.values(draft.items)) {

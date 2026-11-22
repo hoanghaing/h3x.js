@@ -1,7 +1,18 @@
 import type { Command, CommandContext } from '../document/changes';
 import { assertFreeId, fail, notFound } from './shared';
 import { createId } from '../ids';
-import type { CeilingItem, FloorItem, Id, Item, Opening, PresetInfo, WallItem } from '../types';
+import { defaultOpeningType } from '../openings/normalize';
+import type {
+  CeilingItem,
+  FloorItem,
+  Hinge,
+  Id,
+  Item,
+  Opening,
+  PresetInfo,
+  Swing,
+  WallItem,
+} from '../types';
 
 type Created = Command & { createdId: Id };
 
@@ -15,7 +26,8 @@ export function addOpening(input: {
   wall: Id;
   preset: string;
   offset: number;
-  flip?: boolean;
+  hinge?: Hinge;
+  swing?: Swing;
   sill?: number;
 }): Created {
   const id = createId();
@@ -32,6 +44,7 @@ export function addOpening(input: {
       if (!(info.footprint.w > 0)) {
         throw fail('invalid-opening', [id], `Opening ${id} width must be above 0`);
       }
+      const sill = input.sill ?? info.sill ?? 0;
       const after: Opening = {
         id,
         wall: input.wall,
@@ -39,18 +52,19 @@ export function addOpening(input: {
         offset: input.offset,
         width: info.footprint.w,
         height: info.footprint.h,
-        sill: input.sill ?? info.sill ?? 0,
-        flip: input.flip ?? false,
+        sill,
+        type: info.opening?.type ?? defaultOpeningType(sill),
+        hinge: input.hinge ?? info.opening?.hinge ?? 'a',
+        swing: input.swing ?? info.opening?.swing ?? 'left',
       };
+      if (info.opening?.leaves !== undefined) after.leaves = info.opening.leaves;
+      if (info.opening?.split !== undefined) after.split = info.opening.split;
       return [{ kind: 'opening', id, before: null, after }];
     },
   };
 }
 
-export function moveOpening(
-  id: Id,
-  patch: { offset?: number; sill?: number; flip?: boolean },
-): Command {
+export function moveOpening(id: Id, patch: { offset?: number; sill?: number }): Command {
   return {
     label: 'moveOpening',
     run: (ctx) => {
@@ -59,7 +73,6 @@ export function moveOpening(
       const after: Opening = { ...structuredClone(o) };
       if (patch.offset !== undefined) after.offset = patch.offset;
       if (patch.sill !== undefined) after.sill = patch.sill;
-      if (patch.flip !== undefined) after.flip = patch.flip;
       return [{ kind: 'opening', id, before: structuredClone(o), after }];
     },
   };
