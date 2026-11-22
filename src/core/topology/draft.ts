@@ -1,5 +1,7 @@
 import type { Command, CommandContext, EntityChange } from '../document/changes';
 import { deepEqual } from '../document/history';
+import { createId } from '../ids';
+import { syncRoofs } from '../roofs/sync';
 import { syncRooms } from '../rooms/sync';
 import type { Floor, Id, Wall } from '../types';
 
@@ -58,19 +60,28 @@ const NON_ROOM = new Set<FloorKind>(['node', 'wall', 'opening', 'item', 'column'
 
 /**
  * A command that mutates a clone of the floor. Rooms in the draft are ignored:
- * room changes come from `syncRooms(ctx.floor, draft)` so the whole edit is one
- * change list (one undo step).
+ * room changes come from `syncRooms(ctx.floor, draft)` and follow roofs are re-mapped to them
+ * (`syncRoofs`), so the whole edit is one change list (one undo step).
  */
 export function structural(
   label: string,
   mutate: (draft: Floor, ctx: CommandContext) => void,
 ): Command {
+  /** Ids of the extra roofs a detach makes: the same every time this command runs. */
+  const roofIds = new Map<string, Id>();
+  const roofIdFor = (roof: Id, k: number): Id => {
+    const key = `${roof}:${k}`;
+    if (!roofIds.has(key)) roofIds.set(key, createId());
+    return roofIds.get(key)!;
+  };
   return {
     label,
     run: (ctx) => {
       const draft = structuredClone(ctx.floor) as Floor;
       mutate(draft, ctx);
-      return [...diffKinds(ctx.floor, draft, NON_ROOM), ...syncRooms(ctx.floor, draft)];
+      const rooms = syncRooms(ctx.floor, draft);
+      syncRoofs(ctx.floor, draft, rooms, roofIdFor);
+      return [...diffKinds(ctx.floor, draft, NON_ROOM), ...rooms];
     },
   };
 }
