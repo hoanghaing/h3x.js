@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
+import { removeOpening } from '../../src/core/commands/objects';
 import { pushPullWall, splitWall } from '../../src/core/commands/structure';
 import { H3xValidationError } from '../../src/core/errors';
 import { openingRange } from '../../src/core/validate/layout';
@@ -73,8 +74,9 @@ function thickMiddleFloor(): Floor {
   return f;
 }
 
-/** w1 split at x=1 and x=3; returns the middle segment. */
+/** w1 split at x=1 and x=3 (its door removed: it stands at x=1); returns the middle segment. */
 function splitTwice(doc: H3xDocument): Wall {
+  doc.execute(removeOpening('o1'));
   doc.execute(splitWall('w1', { x: 1, y: 0 }));
   const second = Object.values(doc.floor.walls).find((w) => w.a === doc.floor.walls.w1!.b)!;
   doc.execute(splitWall(second.id, { x: 3, y: 0 }));

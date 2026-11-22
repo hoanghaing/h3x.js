@@ -40,6 +40,20 @@ afterEach(() => {
   plans = [];
 });
 
+it('a wall drawn into a door is rejected and the door is marked red', () => {
+  const plan = makePlan();
+  plan.fitToContent();
+  for (const p of [
+    { x: 1.2, y: 2 },
+    { x: 1.2, y: 0 },
+  ]) {
+    click(plan, p);
+  }
+  expect(Object.keys(plan.doc.floor.walls)).toHaveLength(4);
+  expect(plan.doc.floor.openings.o1!.offset).toBe(1.2);
+  expect(plan.svg.querySelector('[data-h3x-id="o1"]')!.getAttribute('class')).toContain('-rejected');
+});
+
 // The SVG's bounding rect is all zeros under jsdom, so client coordinates are screen coordinates.
 function fire(plan: H3xPlan, type: string, p: Vec2, mods: { altKey?: boolean } = {}): void {
   const s = plan.planToScreen(p);

@@ -101,14 +101,10 @@ describe('splitWall', () => {
     );
   });
 
-  it('clamps a straddling opening into the half holding its center', () => {
+  it('rejects a straddling opening instead of pushing it into a half', () => {
     const doc = mk(oneRoomFloor()); // o1 at 1.2, width 0.9
-    const cmd = splitWall('w1', { x: 1, y: 0 });
-    doc.execute(cmd);
-    const other = Object.values(doc.floor.walls).find((w) => w.a === cmd.createdId)!;
-    // half length 3, lo = max(0.1, 0.1) + 0.45
-    expect(doc.floor.openings.o1).toMatchObject({ wall: other.id });
-    expect(doc.floor.openings.o1!.offset).toBeCloseTo(0.55);
+    expect(codeOf(() => doc.execute(splitWall('w1', { x: 1, y: 0 })))).toBe('split-cuts-opening');
+    expect(doc.floor.openings.o1!.offset).toBe(1.2);
   });
 
   it('moves wall items with the half holding their center', () => {
