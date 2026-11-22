@@ -67,6 +67,29 @@ describe('polygon', () => {
       expect(Math.abs(p.y - e[i]!.y)).toBeLessThan(1e-9);
     });
   });
+  it('insetPolygon keeps one point where equal walls carry straight on', () => {
+    for (const bend of [0, 1e-12, 1e-4]) {
+      const pts = [
+        { x: 0, y: 0 },
+        { x: 2, y: bend },
+        { x: 4, y: 0 },
+        { x: 4, y: 4 },
+        { x: 0, y: 4 },
+      ];
+      expect(insetPolygon(pts, [0.1, 0.1, 0.1, 0.1, 0.1])).toHaveLength(5);
+    }
+  });
+  it('insetPolygon steps only past the miter limit of the thicker wall', () => {
+    // The miter is 0.5 m from the corner: past 4 x 0.05, within 4 x 0.2.
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 10, y: 1.6 },
+      { x: 10, y: 4 },
+      { x: 0, y: 4 },
+    ];
+    expect(insetPolygon(pts, [0.2, 0.05, 0.1, 0.1, 0.1])).toHaveLength(5);
+  });
   it('pointInPolygon', () => {
     expect(pointInPolygon({ x: 2, y: 2 }, sq(0, 0, 4, 4))).toBe(true);
     expect(pointInPolygon({ x: 5, y: 5 }, sq(0, 0, 4, 4))).toBe(false);
