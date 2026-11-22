@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { polygonOverlapArea } from '../../../src/core/geometry/clip';
+import { polygonOverlapArea, uncoveredArea } from '../../../src/core/geometry/clip';
 import type { Vec2 } from '../../../src/core/types';
 
 const sq = (x: number, y: number, s = 1): Vec2[] => [
@@ -40,5 +40,29 @@ describe('polygonOverlapArea', () => {
       polygonOverlapArea(sq(0.5, 0.5, 1.5), L),
       9,
     );
+  });
+});
+
+describe('uncoveredArea', () => {
+  it('is the whole area without covers', () => {
+    expect(uncoveredArea(L, [])).toBeCloseTo(3, 9);
+  });
+  it('counts overlapping covers once', () => {
+    expect(uncoveredArea(sq(0, 0, 4), [sq(0, 0, 2), sq(1, 1, 2)])).toBeCloseTo(9, 9);
+  });
+  it('ignores the part of a cover outside the polygon', () => {
+    expect(uncoveredArea(L, [sq(1, 1, 5)])).toBeCloseTo(3, 9);
+    expect(uncoveredArea(sq(0, 0, 2), [sq(1, -1, 5)])).toBeCloseTo(2, 9);
+  });
+  it('handles slanted edges and either winding', () => {
+    const tri = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+      { x: 0, y: 4 },
+    ];
+    expect(uncoveredArea(sq(0, 0, 4), [[...tri].reverse()])).toBeCloseTo(8, 9);
+  });
+  it('is 0 when fully covered', () => {
+    expect(uncoveredArea(sq(1, 1), [sq(0, 0, 3)])).toBe(0);
   });
 });

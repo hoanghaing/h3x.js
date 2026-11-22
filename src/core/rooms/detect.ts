@@ -1,6 +1,7 @@
 import { GEOM_TOL, MIN_ROOM_AREA } from '../constants';
 import { H3xValidationError } from '../errors';
-import { EPS } from '../geometry/vec';
+import { EPS, add, dot, leftNormal, normalize, scale, sub } from '../geometry/vec';
+import { uncoveredArea } from '../geometry/clip';
 import { insetPolygon, isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygon';
 import type { Floor, Id, Room, Vec2, Wall } from '../types';
 
@@ -252,8 +253,11 @@ export function roomPolygon(floor: Floor, room: Room, kind: 'center' | 'inner'):
     return { x: n.x, y: n.y };
   });
   if (kind === 'center') return pts;
-  const dists = room.walls.map((id) => (floor.walls[id]?.thickness ?? 0) / 2);
-  return insetPolygon(pts, dists);
+  return insetPolygon(pts, halfThicknesses(floor, room));
+}
+
+function halfThicknesses(floor: Floor, room: Room): number[] {
+  return room.walls.map((id) => (floor.walls[id]?.thickness ?? 0) / 2);
 }
 
 /**
@@ -270,8 +274,34 @@ export function roomShape(
   return { outer, holes };
 }
 
+/**
+ * Area inside an inset outline. Where a room is narrower than its walls, inset edges reverse
+ * and the outline turns inside out, so its signed area can be positive and far larger than the
+ * room (without reversed edges it is at most the centre area, except next to parallel edges).
+ * Such an area is capped at the floor the walls' inner halves leave uncovered.
+ */
+function insideArea(center: Vec2[], dists: number[], inner: Vec2[]): number {
+  const area = signedArea(inner);
+  if (area <= 0) return area;
+  const next = (i: number): number => (i + 1) % center.length;
+  const reversed = center.some(
+    (a, i) => dot(sub(inner[next(i)]!, inner[i]!), sub(center[next(i)]!, a)) < 0,
+  );
+  if (!reversed && area <= signedArea(center) + EPS) return area;
+  const halves = center.map((a, i) => {
+    const b = center[next(i)]!;
+    const inward = scale(leftNormal(normalize(sub(b, a))), dists[i]!);
+    return [a, b, add(b, inward), add(a, inward)];
+  });
+  return Math.min(area, uncoveredArea(center, halves));
+}
+
 /** Outer area minus hole areas (negative for a flipped outline). */
 export function roomArea(floor: Floor, room: Room, kind: 'center' | 'inner' = 'inner'): number {
   const { outer, holes } = roomShape(floor, room, kind);
-  return signedArea(outer) - holes.reduce((sum, h) => sum + Math.abs(signedArea(h)), 0);
+  const area =
+    kind === 'center'
+      ? signedArea(outer)
+      : insideArea(roomPolygon(floor, room, 'center'), halfThicknesses(floor, room), outer);
+  return area - holes.reduce((sum, h) => sum + Math.abs(signedArea(h)), 0);
 }

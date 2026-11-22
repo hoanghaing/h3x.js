@@ -16,6 +16,9 @@ Editing fixes.
 - **Changed:** an opening width of 0 or less is rejected (`invalid-opening`; a parse error when
   loading XML).
 - The fill at wall junctions is clickable at every zoom.
+- A space narrower than its walls is no longer detected or accepted as a room: its inner area
+  could come out positive and huge (a phantom room, e.g. thousands of m² after saving a sliver
+  of walls). A room stored that way is reported as `room-degenerate`.
 
 Milestone 7: irregular lots and roofs.
 

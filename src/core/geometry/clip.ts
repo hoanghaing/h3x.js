@@ -45,3 +45,61 @@ export function polygonOverlapArea(a: Vec2[], b: Vec2[]): number {
   }
   return Math.abs(total);
 }
+
+/**
+ * Area of the simple polygon `subject` that none of the simple polygons `covers` covers (any
+ * winding; covers may overlap). Exact: between consecutive vertices and edge crossings the
+ * uncovered length of a vertical line is linear in x, so sampling each slab at its middle is
+ * enough.
+ */
+export function uncoveredArea(subject: Vec2[], covers: Vec2[][]): number {
+  const rings = [subject, ...covers].map((ring) =>
+    ring.map((a, i) => [a, ring[(i + 1) % ring.length] as Vec2] as const),
+  );
+  const edges = rings.flat();
+  const xs = edges.map(([a]) => a.x);
+  for (let i = 0; i < edges.length; i++) {
+    const [a, b] = edges[i]!;
+    for (let j = i + 1; j < edges.length; j++) {
+      const [c, d] = edges[j]!;
+      const denom = (b.x - a.x) * (d.y - c.y) - (b.y - a.y) * (d.x - c.x);
+      if (denom === 0) continue;
+      const t = ((c.x - a.x) * (d.y - c.y) - (c.y - a.y) * (d.x - c.x)) / denom;
+      const u = ((c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x)) / denom;
+      if (t > 0 && t < 1 && u > 0 && u < 1) xs.push(a.x + t * (b.x - a.x));
+    }
+  }
+  xs.sort((p, q) => p - q);
+
+  let area = 0;
+  for (let i = 0; i + 1 < xs.length; i++) {
+    const x0 = xs[i]!;
+    const x1 = xs[i + 1]!;
+    if (x1 <= x0) continue;
+    const x = (x0 + x1) / 2;
+    const spans = rings.map((ring) => {
+      const ys: number[] = [];
+      for (const [a, b] of ring) {
+        if (a.x > x !== b.x > x) ys.push(a.y + ((x - a.x) / (b.x - a.x)) * (b.y - a.y));
+      }
+      ys.sort((p, q) => p - q);
+      const out: Array<{ lo: number; hi: number }> = [];
+      for (let k = 0; k + 1 < ys.length; k += 2) out.push({ lo: ys[k]!, hi: ys[k + 1]! });
+      return out;
+    });
+    const covered = spans.slice(1).flat();
+    covered.sort((p, q) => p.lo - q.lo);
+    let free = 0;
+    for (const { lo, hi } of spans[0]!) {
+      let y = lo;
+      for (const c of covered) {
+        if (c.lo >= hi) break;
+        if (c.lo > y) free += c.lo - y;
+        y = Math.max(y, c.hi);
+      }
+      if (hi > y) free += hi - y;
+    }
+    area += free * (x1 - x0);
+  }
+  return area;
+}
