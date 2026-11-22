@@ -1,10 +1,10 @@
 import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '../core';
-import { H3xValidationError, roomShape, stairOutline } from '../core';
+import { H3xValidationError, openingGeometry, openingHit, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { Junction, WallCorners } from '../shared/walls/joins';
 import { roofHit } from './roofs';
-import { columnShape, inRoomShape, itemFootprint, openingShape, wallOutline } from './shapes';
+import { columnShape, inRoomShape, itemFootprint, wallOutline } from './shapes';
 import type { PlanKind, Rect, ScreenPoint } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
 
@@ -63,8 +63,15 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     }
   }
 
-  for (const o of Object.values(floor.openings)) {
-    if (pointInPolygon(p, openingShape(floor, o).gap)) return { kind: 'opening', id: o.id };
+  const openings = Object.values(floor.openings).map((o) => ({
+    id: o.id,
+    geometry: openingGeometry(floor, o),
+  }));
+  // On an opening first: the reach around one door's leaf must not cover the door beside it.
+  for (const reach of [0, WALL_TOLERANCE_PX / view.scale]) {
+    for (const { id, geometry } of openings) {
+      if (geometry && openingHit(geometry, p, reach)) return { kind: 'opening', id };
+    }
   }
 
   for (const w of Object.values(floor.walls)) {

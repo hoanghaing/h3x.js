@@ -1,9 +1,7 @@
-import type { Floor, Id, Opening, Room, Vec2 } from '../core';
+import type { Floor, Id, Room, Vec2 } from '../core';
 import { roomArea, roomShape } from '../core';
 import { GEOM_TOL } from '../core/constants';
-import { add, cross, leftNormal, normalize, scale, sub } from '../core/geometry/vec';
 import { pointInPolygon } from '../core/geometry/polygon';
-import { openingSpan } from '../core/shapes';
 import type { Joins } from '../core/walls/joins';
 
 // The outline of each kind lives in core (validators measure the same shapes); re-exported here.
@@ -90,56 +88,4 @@ export function roomPath(shape: { outer: Vec2[]; holes: Vec2[][] }): string {
     .filter((ring) => ring.length > 0)
     .map((ring) => `M${ring.map((p) => `${p.x},${p.y}`).join('L')}Z`)
     .join('');
-}
-
-export interface OpeningShape {
-  kind: 'door' | 'window';
-  gap: [Vec2, Vec2, Vec2, Vec2];
-  leaf?: [Vec2, Vec2];
-  /** `sweep` is the SVG sweep flag for plan-space coordinates (1 = increasing angle, CCW with +y up). */
-  arc?: { from: Vec2; to: Vec2; center: Vec2; r: number; sweep: 0 | 1 };
-  lines?: [Vec2, Vec2][];
-}
-
-export function openingShape(floor: Floor, o: Opening): OpeningShape {
-  const wall = floor.walls[o.wall];
-  const a = wall && floor.nodes[wall.a];
-  const b = wall && floor.nodes[wall.b];
-  if (!wall || !a || !b) {
-    const z = { x: 0, y: 0 };
-    return { kind: 'door', gap: [z, z, z, z] };
-  }
-  const d = normalize(sub(b, a));
-  const n = leftNormal(d);
-  const t = wall.thickness;
-  const span = openingSpan(o);
-  const near = add(a, scale(d, span.lo));
-  const far = add(a, scale(d, span.hi));
-  const nt = scale(n, t / 2);
-  const gap: [Vec2, Vec2, Vec2, Vec2] = [add(near, nt), add(far, nt), sub(far, nt), sub(near, nt)];
-
-  if (o.sill >= GEOM_TOL) {
-    const lines = [-t / 2, 0, t / 2].map((k): [Vec2, Vec2] => [
-      add(near, scale(n, k)),
-      add(far, scale(n, k)),
-    ]);
-    return { kind: 'window', gap, lines };
-  }
-
-  const hinge = o.hinge === 'b' ? far : near;
-  const side = o.swing === 'right' ? -1 : 1;
-  const leafEnd = add(hinge, scale(n, side * o.width));
-  const closed = o.hinge === 'b' ? near : far;
-  return {
-    kind: 'door',
-    gap,
-    leaf: [hinge, leafEnd],
-    arc: {
-      from: leafEnd,
-      to: closed,
-      center: hinge,
-      r: o.width,
-      sweep: cross(sub(leafEnd, hinge), sub(closed, hinge)) > 0 ? 1 : 0,
-    },
-  };
 }

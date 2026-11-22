@@ -41,6 +41,8 @@ export {
   mirrorOrientation,
   nextOrientation,
 } from './openings/params';
+export { openingGeometry, openingHit, pieceOutline } from './openings/geometry';
+export type { OpeningGeometry, OpeningPiece, SweepArea } from './openings/geometry';
 export { normalizeOpening } from './openings/normalize';
 export { OPENING_PRESETS, createPresetResolver } from './openings/presets';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
