@@ -44,6 +44,17 @@ function fitOn(
   }
 }
 
+/** Adds `by` to every offset on `wallId`: keeps its contents in place when its end `a` moves. */
+function shiftOn(draft: Floor, wallId: Id, by: number): void {
+  if (Math.abs(by) < EPS) return;
+  for (const o of Object.values(draft.openings)) {
+    if (o.wall === wallId) o.offset = tidy(o.offset + by);
+  }
+  for (const it of Object.values(draft.items)) {
+    if (it.mount === 'wall' && it.wall === wallId) it.offset = tidy(it.offset + by);
+  }
+}
+
 /**
  * Splits `wallId` at the projection of `at`. The original wall keeps the half from
  * `a`; the half to the old `b` becomes `newWallId` (same thickness, height,
@@ -198,8 +209,9 @@ function attachments(draft: Floor, wallId: Id): number {
  * Re-attaches the walls of `drop` to `keep` and deletes `drop`. A wall that would join
  * `keep` to itself is deleted (with its openings / items); of two walls then joining the
  * same nodes, the one with more openings + wall items survives (ties: smaller id) and the
- * other's openings / items are deleted. Openings / wall items on re-attached walls are
- * clamped to the new length, `merge-drops-opening` when one cannot fit. Same node:
+ * other's openings / items are deleted. Openings / wall items on re-attached walls keep their
+ * distance from the end that stays and are clamped to the new length, `merge-drops-opening`
+ * when one cannot fit. Same node:
  * `invalid-target`.
  */
 export function mergeNodesIn(draft: Floor, keep: Id, drop: Id, presets?: PresetResolver): void {
@@ -208,6 +220,8 @@ export function mergeNodesIn(draft: Floor, keep: Id, drop: Id, presets?: PresetR
   if (keep === drop) {
     throw fail('invalid-target', [keep], `Cannot merge node ${keep} with itself`);
   }
+  const from = draft.nodes[drop]!;
+  const to = draft.nodes[keep]!;
   const moved: Id[] = [];
   for (const w of wallsAt(draft, drop)) {
     const far = w.a === drop ? w.b : w.a;
@@ -215,8 +229,11 @@ export function mergeNodesIn(draft: Floor, keep: Id, drop: Id, presets?: PresetR
       dropWall(draft, w.id);
       continue;
     }
-    if (w.a === drop) w.a = keep;
-    else w.b = keep;
+    if (w.a === drop) {
+      w.a = keep;
+      const other = draft.nodes[far]!;
+      shiftOn(draft, w.id, distance(to, other) - distance(from, other));
+    } else w.b = keep;
     moved.push(w.id);
   }
   delete draft.nodes[drop];
@@ -471,6 +488,7 @@ export function pushPullIn(
           );
         }
         draft.nodes[nodeId] = { ...p, ...moved };
+        if (other.a === nodeId) shiftOn(draft, other.id, distance(moved, far) - len);
         resized.push(other.id);
         continue;
       }

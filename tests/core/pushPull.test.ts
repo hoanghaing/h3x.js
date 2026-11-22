@@ -109,13 +109,13 @@ describe('pushPullWall', () => {
   });
 
   it('re-fits an opening on a slid neighbour that survives the shortening', () => {
-    const doc = mk(withOpeningOnW2(3.3));
+    // w2 starts at w1: pulling w1 in by 1 m removes the stretch the door stands on.
+    const doc = mk(withOpeningOnW2(0.7));
     doc.execute(pushPullWall('w1', 1));
     const o = doc.floor.openings.o2!;
     expect(o.wall).toBe('w2');
-    const { hi } = openingRange(doc.floor, o);
-    expect(o.offset).toBeLessThan(3.3);
-    expect(o.offset).toBeCloseTo(hi, 6);
+    const { lo } = openingRange(doc.floor, o);
+    expect(o.offset).toBeCloseTo(lo, 6);
   });
 
   it('rejects with push-pull-cuts-opening when a slid neighbour cannot hold its opening', () => {
