@@ -518,7 +518,8 @@ describe('the inner area is the floor the drawn walls leave free', () => {
         pts.map(() => [0.1, 0.2, 0.22, 0.4][Math.floor(random() * 4)]!),
       );
       const error = Math.abs(roomArea(f, f.rooms.r!, 'inner') - drawnFloor(f));
-      // At a very sharp tip the square wall ends reach slightly past the mitred outline.
+      // Not a bound in general: at very sharp tips the square wall ends reach past the mitred
+      // outline. The bound holds for this seed and family of shapes.
       expect(error, JSON.stringify(pts)).toBeLessThan(0.02);
       checked++;
     }
