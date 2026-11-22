@@ -7,6 +7,7 @@ import {
   moveOpening,
   openingClearances,
   openingGeometry,
+  polygonOverlapArea,
   resizeOpening,
   setOpeningDistance,
   updateOpening,
@@ -17,7 +18,6 @@ import {
   type PresetResolver,
   type Vec2,
 } from '../../src/core';
-import { pointInPolygon } from '../../src/core/geometry/polygon';
 import { closestPointOnSegment } from '../../src/core/geometry/segment';
 import { add, distance, leftNormal, normalize, scale, sub } from '../../src/core/geometry/vec';
 import { ctxFor, oneRoomFloor } from '../fixtures/floors';
@@ -40,7 +40,7 @@ const tilted = (x: number, y: number): Vec2 => ({
   y: x * Math.sin(TILT) + y * Math.cos(TILT),
 });
 
-type Arm = [deg: number, thickness: number];
+type Arm = [deg: number, thickness: number, length?: number];
 
 /**
  * A slanted 6 m wall whose `end` is the node n, `arms` meeting it there (their angle from it),
@@ -52,9 +52,9 @@ function meeting(arms: Arm[], { end = 'a' as Hinge, thickness = 0.2 } = {}): Flo
   const a = end === 'a' ? 'n' : 'far';
   const b = end === 'a' ? 'far' : 'n';
   f.walls = { w: { id: 'w', a, b, thickness, height: 3.2 } };
-  arms.forEach(([deg, t], i) => {
+  arms.forEach(([deg, t, length = 4], i) => {
     const id = `m${i}`;
-    f.nodes[id] = { id, ...tilted(4 * Math.cos(rad(deg)), 4 * Math.sin(rad(deg))) };
+    f.nodes[id] = { id, ...tilted(length * Math.cos(rad(deg)), length * Math.sin(rad(deg))) };
     f.walls[id] = { id, a: 'n', b: id, thickness: t, height: 3.2 };
   });
   return f;
@@ -75,7 +75,8 @@ function expectPoint(actual: Vec2, expected: Vec2) {
 
 /**
  * The drawn outlines as the judge: `until` is on one of them, `face` is how far it is from the
- * jamb, and up to there neither face of the wall is inside a meeting wall.
+ * jamb, no meeting wall has any area in the wall's band up to there, and just beyond there one
+ * has, or the wall's own outline has ended (a junction's fill, or a free end).
  */
 function expectMatchesOutlines(f: Floor, o: Opening) {
   const outlines = wallOutlines(f);
@@ -100,15 +101,19 @@ function expectMatchesOutlines(f: Floor, o: Opening) {
     expect(distance(jamb, until)).toBeCloseTo(face, 8);
 
     const out = scale(dir, end === 'a' ? -1 : 1);
-    const along = o.offset + (end === 'a' ? -o.width : o.width) / 2;
-    for (const side of [1, -1]) {
-      const start = add(add(a, scale(dir, along)), scale(half, side));
-      for (let k = 0; k <= 10; k++) {
-        // 1 cm short: pointInPolygon counts 1 mm around an outline as inside.
-        const p = add(start, scale(out, ((face - 0.01) * k) / 10));
-        for (const { id } of meets) expect(pointInPolygon(p, outlines[id]!), id).toBe(false);
-      }
-    }
+    const start = add(a, scale(dir, o.offset + (end === 'a' ? -o.width : o.width) / 2));
+    /** The wall's band between both faces, from `from` to `to` metres out of the jamb. */
+    const band = (from: number, to: number): Vec2[] => {
+      const p = add(start, scale(out, from));
+      const q = add(start, scale(out, to));
+      return [add(p, half), add(q, half), sub(q, half), sub(p, half)];
+    };
+    const covered = (ring: Vec2[]): number =>
+      meets.reduce((sum, { id }) => sum + polygonOverlapArea(ring, outlines[id]!), 0);
+    expect(covered(band(0, face)), `${wall.id} ${end}`).toBeLessThan(1e-9);
+    const beyond = band(face, face + 0.005);
+    const notOwn = 0.005 * wall.thickness - polygonOverlapArea(beyond, outlines[wall.id]!);
+    expect(covered(beyond) + notOwn, `${wall.id} ${end}`).toBeGreaterThan(1e-9);
   }
 }
 
@@ -329,7 +334,8 @@ describe('openingClearances', () => {
         [135, 0.04],
         [-135, 0.04],
       ],
-      crossing(135, 0.2, 0.04),
+      // Both corners are behind the node; the crook of the arms, between the faces, is nearer.
+      -0.02 / Math.sin(rad(45)),
     ],
   ])('at %s', (_, arms, x) => {
     for (const end of ENDS) {
@@ -378,6 +384,60 @@ describe('openingClearances', () => {
     // The thicker wall's end edge runs from (0.1268, 0.1) to (0.4123, -0.4113), so it crosses
     // the right face at 0.2385; the wall's own corner there is at 0.1970.
     expect(faceAt(f, 'a')).toBeCloseTo(JAMB - 0.2385, 3);
+    expectMatchesOutlines(f, f.openings.o1!);
+  });
+
+  describe.each([
+    // The far corner of a short thin wall that never reaches a face of the thick one.
+    ['a short thin wall', 14, 0.05, 0.4, 0.4],
+    // The corner of the square end of a thinner wall almost in line.
+    ['a thinner wall almost in line', 175, 0.15, 4, 0.3],
+  ] as const)('%s between the faces', (_, deg, other, length, own) => {
+    const d = { x: Math.cos(rad(deg)), y: Math.sin(rad(deg)) };
+    // That wall's right corner: at its far end, or at the node when it heads away.
+    const reach = deg < 90 ? length : 0;
+    const x = reach * d.x + (other / 2) * d.y;
+    const y = reach * d.y - (other / 2) * d.x;
+
+    it.each(ENDS)('counts at %s', (end) => {
+      for (const mirror of [1, -1]) {
+        const f = meeting([[mirror * deg, other, length]], { end, thickness: own });
+        const c = openingClearances(f, f.openings.o1!)[end];
+        expect(c.face).toBeCloseTo(JAMB - x, 8);
+        expectPoint(c.jamb, tilted(JAMB, mirror * y));
+        expectPoint(c.until, tilted(x, mirror * y));
+        expectMatchesOutlines(f, f.openings.o1!);
+      }
+    });
+
+    it.each(ENDS)('a cut at distance 0 from it at %s does not overlap it', (end) => {
+      const f = meeting([[deg, other, length]], { end, thickness: own });
+      const ring = wallOutlines(f).m0!;
+      const cmd = setOpeningDistance('o1', { end, distance: 0, from: 'face' });
+      const at = cmd.run(ctxFor(f))[0]!.after as Opening;
+      const overlap = (o: Opening) => polygonOverlapArea(openingGeometry(f, o)!.cut, ring);
+      expect(overlap(at)).toBeLessThan(1e-9);
+      // 5 mm further toward the node it does.
+      const past = end === 'a' ? -0.005 : 0.005;
+      expect(overlap({ ...at, offset: at.offset + past })).toBeGreaterThan(1e-9);
+    });
+  });
+
+  it('stays on the left face where a tie reaches between the faces', () => {
+    // A thinner continuation's end has both its corners between the faces, level with the node.
+    const f = meeting([[180, 0.1]]);
+    expectPoint(openingClearances(f, f.openings.o1!).a.until, tilted(0, 0.1));
+  });
+
+  it('counts a corner between the faces at a crowded node', () => {
+    const f = meeting(
+      [
+        [125, 0.2],
+        [190, 0.22],
+        [140, 0.3],
+      ],
+      { thickness: 0.4 },
+    );
     expectMatchesOutlines(f, f.openings.o1!);
   });
 
