@@ -4,10 +4,15 @@ import { describe, expect, it } from 'vitest';
 import {
   H3xDocument,
   openingGeometry,
+  openingHit,
   pieceOutline,
+  wallOutline,
   type Floor,
   type Opening,
+  type Vec2,
 } from '../../src/core';
+import { GEOM_TOL } from '../../src/core/constants';
+import { openingRange } from '../../src/core/validate/layout';
 import { hitTest } from '../../src/plan/hit';
 import { paintOpening } from '../../src/plan/openings';
 import { createEntityElement, updateEntityElement } from '../../src/plan/render';
@@ -156,19 +161,59 @@ describe('opening geometry and paint on a room wall', () => {
 });
 
 describe('opening hit', () => {
-  const scene = (floor: Floor, scale: number) => ({
-    floor,
-    view: { ...view, scale },
-    corners: computeJoins(floor).corners,
-    dimensions: [],
-  });
+  const scene = (floor: Floor, scale: number) => {
+    const { corners, junctions } = computeJoins(floor);
+    return { floor, view: { ...view, scale }, corners, junctions, dimensions: [] };
+  };
   const at = (scale: number, x: number, y: number) => ({
     x: view.width / 2 + (x - view.cx) * scale,
     y: view.height / 2 - y * scale,
   });
   const o1 = { kind: 'opening', id: 'o1' };
+  const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  });
+  const steps = (n: number) => Array.from({ length: n + 1 }, (_, i) => i / n);
 
   describe.each([50, 200, 800])('at %i px/m', (scale) => {
+    it.each(OPENING_CASES)('$name in a corner: all of the cut and leaves', ({ over }) => {
+      const f = oneRoomFloor();
+      const o = { ...f.openings.o1!, ...over };
+      const { lo, hi } = openingRange(f, o);
+      for (const offset of [lo, hi]) {
+        f.openings.o1 = { ...o, offset };
+        const g = openingGeometry(f, f.openings.o1)!;
+        const [p0, p1, p2, p3] = g.cut;
+        const points = steps(6).flatMap((t) =>
+          steps(4).map((u) => lerp(lerp(p0, p1, t), lerp(p3, p2, t), u)),
+        );
+        for (const l of g.plan.filter((p) => p.role === 'leaf')) {
+          for (const t of steps(8)) points.push(lerp(l.a, l.b, t));
+          if (l.depth === 0) continue;
+          const ring = pieceOutline(l);
+          ring.forEach((q, i) => {
+            for (const t of steps(4)) points.push(lerp(q, ring[(i + 1) % ring.length]!, t));
+          });
+        }
+        const s = scene(f, scale);
+        let probed = 0;
+        const missed: Vec2[] = [];
+        for (const p of points) {
+          // a node handle wins within its 8 px
+          const onNode = Object.values(f.nodes).some(
+            (n) => Math.hypot(n.x - p.x, n.y - p.y) * scale <= 8,
+          );
+          if (onNode) continue;
+          const hit = hitTest(s, at(scale, p.x, p.y));
+          if (hit?.kind !== o1.kind || hit.id !== o1.id) missed.push(p);
+          probed++;
+        }
+        expect(missed).toEqual([]);
+        expect(probed).toBeGreaterThan(0);
+      }
+    });
+
     it.each(OPENING_CASES)('$name: cut and leaves', ({ over }) => {
       const f = openingFloor(over);
       const g = openingGeometry(f, f.openings.o1!)!;
@@ -193,6 +238,34 @@ describe('opening hit', () => {
       const s = scene(openingFloor(), scale);
       expect(hitTest(s, at(scale, 1.4 - 3.5 / scale, 0.7))).toEqual(o1);
       expect(hitTest(s, at(scale, 1.4 - 4.5 / scale, 0.7))).toBeNull();
+    });
+  });
+
+  describe.each([25, 50, 100])('samples at %i px/m', (scale) => {
+    it.each(Object.keys(SAMPLE_SYMBOLS))('%s: wall bodies stay walls', (file) => {
+      const doc = H3xDocument.fromXML(readFileSync(`examples/layouts/${file}`, 'utf8'));
+      let probed = 0;
+      for (const floor of doc.project.floors) {
+        const s = scene(floor, scale);
+        const geometries = Object.values(floor.openings).map((o) => openingGeometry(floor, o)!);
+        const taken: Vec2[] = [];
+        for (const c of Object.values(s.corners)) {
+          const [q0, q1, q2, q3] = wallOutline(c) as [Vec2, Vec2, Vec2, Vec2];
+          const n = Math.ceil(Math.hypot(q1.x - q0.x, q1.y - q0.y) / 0.05);
+          for (const t of steps(n)) {
+            for (const u of [0.05, 0.3, 0.5, 0.7, 0.95]) {
+              const p = lerp(lerp(q0, q1, t), lerp(q3, q2, t), u);
+              // at risk: within a leaf's reach, yet on no cut and no leaf
+              if (!geometries.some((g) => openingHit(g, p, 4 / scale))) continue;
+              if (geometries.some((g) => openingHit(g, p, GEOM_TOL))) continue;
+              probed++;
+              if (hitTest(s, at(scale, p.x, p.y))?.kind === 'opening') taken.push(p);
+            }
+          }
+        }
+        expect(taken, floor.id).toEqual([]);
+      }
+      expect(probed).toBeGreaterThan(0);
     });
   });
 

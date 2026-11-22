@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { H3xDocument, type Floor, type OpeningType, type Project, type Vec2 } from '../../src/core';
+import { H3xDocument, type Floor, type Project, type Vec2 } from '../../src/core';
 import { signedArea } from '../../src/core/geometry/polygon';
 import { H3xPlan } from '../../src/plan/H3xPlan';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
@@ -20,9 +20,8 @@ afterEach(() => {
 });
 
 /** Ground floor (one 4 × 4 room) with a column of each shape, a sofa and a stair, plus a floor above. */
-function floor(type: OpeningType): Floor {
+function floor(): Floor {
   const f = oneRoomFloor();
-  f.openings.o1!.type = type;
   f.columns = {
     c1: { id: 'c1', x: 1, y: 3, width: 0.3, rotation: 0.3, shape: 'square' },
     c2: { id: 'c2', x: 3, y: 3.2, width: 0.3, rotation: 0, shape: 'round' },
@@ -47,8 +46,8 @@ function floor(type: OpeningType): Floor {
   return f;
 }
 
-function makePlan(type: OpeningType = 'door-swing'): H3xPlan {
-  const ground = floor(type);
+function makePlan(): H3xPlan {
+  const ground = floor();
   const upper = { ...oneRoomFloor(), id: 'f2', level: 1, elevation: 3.35 } as Floor;
   upper.openings = {};
   const doc = H3xDocument.fromProject(
@@ -153,7 +152,7 @@ describe('hit region = drawn outline', () => {
   });
 
   it('opening: its drawn gap', () => {
-    const plan = makePlan('window-fixed'); // no leaf, so the gap is all of it
+    const plan = makePlan();
     const gap = group(plan, 'opening', 'o1').querySelector(`.${P}-opening-gap`)!;
     probeEdges(plan, parsePoints(gap.getAttribute('points')!), { kind: 'opening', id: 'o1' });
   });

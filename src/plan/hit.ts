@@ -1,5 +1,6 @@
 import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '../core';
 import { H3xValidationError, openingGeometry, openingHit, roomShape, stairOutline } from '../core';
+import { GEOM_TOL } from '../core/constants';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { Junction, WallCorners } from '../shared/walls/joins';
@@ -67,12 +68,12 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     id: o.id,
     geometry: openingGeometry(floor, o),
   }));
-  // On an opening first: the reach around one door's leaf must not cover the door beside it.
-  for (const reach of [0, WALL_TOLERANCE_PX / view.scale]) {
-    for (const { id, geometry } of openings) {
-      if (geometry && openingHit(geometry, p, reach)) return { kind: 'opening', id };
-    }
-  }
+  const openingWithin = (reach: number): Id | undefined =>
+    openings.find(({ geometry }) => geometry && openingHit(geometry, p, reach))?.id;
+  // What is drawn under the pointer comes before any pick aid: an opening's cut, panel or line,
+  // then a wall body or junction fill, and only then the reach around a leaf.
+  const onOpening = openingWithin(GEOM_TOL);
+  if (onOpening !== undefined) return { kind: 'opening', id: onOpening };
 
   for (const w of Object.values(floor.walls)) {
     const c = scene.corners[w.id];
@@ -83,6 +84,8 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     const id = nearestWallAt(floor, node, p);
     if (id !== undefined) return { kind: 'wall', id };
   }
+  const nearLeaf = openingWithin(WALL_TOLERANCE_PX / view.scale);
+  if (nearLeaf !== undefined) return { kind: 'opening', id: nearLeaf };
   // Pick aid for walls drawn thinner than 2 × WALL_TOLERANCE_PX: within that distance of the
   // centre line. For a wall drawn wider this band lies inside its outline, so it adds nothing.
   let nearestWall: Id | undefined;
