@@ -360,6 +360,12 @@ function parseFloor(fe: Element): Floor {
           sill: num(e, 'sill', 0),
           flip: flip === '1' || flip === 'true',
         };
+        if (!(o.width > 0)) {
+          throw new H3xParseError(`<opening> attribute "width" must be above 0: "${o.width}"`, {
+            element: 'opening',
+            attribute: 'width',
+          });
+        }
         add(floor.openings, o, 'opening');
         break;
       }

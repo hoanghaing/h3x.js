@@ -2,7 +2,7 @@ import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '
 import { H3xValidationError, roomShape, stairOutline } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
-import type { WallCorners } from '../shared/walls/joins';
+import type { Junction, WallCorners } from '../shared/walls/joins';
 import { roofHit } from './roofs';
 import { columnShape, inRoomShape, itemFootprint, openingShape, wallOutline } from './shapes';
 import type { PlanKind, Rect, ScreenPoint } from './types';
@@ -14,6 +14,8 @@ export interface HitScene {
   floor: Floor;
   view: View;
   corners: Record<Id, WallCorners>;
+  /** The junction fills drawn between wall ends, by node id: they hit a wall of that node. */
+  junctions?: Readonly<Record<Id, Junction>>;
   /** Dimension label rectangles in screen px, keyed by wall id. */
   dimensions: Array<{ wallId: Id; rect: Rect }>;
   presets?: PresetResolver;
@@ -69,6 +71,11 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     const c = scene.corners[w.id];
     if (c && pointInPolygon(p, wallOutline(c))) return { kind: 'wall', id: w.id };
   }
+  for (const [node, j] of Object.entries(scene.junctions ?? {})) {
+    if (!pointInPolygon(p, j.points)) continue;
+    const id = nearestWallAt(floor, node, p);
+    if (id !== undefined) return { kind: 'wall', id };
+  }
   // Pick aid for walls drawn thinner than 2 × WALL_TOLERANCE_PX: within that distance of the
   // centre line. For a wall drawn wider this band lies inside its outline, so it adds nothing.
   let nearestWall: Id | undefined;
@@ -117,6 +124,25 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   }
 
   return null;
+}
+
+/** Of the walls meeting at `node`, the one whose centre line is nearest `p`. */
+function nearestWallAt(floor: Floor, node: Id, p: Vec2): Id | undefined {
+  let best: Id | undefined;
+  let bestDist = Infinity;
+  for (const w of Object.values(floor.walls)) {
+    if (w.a !== node && w.b !== node) continue;
+    const a = floor.nodes[w.a];
+    const b = floor.nodes[w.b];
+    if (!a || !b) continue;
+    const c = closestPointOnSegment(p, a, b).point;
+    const d = Math.hypot(c.x - p.x, c.y - p.y);
+    if (d < bestDist) {
+      best = w.id;
+      bestDist = d;
+    }
+  }
+  return best;
 }
 
 /** The room whose drawn (inner) outline contains `p`, if any. */

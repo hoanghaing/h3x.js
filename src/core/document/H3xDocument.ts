@@ -141,6 +141,16 @@ export class H3xDocument {
       (f as { roofs?: Floor['roofs'] }).roofs ??= {};
       const roofIssues = Object.values(f.roofs).flatMap(validateRoofParams);
       if (roofIssues.length > 0) throw new H3xValidationError(roofIssues);
+      const badWidths = Object.values(f.openings).filter((o) => !(o.width > 0));
+      if (badWidths.length > 0) {
+        throw new H3xValidationError(
+          badWidths.map((o) => ({
+            code: 'invalid-opening',
+            ids: [o.id],
+            message: `Opening ${o.id} width must be above 0`,
+          })),
+        );
+      }
       (f as { slabThickness?: number }).slabThickness ??= DEFAULT_SLAB_THICKNESS;
       if (!Number.isFinite(f.slabThickness) || f.slabThickness <= 0) {
         throw new H3xValidationError([

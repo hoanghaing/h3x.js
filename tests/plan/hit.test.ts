@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { pointInPolygon } from '../../src/core/geometry/polygon';
+import { wallOutline } from '../../src/core/shapes';
 import { computeJoins } from '../../src/shared/walls/joins';
 import { hitTest, type HitScene } from '../../src/plan/hit';
 import { planToScreen, type View } from '../../src/plan/view';
@@ -30,6 +32,40 @@ describe('hitTest', () => {
     const p = at(3, 0);
     expect(hitTest(s, { x: p.x, y: p.y - 3.5 })).toEqual({ kind: 'wall', id: 'w1' });
     expect(hitTest(s, { x: p.x, y: p.y - 6 })).toEqual({ kind: 'room', id: 'r1' });
+  });
+
+  it.each([50, 100, 200, 800, 2000])('hits every point of a junction fill at %s px/m', (scale) => {
+    const floor = oneRoomFloor();
+    floor.openings = {};
+    floor.nodes.t = { id: 't', x: 2, y: 0 };
+    floor.nodes.c = { id: 'c', x: 2.9, y: 2 };
+    floor.walls.w1!.b = 't';
+    floor.walls.w1b = { ...floor.walls.w2!, id: 'w1b', a: 't', b: 'n2' };
+    floor.walls.skew = { ...floor.walls.w2!, id: 'skew', a: 't', b: 'c' };
+    const { corners, junctions } = computeJoins(floor);
+    const v = { ...view, scale };
+    const s = scene({ floor, corners, junctions, view: v });
+    let inside = 0;
+    for (const [node, { points }] of Object.entries(junctions)) {
+      const xs = points.map((p) => p.x);
+      const ys = points.map((p) => p.y);
+      for (let x = Math.min(...xs) + 0.003; x < Math.max(...xs); x += 0.011) {
+        for (let y = Math.min(...ys) + 0.003; y < Math.max(...ys); y += 0.011) {
+          if (!pointInPolygon({ x, y }, points)) continue;
+          inside++;
+          const hit = hitTest(s, planToScreen(v, { x, y }));
+          if (hit?.kind === 'wall') {
+            const w = floor.walls[hit.id]!;
+            // A wall that meets at this junction, or the one drawn over this point.
+            const meets = w.a === node || w.b === node;
+            expect(meets || pointInPolygon({ x, y }, wallOutline(corners[hit.id]!))).toBe(true);
+          } else {
+            expect(hit?.kind).toBe('node');
+          }
+        }
+      }
+    }
+    expect(inside).toBeGreaterThan(0);
   });
 
   it('hits an opening inside its gap', () => {
