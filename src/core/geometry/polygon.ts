@@ -1,6 +1,6 @@
 import type { Vec2 } from '../types';
 import { GEOM_TOL, MITER_LIMIT } from '../constants';
-import { EPS, cross, leftNormal, normalize, sub } from './vec';
+import { EPS, cross, distance, dot, leftNormal, normalize, sub } from './vec';
 import { closestPointOnSegment, segmentsIntersect } from './segment';
 
 const BOUNDARY_TOL = GEOM_TOL;
@@ -22,8 +22,21 @@ export function signedArea(pts: Vec2[]): number {
 export function isSimple(pts: Vec2[]): boolean {
   const n = pts.length;
   if (n < 3) return false;
+  // Edges whose boxes are GEOM_TOL apart cannot meet: skip them before the exact test.
+  const box = pts.map((p, i) => {
+    const q = at(pts, i + 1);
+    return {
+      x0: Math.min(p.x, q.x) - GEOM_TOL,
+      x1: Math.max(p.x, q.x),
+      y0: Math.min(p.y, q.y) - GEOM_TOL,
+      y1: Math.max(p.y, q.y),
+    };
+  });
   for (let i = 0; i < n; i++) {
+    const a = box[i]!;
     for (let j = i + 1; j < n; j++) {
+      const b = box[j]!;
+      if (b.x0 > a.x1 || a.x0 > b.x1 || b.y0 > a.y1 || a.y0 > b.y1) continue;
       if (j === i + 1 || (i === 0 && j === n - 1)) continue;
       if (segmentsIntersect(at(pts, i), at(pts, i + 1), at(pts, j), at(pts, j + 1))) return false;
     }
@@ -32,24 +45,55 @@ export function isSimple(pts: Vec2[]): boolean {
 }
 
 /**
- * Offsets each edge inward by distances[i] (edge i to i+1) and intersects
- * consecutive offset lines. Input must be CCW (inward = left).
+ * Each edge i (pts[i] to pts[i+1]) offset inward by distances[i], between its joins with the
+ * neighbouring edges. Input must be CCW (inward = left). Edges meet at a miter point. Where
+ * that point is beyond MITER_LIMIT x the larger distance, or does not exist, two kinds of corner
+ * end square at the vertex instead, as the wall outlines do (computeJoins), so from[i] differs
+ * from to[i - 1]: edges that carry straight on (a step between different distances) and reflex
+ * corners (the bevel round an acute spike).
  */
-export function insetPolygon(pts: Vec2[], distances: number[]): Vec2[] {
+export function insetEdges(pts: Vec2[], distances: number[]): { from: Vec2[]; to: Vec2[] } {
   const lines = pts.map((p, i) => {
     const q = at(pts, i + 1);
     const dir = normalize(sub(q, p));
     const nrm = leftNormal(dir);
     const d = distances[i] ?? 0;
-    return { p: { x: p.x + nrm.x * d, y: p.y + nrm.y * d }, dir };
+    return { p: { x: p.x + nrm.x * d, y: p.y + nrm.y * d }, dir, nrm, d };
   });
-  return pts.map((_, i) => {
+  const from: Vec2[] = [];
+  const ends: Vec2[] = []; // ends[i]: where edge i - 1 ends, at vertex i
+  pts.forEach((v, i) => {
     const l0 = at(lines, i - 1);
     const l1 = at(lines, i);
     const denom = cross(l0.dir, l1.dir);
-    if (Math.abs(denom) < EPS) return { x: l1.p.x, y: l1.p.y }; // parallel edges
-    const t = cross(sub(l1.p, l0.p), l1.dir) / denom;
-    return { x: l0.p.x + l0.dir.x * t, y: l0.p.y + l0.dir.y * t };
+    let miter: Vec2 | undefined;
+    if (Math.abs(denom) >= EPS) {
+      const t = cross(sub(l1.p, l0.p), l1.dir) / denom;
+      miter = { x: l0.p.x + l0.dir.x * t, y: l0.p.y + l0.dir.y * t };
+    }
+    let end = miter ?? { x: l1.p.x, y: l1.p.y }; // parallel edges
+    let start = end;
+    const limit = MITER_LIMIT * Math.max(l0.d, l1.d);
+    if ((dot(l0.dir, l1.dir) > 0 || denom < 0) && (!miter || distance(miter, v) > limit)) {
+      const square = { x: v.x + l0.nrm.x * l0.d, y: v.y + l0.nrm.y * l0.d };
+      start = { x: l1.p.x, y: l1.p.y };
+      end = distance(square, start) > GEOM_TOL ? square : start;
+    }
+    ends.push(end);
+    from.push(start);
+  });
+  return { from, to: pts.map((_, i) => at(ends, i + 1)) };
+}
+
+/**
+ * The outline through `insetEdges`: one point per vertex, two where the corner is a step. So
+ * its edges do not map one to one onto the input's.
+ */
+export function insetPolygon(pts: Vec2[], distances: number[]): Vec2[] {
+  const { from, to } = insetEdges(pts, distances);
+  return from.flatMap((start, i) => {
+    const end = at(to, i - 1);
+    return end === start ? [start] : [end, start];
   });
 }
 
