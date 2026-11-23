@@ -3,7 +3,7 @@ import type { EntityChange } from '../document/changes';
 import { H3xValidationError } from '../errors';
 import { polygonOverlapArea } from '../geometry/clip';
 import { signedArea } from '../geometry/polygon';
-import { createId } from '../ids';
+import { createId, idFor } from '../ids';
 import type { Floor, Id, Room, Vec2 } from '../types';
 import { detectRooms, roomShape } from './detect';
 import type { DetectedRoom } from './detect';
@@ -150,5 +150,48 @@ export function syncRooms(before: Readonly<Floor>, after: Readonly<Floor>): Enti
     changes.push({ kind: 'room', id: room.id, before: null, after: room });
   });
 
+  return changes;
+}
+
+/** True when some entity of the floor has the id (ids are unique per floor across kinds). */
+function inUse(floor: Readonly<Floor>, id: Id): boolean {
+  return [
+    floor.nodes,
+    floor.walls,
+    floor.openings,
+    floor.rooms,
+    floor.items,
+    floor.columns,
+    floor.stairs,
+    floor.roofs,
+  ].some((c) => Object.hasOwn(c, id));
+}
+
+/**
+ * New rooms for the faces of `after` that `before` does not have and that no room of `before`
+ * already runs round (same outer walls): what moving walls encloses. Other rooms are left
+ * alone. A new room's id comes from its outer walls, so a drag, which re-runs its command
+ * from the start at every step, keeps one id.
+ */
+export function enclosedRooms(before: Readonly<Floor>, after: Readonly<Floor>): EntityChange[] {
+  // Sorted wall ids name a loop whatever wall it starts from and whichever way it runs.
+  const loopKey = (walls: readonly Id[]): string => [...walls].sort().join(',');
+  const stored = new Set(Object.values(before.rooms).map((r) => loopKey(r.walls)));
+  const fresh = detectRooms(after as Floor).filter((f) => !stored.has(loopKey(f.walls)));
+  if (fresh.length === 0) return [];
+  const found = new Set(detectRooms(before as Floor).map((f) => loopKey(f.walls)));
+  // A roof may still list a room that is gone; a new room must not take that id and join it.
+  const listed = new Set(Object.values(before.roofs).flatMap((r) => r.rooms ?? []));
+  const added = new Set<Id>();
+  const changes: EntityChange[] = [];
+  for (const face of fresh) {
+    const key = loopKey(face.walls);
+    if (found.has(key)) continue;
+    const id = idFor(key, (k) => added.has(k) || listed.has(k) || inUse(before, k));
+    added.add(id);
+    const room: Room = { id, name: '', walls: [...face.walls] };
+    if (face.holes.length > 0) room.holes = face.holes.map((h) => [...h]);
+    changes.push({ kind: 'room', id, before: null, after: room });
+  }
   return changes;
 }
