@@ -1,4 +1,5 @@
 import type {
+  AlignEdge,
   ChangeEvent,
   Clipboard,
   EntityChange,
@@ -22,6 +23,8 @@ import {
   removeNode,
   removeObjects,
   removeOpening,
+  alignObjects,
+  setLocked,
   arrayObjects,
   clipboardCenter,
   clipboardIsEmpty,
@@ -610,6 +613,25 @@ export class H3xPlan {
     return res.ok;
   }
 
+  /**
+   * Locks or unlocks the selection (`setLocked`, one undo step): a locked object rejects every
+   * edit until it is unlocked; it stays selectable and is drawn with the `<prefix>-locked` class.
+   */
+  lockSelection(locked: boolean): boolean {
+    if (this.selectionSet.length === 0) return false;
+    const res = this.doc.tryExecute(setLocked(this.selectionObjects(), locked));
+    this.reportRejected(res.ok ? [] : res.issues);
+    return res.ok;
+  }
+
+  /** Lines up the selection's columns, stairs, items and roofs on `edge` (`alignObjects`). */
+  alignSelection(edge: AlignEdge): boolean {
+    if (this.selectionSet.length < 2) return false;
+    const res = this.doc.tryExecute(alignObjects(this.selectionObjects(), edge));
+    this.reportRejected(res.ok ? [] : res.issues);
+    return res.ok;
+  }
+
   private selectObjects(set: ObjectSet): void {
     const kinds: Array<[keyof ObjectSet, PlanKind]> = [
       ['walls', 'wall'],
@@ -1010,9 +1032,20 @@ export class H3xPlan {
       return;
     }
     const chosen = new Set(set.map((s) => `${s.kind}:${s.id}`));
+    const floor = this.doc.floor;
+    const lockable: Partial<Record<PlanKind, Readonly<Record<Id, { locked?: boolean }>>>> = {
+      wall: floor.walls,
+      opening: floor.openings,
+      item: floor.items,
+      column: floor.columns,
+      stair: floor.stairs,
+      roof: floor.roofs,
+    };
     for (const kind of KINDS) {
+      const coll = lockable[kind];
       for (const [id, g] of this.dom.elements[kind]) {
         g.classList.toggle(`${this.prefix}-selected`, chosen.has(`${kind}:${id}`));
+        g.classList.toggle(`${this.prefix}-locked`, !!coll?.[id]?.locked);
         g.classList.toggle(`${this.prefix}-invalid`, invalid.has(id));
         g.classList.toggle(`${this.prefix}-warning`, warned.has(id) && !invalid.has(id));
         g.classList.toggle(`${this.prefix}-rejected`, rejected.has(id));

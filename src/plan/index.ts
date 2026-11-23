@@ -36,6 +36,7 @@ export {
 } from './H3xPlan';
 export type { PlanPointerEvent, Tool, ToolContext } from './tools/Tool';
 export { SelectEditTool, type SelectEditToolOptions } from './tools/SelectEditTool';
+export { MeasureTool, type Measurement, type MeasureToolOptions } from './tools/MeasureTool';
 export { DrawWallTool, type DrawWallToolOptions, type WallReference } from './tools/DrawWallTool';
 export { DrawSiteTool } from './tools/DrawSiteTool';
 export { ColumnTool, type ColumnToolOptions } from './tools/ColumnTool';

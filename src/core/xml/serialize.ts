@@ -56,6 +56,7 @@ function itemEl(i: Item): string {
     ['preset', i.preset],
     ['variant', i.variant],
     ['mount', i.mount],
+    ['locked', i.locked ? 'true' : undefined],
   ];
   if (i.mount === 'wall') {
     return el('item', [
@@ -79,6 +80,7 @@ function columnEl(c: Column): string {
     ['depth', c.depth],
     ['rotation', c.rotation],
     ['height', c.height],
+    ['locked', c.locked ? 'true' : undefined],
   ]);
 }
 
@@ -94,6 +96,7 @@ function stairEl(s: Stair): string {
     ['turn', s.turn],
     ['hand', s.hand],
     ['flightWidth', s.flightWidth],
+    ['locked', s.locked ? 'true' : undefined],
   ]);
 }
 
@@ -136,6 +139,7 @@ function roofEl(r: Roof, f: Floor): string {
     ['supports', r.supports],
     ['postSize', r.postSize],
     ['postSpacing', r.postSpacing],
+    ['locked', r.locked ? 'true' : undefined],
   );
   return el('roof', attrs);
 }
@@ -173,6 +177,7 @@ function floorEl(f: Floor): string {
         ['height', w.height],
         ['finishLeft', w.finishLeft],
         ['finishRight', w.finishRight],
+        ['locked', w.locked ? 'true' : undefined],
       ]),
     ),
     ...byId(f.openings).map((o) =>
@@ -189,6 +194,7 @@ function floorEl(f: Floor): string {
         ['swing', o.swing === 'left' ? undefined : o.swing],
         ['leaves', o.leaves],
         ['split', o.split],
+        ['locked', o.locked ? 'true' : undefined],
       ]),
     ),
     ...byId(f.rooms).map((r) =>

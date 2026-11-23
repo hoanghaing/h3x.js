@@ -213,6 +213,23 @@
         <button id="btn-duplicate" title="Nhân bản lệch 1 m (Ctrl + D)">Nhân bản</button>
         <label>Nhân <input id="in-array-count" type="number" min="1" step="1" value="3" /></label>
         <button id="btn-array" title="Tạo N bản, mỗi bản lệch thêm x, y của ô Dời">lần</button>
+        <select id="sel-align" title="Căn cột, cầu thang, đồ đạc, mái đang chọn">
+          <option value="left">Căn trái</option>
+          <option value="right">Căn phải</option>
+          <option value="top">Căn trên</option>
+          <option value="bottom">Căn dưới</option>
+          <option value="centerX">Giữa (ngang)</option>
+          <option value="centerY">Giữa (dọc)</option>
+        </select>
+        <button id="btn-align">Căn</button>
+        <button id="btn-lock" title="Khoá vùng chọn: không sửa, xoá được nữa">Khoá</button>
+        <button id="btn-unlock">Mở khoá</button>
+        <button
+          id="btn-measure"
+          title="Đo: nhấp từng điểm, nhấp lại điểm đầu để có diện tích; Esc xoá"
+        >
+          Đo
+        </button>
       </span>
       <button id="btn-wall">Vẽ tường</button>
       <select id="sel-wall-ref" title="Đường đang vẽ là tim tường hay một mặt tường">

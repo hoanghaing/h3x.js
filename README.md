@@ -131,6 +131,12 @@ the opening it makes.
   encloses become rooms named like the copied ones. Pasted walls do not join walls already there,
   and an overlap rejects the paste. `arrayObjects(set, count, delta)` makes `count` copies, the
   k-th k × `delta` away. `clipboardCenter(clip)` and `clipboardIsEmpty(clip)` help placing it.
+- Locking and aligning: `setLocked(set, locked)` locks or unlocks walls (a room id: its walls),
+  openings, items, columns, stairs and roofs (`locked: true`, saved as `locked="true"`). A locked
+  object rejects every edit but unlocking (`object-locked`), and so do the nodes of a locked wall;
+  a pasted copy is not locked. `alignObjects(set, edge)` lines up the columns, stairs, floor /
+  ceiling items and independent roofs of the set on `'left' | 'right' | 'top' | 'bottom' |
+'centerX' | 'centerY'` of their common bounding box (walls are left alone).
 - Structure: `addWall({ from, to, thickness, height? })` draws a wall; each end is
   `{ node: id }` or `{ at: { x, y } }`. An `at` end within `GEOM_TOL` of a node reuses it, one on
   a wall splits that wall (T-junction); the new wall is cut at every node it passes through and
@@ -552,6 +558,9 @@ both views.
   the copy; `plan.duplicateSelection(delta?)` pastes a copy 1 m right and up by default without
   touching the clipboard; `plan.arraySelection(count, delta)` runs `arrayObjects`. Each is one
   undo step and a rejection is flashed.
+- **Lock and align.** `plan.lockSelection(locked)` runs `setLocked` on the selection (locked
+  entities carry the `<prefix>-locked` class and stay selectable); `plan.alignSelection(edge)`
+  runs `alignObjects` on a selection of two or more.
 - **Events.** `plan.on(type, fn)` returns an unsubscribe function.
   - `selectionchange` receives the new primary `Selection | null`, only when the selection
     (or the multiple selection) changes.
@@ -643,6 +652,10 @@ both views.
     **Enter** or double-click closes it (`setSite`); **Esc** cancels.
   - `new ColumnTool({ shape?, width?, depth? })` (`'square'` 0.3 m by default): one click places a
     column (`addColumn`) and selects it.
+  - `new MeasureTool({ onChange? })`: measures without editing. Each click adds a point (drawing
+    snaps; **Shift** ortho, **Alt** none); the preview shows the segment length and the running
+    total; a click on the first point closes it and shows the area. `tool.measurement` is
+    `{ points, length, area, closed }`. **Backspace** drops the last point, **Esc** starts over.
   - `new OpeningTool({ preset })`: a ghost of the preset follows the pointer onto the nearest wall
     within reach, snapped by `resolvePlacement` (ticks show the snap), red where it cannot go. A
     click places it (`addOpening`, one undo step) and selects it; on an invalid spot or with no
