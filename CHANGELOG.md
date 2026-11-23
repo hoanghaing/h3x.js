@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Quantities.
+
+- Core: `floorQuantities(floor)` and `projectQuantities(project)` measure walls (length, gross,
+  opening and net area, volume with corners counted once), room floor areas, openings grouped by
+  type / preset / size, and roof areas, with totals per floor and for the project.
+
 Doors and windows.
 
 - Core: typed openings. `Opening` gains `type` (`door-swing`, `door-double`, `door-sliding`,
