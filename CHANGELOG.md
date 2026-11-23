@@ -56,7 +56,16 @@ Doors and windows.
   `-invalid`.
 - `opening-out-of-wall` is listed once in the plan's standing issues (layout and placement
   checks both report it).
-- Example page: door and window tool with a preset picker, a bar for the selected opening (type,
+- 3D editing: `new H3xViewer(el, scene, { editing: true })` selects, places and drags doors and
+  windows of the active floor with the pointer (Esc clears or cancels, Delete removes, the orbit
+  is suspended while a handle or an opening is dragged). New `viewer.selection`,
+  `viewer.select(sel | null)`, `viewer.setPlacement({ preset } | null)` and events
+  `viewer.on('selectionchange' | 'issues', fn)`; types `ViewerSelection` and `ViewerPlacement`.
+  Placement and drags use the same rules as the plan, one undo step per gesture. Without
+  `editing` the pointer only orbits, as before.
+- 3D: `scene.document` gives the `H3xDocument` the scene renders.
+- Example page: the 3D view edits openings with the pointer, selection is shared with the plan,
+  the preset picker also drives 3D placement and rejections show in the status line. Door and window tool with a preset picker, a bar for the selected opening (type,
   width, height, sill, hinge, swing, leaves, split; inputs the type does not use are disabled),
   an input for a clicked clear distance, and rejection reasons in the status line.
 

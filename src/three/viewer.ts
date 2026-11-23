@@ -5,6 +5,7 @@ import {
   Color,
   DirectionalLight,
   GridHelper,
+  Group,
   HemisphereLight,
   MathUtils,
   type Object3D,
@@ -16,7 +17,10 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import type { Issue } from '../core';
+import { Emitter } from '../core/document/emitter';
 import { AxisGizmo, type AxisName } from './gizmo';
+import { OpeningInteraction, type ViewerPlacement, type ViewerSelection } from './interaction';
 import type { H3xScene } from './scene';
 
 export interface RendererLike {
@@ -34,7 +38,14 @@ export interface H3xViewerOptions {
   gizmo?: boolean;
   shadows?: boolean;
   createRenderer?: () => RendererLike;
+  /**
+   * Select, place and drag openings of the active floor with the pointer; Esc and Delete act
+   * on them. Default false: the pointer only orbits.
+   */
+  editing?: boolean;
 }
+
+export type { ViewerPlacement, ViewerSelection } from './interaction';
 
 const FOV = 50;
 /** The grid sits this far below the lowest content. */
@@ -65,6 +76,10 @@ export class H3xViewer {
   private readonly resizeObserver: ResizeObserver | undefined;
   private readonly onWindowResize = (): void => this.resize();
   private readonly prevContainerPosition: string;
+  private readonly overlay = new Group();
+  private readonly interaction: OpeningInteraction | undefined;
+  private readonly selectionEmitter = new Emitter<ViewerSelection | null>();
+  private readonly issuesEmitter = new Emitter<Issue[]>();
   private orthoHalf = 5;
   private rafId: number | undefined;
   private disposed = false;
@@ -122,6 +137,23 @@ export class H3xViewer {
 
     this.offInvalidate = scene.onInvalidate(() => this.onSceneInvalidate());
 
+    this.overlay.name = 'h3x-overlay';
+    this.threeScene.add(this.overlay);
+    if (opts.editing) {
+      this.interaction = new OpeningInteraction({
+        container,
+        canvas: this.renderer.domElement,
+        controls: this.controls,
+        scene,
+        overlay: this.overlay,
+        camera: () => this.cam,
+        size: () => this.size(),
+        requestRender: () => this.requestRender(),
+        emitSelection: (sel) => this.selectionEmitter.emit(sel),
+        emitIssues: (issues) => this.issuesEmitter.emit(issues),
+      });
+    }
+
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.resize());
       this.resizeObserver.observe(container);
@@ -145,6 +177,41 @@ export class H3xViewer {
   /** The point the camera orbits around (a copy). */
   get target(): Vector3 {
     return this.controls.target.clone();
+  }
+
+  /** The selected opening (editing only; always null otherwise). */
+  get selection(): ViewerSelection | null {
+    return this.interaction?.selection ?? null;
+  }
+
+  /**
+   * Selects an opening of the active floor, or clears with null; fires 'selectionchange' when
+   * it changes. A no-op unless editing.
+   */
+  select(sel: ViewerSelection | null): void {
+    if (this.disposed) return;
+    this.interaction?.select(sel);
+  }
+
+  /**
+   * Turns placing on: a press on a wall of the active floor adds the preset there (and selects
+   * it), a ghost follows the pointer. Null goes back to selecting and dragging. A no-op unless
+   * editing.
+   */
+  setPlacement(p: ViewerPlacement | null): void {
+    if (this.disposed) return;
+    this.interaction?.setPlacement(p);
+  }
+
+  /** Fires when the selection changes (by the pointer, a key, `select` or an edit). */
+  on(type: 'selectionchange', fn: (sel: ViewerSelection | null) => void): () => void;
+  /** Fires with the reasons a pointer edit was refused; `[]` when they no longer apply. */
+  on(type: 'issues', fn: (issues: Issue[]) => void): () => void;
+  on(
+    type: 'selectionchange' | 'issues',
+    fn: ((sel: ViewerSelection | null) => void) & ((issues: Issue[]) => void),
+  ): () => void {
+    return type === 'selectionchange' ? this.selectionEmitter.on(fn) : this.issuesEmitter.on(fn);
   }
 
   setProjection(mode: 'perspective' | 'orthographic'): void {
@@ -241,6 +308,8 @@ export class H3xViewer {
       cancelAnimationFrame(this.rafId);
       this.rafId = undefined;
     }
+    this.interaction?.dispose();
+    this.threeScene.remove(this.overlay);
     this.offInvalidate();
     this.resizeObserver?.disconnect();
     if (typeof window !== 'undefined') window.removeEventListener('resize', this.onWindowResize);
@@ -273,6 +342,7 @@ export class H3xViewer {
   private onSceneInvalidate(): void {
     if (this.disposed) return;
     this.syncSceneDecor();
+    this.interaction?.refresh();
     this.requestRender();
   }
 
