@@ -1,7 +1,7 @@
 # h3x.js
 
-h3x is a TypeScript library for describing house floor plans and saving them as XML. The scene
-is stored as XML, and each object type has its own element with matching attributes.
+h3x is a TypeScript library for describing house floor plans and saving them as ML. The scene
+is stored as ML, and each object type has its own element with matching attributes.
 
 This release ships `h3x/core` (the package root `h3x` re-exports it):
 
@@ -9,7 +9,7 @@ This release ships `h3x/core` (the package root `h3x` re-exports it):
 - commands for layout (nodes and walls), openings, items, finishes and room names,
 - validators for layout and placement (collision, containment, wall ranges),
 - room detection and room geometry helpers,
-- XML read / write in the `<h3x version="1" unit="m">` format,
+- ML read / write in the `<h3x version="1" unit="m">` format,
 - small 2D geometry helpers (oriented boxes).
 
 Two optional subpaths build on it: `h3x/three` (a three.js 3D view) and `h3x/plan` (an SVG 2D
@@ -28,10 +28,10 @@ pnpm add h3x   # or npm install h3x
 import { H3xDocument } from 'h3x/core'; // or from 'h3x'
 ```
 
-**XML loading needs a DOM.** `H3xDocument.fromXML` / `projectFromXML` use the global
-`DOMParser`. Browsers provide it (along with `XMLSerializer`); in Node, install a DOM such as
-jsdom and expose its `DOMParser` (and `XMLSerializer`, if your own code uses it) as globals,
-for example with the vitest `jsdom` environment. `toXML` / `projectToXML` build the string
+**ML loading needs a DOM.** `H3xDocument.fromML` / `projectFromML` use the global
+`DOMParser`. Browsers provide it (along with `MLSerializer`); in Node, install a DOM such as
+jsdom and expose its `DOMParser` (and `MLSerializer`, if your own code uses it) as globals,
+for example with the vitest `jsdom` environment. `toML` / `projectToML` build the string
 themselves and need neither, and everything else works without a DOM.
 
 ## Quick example
@@ -51,11 +51,11 @@ const xml = `<h3x version="1" unit="m">
   </floor>
 </h3x>`;
 
-const doc = H3xDocument.fromXML(xml);
+const doc = H3xDocument.fromML(xml);
 doc.execute(moveNode('n3', { x: 5, y: 3 }));
 doc.execute(moveNode('n2', { x: 5, y: 0 }));
 console.log(roomArea(doc.floor, doc.floor.rooms.r1!, 'center')); // 15
-console.log(doc.toXML());
+console.log(doc.toML());
 doc.undo(); // every command is undoable
 ```
 
@@ -65,10 +65,10 @@ This example is run by the test suite (`tests/core/public-api.test.ts`); keep bo
 
 ### Document
 
-- `H3xDocument.create({ name?, presets? })`, `H3xDocument.fromXML(xml, { presets? })`,
+- `H3xDocument.create({ name?, presets? })`, `H3xDocument.fromML(xml, { presets? })`,
   `H3xDocument.fromProject(project, { presets? })` (deep-cloned; throws `H3xValidationError`
   with `no-floor` or `bad-reference`).
-- `doc.project`, `doc.floor` (live, read-only), `doc.toXML({ pretty? })`.
+- `doc.project`, `doc.floor` (live, read-only), `doc.toML({ pretty? })`.
 - `doc.execute(cmd, { coalesceKey?, restart? })` throws `H3xValidationError` on rejection;
   `doc.tryExecute(cmd, opts)` returns `{ ok: true } | { ok: false, issues }`;
   `doc.preview(cmd)` returns the issues without changing anything.
@@ -163,7 +163,7 @@ the opening it makes.
   - `removeOpening(id)`.
 
   Values an opening may not hold are `invalid-opening` (`validateOpeningValues(o)`,
-  `validateOpeningParams(o)`; also in `fromProject`, a parse error in XML).
+  `validateOpeningParams(o)`; also in `fromProject`, a parse error in ML).
   `normalizeOpening(raw)` fills an older opening (no type, maybe `flip`).
 
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
@@ -187,8 +187,8 @@ A stair links its floor to the floor above; the slab and room floors above get a
   `rotation: 0`), `updateStair(id, patch)` and `removeStair(id)`. A non-finite position or
   rotation, an unknown type / turn / hand, a non-positive size (`flightWidth` too, for every
   type) or a flight wider than the bay (wider than half the bay for U) by more than
-  `FLIGHT_WIDTH_TOL` (1e-4 m, so 4-decimal XML reloads) is `invalid-stair`; `fromProject` and
-  `fromXML` reject such a stair too. `updateStair` ignores patch keys whose value is `undefined`.
+  `FLIGHT_WIDTH_TOL` (1e-4 m, so 4-decimal ML reloads) is `invalid-stair`; `fromProject` and
+  `fromML` reject such a stair too. `updateStair` ignores patch keys whose value is `undefined`.
 - Parameters by type: `stairParams(type)` lists the parameters that shape a stair of that type
   (`straight`: `hand`, `flightWidth`; `L` / `U`: `turn`, `hand`, `flightWidth`; `spiral`: `hand`),
   so an editor can disable the other inputs.
@@ -235,7 +235,7 @@ steel posts under a light roof. See [docs/xml-format.md](docs/xml-format.md) for
   `setRoofEdge(id, { index, hole? } | { wallId }, edge)`, `detachRoof(id)` (turns a follow roof
   independent; extra disjoint outlines become new roofs, listed in the command's `newIds`),
   `fitRoofToWalls(id, rooms?)` and `removeRoof(id)`. Bad input is `invalid-roof`
-  (`validateRoofParams`); `fromProject` and `fromXML` reject such a roof too.
+  (`validateRoofParams`); `fromProject` and `fromML` reject such a roof too.
 - Geometry: `roofGeometry(roof, floor)` returns `{ ok, bodies }` with every face (polygons in 3D),
   the ridge / hip / valley / eave / rake lines, the overhang outline, posts and parapets;
   `roofFaceArea(face)` gives a face's area and `gableProfile(floor, wallId)` the top profile of a
@@ -300,7 +300,7 @@ instead. Only entities touched by a change can block it.
 | `merge-drops-opening`              | removing a node would merge walls into one too short for its openings / wall items                                        |
 | `no-floor`, `bad-reference`        | invalid project passed to `fromProject`                                                                                   |
 | `room-open`                        | room walls do not form a closed loop (from room geometry helpers)                                                         |
-| `non-finite-number`                | `projectToXML` was given a non-finite number                                                                              |
+| `non-finite-number`                | `projectToML` was given a non-finite number                                                                               |
 
 The usable range along a wall is shortened at each end by half the thickness of the thickest
 other wall meeting there, so nothing sits inside a corner. An opening's range ends where the
@@ -356,15 +356,30 @@ does every floor in order and adds them up (`totals`).
 - **Roofs** (`RoofQuantity`): the true area of every face, overhangs included; vertical gable ends
   are left out.
 - **Totals** (`QuantityTotals`): `wallLength`, `wallNetArea`, `wallVolume`, `floorArea`,
-  `openingCount`, `openingArea`, `roofArea`, `slabArea`, `slabVolume`, `paintInterior`,
-  `paintExterior`.
+  `skirting`, `openingCount`, `openingArea`, `roofArea`, `slabArea`, `slabVolume`,
+  `paintInterior`, `paintExterior`.
 
-### XML
+`estimate(quantities, prices)` prices a floor or a project at unit prices in any one currency (no
+defaults; a key left out is not estimated): `masonry` (wall volume, m³), `plaster` (both paint
+areas, m²), `paintInterior`, `paintExterior`, `slab` (slab volume, m³), `flooring` and `ceiling`
+(floor area, m²), `skirting` (m), `roof` (m²), and `openings` per set by preset, else by type
+(`{ byPreset, byType }`). It returns `lines` (`quantity`, `unit`, `unitPrice`, `cost`; one per
+opening group, merged across floors), `total`, and the opening groups left `unpriced`.
 
-`projectFromXML(xml)` and `projectToXML(project, { pretty? })` convert between XML and plain
+```ts
+const { lines, total, unpriced } = estimate(projectQuantities(doc.project), {
+  masonry: 1_200_000,
+  flooring: 350_000,
+  openings: { byType: { 'door-swing': 3_500_000 } },
+});
+```
+
+### ML
+
+`projectFromML(xml)` and `projectToML(project, { pretty? })` convert between ML and plain
 `Project` data. Parse problems throw `H3xParseError` (with `element` / `attribute`), newer
 format versions throw `H3xVersionError`. A file without a `<floor>` is rejected. Numbers are
-written with at most 4 decimals (`XML_DECIMALS`); characters XML 1.0 forbids are written as
+written with at most 4 decimals (`ML_DECIMALS`); characters ML 1.0 forbids are written as
 U+FFFD.
 
 ### Geometry helpers
@@ -399,7 +414,7 @@ pnpm add h3x three
 import { H3xDocument } from 'h3x/core';
 import { H3xScene, H3xViewer } from 'h3x/three';
 
-const doc = H3xDocument.fromXML(xml);
+const doc = H3xDocument.fromML(xml);
 const scene = new H3xScene(doc); // meshes follow every document change
 const viewer = new H3xViewer(document.getElementById('app')!, scene);
 viewer.fitToContent();
@@ -455,7 +470,7 @@ viewer.viewFromAxis('y'); // top view
   `userData = { h3xKind: 'wall' | 'room' | 'join' | 'column' | 'slab' | 'opening', h3xId,
 h3xFloorId }`.
   Ids can repeat across floors, so picking must read `h3xFloorId` as well as `h3xId`; both sit on
-  the mesh itself, no parent walk needed. A `join` mesh closes the top of a T or X junction (or the
+  the mesh itself, no parent walk needed. A `join` mesh closes the top of a T or junction (or the
   slot of a very acute corner); its `h3xId` is the node id. A `slab` mesh's `h3xId` is the floor id.
   Mesh objects keep their identity across document changes: only their geometry and materials are
   swapped, so references from `getWallMesh` / `getFloorMesh` stay valid.
@@ -485,7 +500,7 @@ import { H3xDocument } from 'h3x/core';
 import { H3xScene, H3xViewer } from 'h3x/three';
 import { H3xPlan } from 'h3x/plan';
 
-const doc = H3xDocument.fromXML(xml);
+const doc = H3xDocument.fromML(xml);
 const plan = new H3xPlan(document.getElementById('plan')!, doc);
 const viewer = new H3xViewer(document.getElementById('view3d')!, new H3xScene(doc));
 plan.fitToContent();
@@ -614,7 +629,7 @@ presets?, tool?, stairLabels? })`. Defaults: grid shown, `snap` 0.05 m with alig
   more than once. It does not dispose the document.
 
 In 3D, columns, the site outline (a line loop on the ground around the house) and floors with
-holes (inner light wells) are rendered too. Columns and `<site>` are stored as their own XML
+holes (inner light wells) are rendered too. Columns and `<site>` are stored as their own ML
 elements; see [docs/xml-format.md](docs/xml-format.md).
 
 The plan shows the active floor, with the floor below drawn faded underneath. Switching the
@@ -640,12 +655,12 @@ visibility toggle.
 
 All contact, containment and range checks use one tolerance, `GEOM_TOL` = 1e-3 m (1 mm).
 Things that touch, sit flush or overlap by up to 1 mm are fine. This is well above the
-rounding of 4-decimal XML, so a document that validates keeps validating after save and load.
+rounding of 4-decimal ML, so a document that validates keeps validating after save and load.
 
 ## Clean-room note
 
 This library is a clean-room implementation. No code from earlier, unrelated projects was
-opened, copied, ported or paraphrased; only the general idea of an XML scene with one element
+opened, copied, ported or paraphrased; only the general idea of an ML scene with one element
 per object type carries over.
 
 ## Development
@@ -663,7 +678,7 @@ pnpm dev         # example page (examples/) with the sample layout
 
 ## Documentation
 
-- [XML format](docs/xml-format.md): every element and attribute of `.h3x` v1, with an example.
+- [ML format](docs/xml-format.md): every element and attribute of `.h3x` v1, with an example.
 - [Validation](docs/validation.md): issue codes, blocking vs reported-only, the tolerance contract.
 - [Roadmap](docs/roadmap.md): milestones.
 - [Contributing](CONTRIBUTING.md): setup, rules, how to add commands and validators.
