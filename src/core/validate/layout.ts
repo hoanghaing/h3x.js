@@ -67,14 +67,15 @@ export function openingFitRange(
 }
 
 /**
- * The ranges layout edits keep an opening in: `openingFitRange` and `openingRange`. An opening
- * in either is not moved, so neither an older file nor an opening placed by the outlines is.
+ * The ranges layout edits keep an opening in, for `clampIntoRanges`: `openingRange`, then
+ * `openingFitRange`. An opening in either is not moved, so neither an older file nor an opening
+ * placed by the outlines is; one that must move goes where it is valid when it can.
  */
 export function openingKeptRanges(
   floor: Floor,
   o: { wall: Id; width: number },
 ): { lo: number; hi: number }[] {
-  return [openingFitRange(floor, o), openingRange(floor, o)];
+  return [openingRange(floor, o), openingFitRange(floor, o)];
 }
 
 /**
@@ -102,7 +103,7 @@ export function inRange(offset: number, r: { lo: number; hi: number }): boolean 
 }
 
 /**
- * `offset` when in one of `ranges`, else the nearest end of one that is not empty (see
+ * `offset` when in one of `ranges`, else clamped into the first of them that is not empty (see
  * clampIntoRange); null when all are empty.
  */
 export function clampIntoRanges(
@@ -110,12 +111,11 @@ export function clampIntoRanges(
   ranges: { lo: number; hi: number }[],
 ): number | null {
   if (ranges.some((r) => inRange(offset, r))) return offset;
-  let best: number | null = null;
   for (const r of ranges) {
     const c = clampIntoRange(offset, r);
-    if (c !== null && (best === null || Math.abs(c - offset) < Math.abs(best - offset))) best = c;
+    if (c !== null) return c;
   }
-  return best;
+  return null;
 }
 
 /**

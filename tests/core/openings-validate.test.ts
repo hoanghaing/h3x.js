@@ -704,7 +704,6 @@ describe('layout edits near a skew corner', () => {
 
   it.each<[string, () => Floor, () => Command, number]>([
     ['shorter from the far end', () => skew('a', 0.55), () => setWallLength('w', 3), 0.55],
-    ['shorter into the corner', () => skew('b', 2), () => setWallLength('w', 2), 1.45],
     [
       'shorter from node a',
       () => skew('b', 3.45),
@@ -727,8 +726,6 @@ describe('layout edits near a skew corner', () => {
     ],
     ['split', () => skew('a', 0.55), () => splitWall('w', { x: 2.5, y: 0 }), 0.55],
     ['merged', () => inLine(1.45), () => removeNode('b'), 5.45],
-    ['merged and fitted', () => inLine(1.8), () => removeNode('b'), 5.45],
-    ['node merged', mergeTarget, () => mergeNodes('ta', 'a'), 0.55],
     ['node dropped', dropTarget, () => dropNode('a', { wall: 't', at: { x: 1, y: 0 } }), 0.6],
     ['neighbour pushed', slid, () => pushPullWall('v', -1), 2.45],
     [
@@ -742,6 +739,55 @@ describe('layout edits near a skew corner', () => {
     const doc = mk(make());
     expect(rejection(doc, cmd())).toEqual([]);
     expect(doc.floor.openings.o1!.offset).toBeCloseTo(offset, 9);
+  });
+
+  // Moving node b turns the skew wall to 86.7 degrees: its outline stops 0.1059 from b.
+  const nearlySquare =
+    2 -
+    crossing((Math.acos(0.12132 / Math.hypot(0.12132, 2.12132)) * 180) / Math.PI, 0.2, 0.2) -
+    0.45;
+
+  it.each<[string, () => Floor, () => Command, number]>([
+    ['shorter into the corner', () => skew('b', 2), () => setWallLength('w', 2), nearlySquare],
+    [
+      'merged and fitted',
+      () => inLine(1.8),
+      () => removeNode('b'),
+      6 - crossing(45, 0.2, 0.2) - 0.45,
+    ],
+    ['node merged', mergeTarget, () => mergeNodes('ta', 'a'), crossing(45, 0.2, 0.2) + 0.45],
+  ])('%s: moved only as far as it must, to where it is valid', (_, make, cmd, offset) => {
+    const doc = mk(make());
+    expect(rejection(doc, cmd())).toEqual([]);
+    const o = doc.floor.openings.o1!;
+    expect(o.offset).toBeCloseTo(offset, 4);
+    expect(checkOpening(doc.floor as Floor, o)).toEqual([]);
+  });
+
+  it('a wall edit that must move an opening leaves it valid where it can be', () => {
+    let seed = 11;
+    const random = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    let forced = 0;
+    for (let i = 0; i < 200; i++) {
+      const end = random() < 0.5 ? 'a' : 'b';
+      const deg = 15 + random() * 150;
+      const f = corner(end, [[random() < 0.5 ? deg : -deg, 0.05 + random() * 0.4]], {
+        offset: 0.6 + random() * 2.8,
+        thickness: 0.05 + random() * 0.4,
+      });
+      const doc = mk(f);
+      const before = doc.floor.openings.o1!.offset;
+      const anchor = random() < 0.5 ? 'a' : 'b';
+      const length = 1.2 + random() * 2.6;
+      if (rejection(doc, setWallLength('w', length, { anchor })).length > 0) continue;
+      const o = doc.floor.openings.o1!;
+      const shifted = anchor === 'b' ? before + length - 4 : before;
+      const { lo, hi } = openingRange(doc.floor as Floor, o);
+      if (Math.abs(o.offset - shifted) < 1e-9 || hi < lo) continue;
+      forced++;
+      expect(codes(checkOpening(doc.floor as Floor, o)), `${i}`).toEqual([]);
+    }
+    expect(forced).toBeGreaterThan(30);
   });
 
   it('an opening at the end the outlines allow before a thicker wall in line stays put', () => {
