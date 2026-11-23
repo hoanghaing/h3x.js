@@ -25,6 +25,7 @@ import {
   SelectEditTool,
   StairTool,
   type Tool,
+  type WallReference,
 } from 'h3x/plan';
 import { H3xScene, H3xViewer, type H3xViewMode } from 'h3x/three';
 import layoutXml from './layouts/nha-ong-4x16.h3x?raw';
@@ -252,8 +253,13 @@ on('btn-select', () => {
     'Chọn: kéo nút / tường / cửa, nhấp đúp tường để thêm điểm, Shift + kéo tường để đẩy / kéo, nhấp số khoảng cách cửa để sửa',
   );
 });
+const wallRefSelect = document.getElementById('sel-wall-ref') as HTMLSelectElement;
+const wallRef = (): WallReference => wallRefSelect.value as WallReference;
+wallRefSelect.addEventListener('change', () => {
+  if (plan.tool instanceof DrawWallTool) plan.tool.setOptions({ reference: wallRef() });
+});
 on('btn-wall', () => {
-  useTool(new DrawWallTool());
+  useTool(new DrawWallTool({ reference: wallRef() }));
   say('Vẽ tường: nhấp từng điểm, Enter / nhấp đúp để kết thúc, gõ độ dài rồi Enter');
 });
 on('btn-site', () => {
