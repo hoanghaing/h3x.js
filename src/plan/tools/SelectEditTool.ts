@@ -115,6 +115,8 @@ interface Gesture {
 }
 
 const SNAP_RADIUS_PX = 8;
+/** Clicks closer than this on one distance label are one double click. */
+const DOUBLE_CLICK_MS = 500;
 
 const ARROWS: Record<string, Vec2> = {
   ArrowLeft: { x: -1, y: 0 },
@@ -158,6 +160,7 @@ export class SelectEditTool implements Tool {
   private ctx: ToolContext | null = null;
   private unsubscribe: (() => void) | null = null;
   private press: Press | null = null;
+  private lastDistanceAsk: { id: Id; end: Hinge; at: number } | null = null;
   private gesture: Gesture | null = null;
   private gestureCount = 0;
   /** True while the tool's own document calls run, so their change events are not interruptions. */
@@ -245,7 +248,13 @@ export class SelectEditTool implements Tool {
     if (press.roofVertex) return;
     const t = press.target;
     if (t?.kind === 'openingDistance') {
-      this.ctx.plan.emitOpeningDistanceRequest(t.id, t.end);
+      // The second click of a double click on the same label asks nothing new.
+      const now = performance.now();
+      const last = this.lastDistanceAsk;
+      if (!last || last.id !== t.id || last.end !== t.end || now - last.at > DOUBLE_CLICK_MS) {
+        this.ctx.plan.emitOpeningDistanceRequest(t.id, t.end);
+      }
+      this.lastDistanceAsk = { id: t.id, end: t.end, at: now };
       return;
     }
     if (t?.kind === 'openingHandle') this.ctx.plan.select({ kind: 'opening', id: t.id });

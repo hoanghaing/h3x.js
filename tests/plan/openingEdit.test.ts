@@ -622,6 +622,16 @@ describe('clear distances', () => {
     expect(plan.doc.canUndo).toBe(false);
   });
 
+  it('a double click on one asks only once', () => {
+    const plan = makePlan();
+    const asked: OpeningDistanceRequest[] = [];
+    plan.on('openingDistanceRequest', (e) => asked.push(e));
+    click(plan, { x: 1.2, y: 0 });
+    click(plan, labelCentre(plan, 'b'));
+    click(plan, labelCentre(plan, 'b'));
+    expect(asked).toHaveLength(1);
+  });
+
   it('setOpeningDistance answers it: one undo step; a rejected value is reported', () => {
     const plan = makePlan(withNeighbour());
     expect(plan.setOpeningDistance('o1', { end: 'a', distance: 0.3 })).toEqual({ ok: true });
