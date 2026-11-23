@@ -59,7 +59,7 @@ export function copyObjects(floor: Readonly<Floor>, set: Readonly<ObjectSet>): C
       if (r.floorFinish !== undefined) out.floorFinish = r.floorFinish;
       return out;
     });
-  return structuredClone({
+  const clip = structuredClone({
     version: 1 as const,
     nodes: [...nodeIds].map((id) => f.nodes[id]!),
     walls,
@@ -70,6 +70,18 @@ export function copyObjects(floor: Readonly<Floor>, set: Readonly<ObjectSet>): C
     roofs: pick(set.roofs, f.roofs).filter((r) => !r.follow),
     rooms,
   });
+  // A copy is a new object: it does not inherit the lock.
+  for (const e of [
+    ...clip.walls,
+    ...clip.openings,
+    ...clip.items,
+    ...clip.columns,
+    ...clip.stairs,
+    ...clip.roofs,
+  ]) {
+    delete (e as { locked?: boolean }).locked;
+  }
+  return clip;
 }
 
 /** Whether the clipboard holds anything to paste. */

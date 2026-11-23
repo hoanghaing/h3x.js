@@ -419,6 +419,21 @@ function parseFloor(fe: Element): Floor {
       default:
         break; // unknown elements are ignored
     }
+    // locked="true" on any lockable element.
+    if (e.getAttribute('locked') === 'true') {
+      const coll = (
+        {
+          wall: floor.walls,
+          opening: floor.openings,
+          item: floor.items,
+          column: floor.columns,
+          stair: floor.stairs,
+          roof: floor.roofs,
+        } as Record<string, Record<string, { locked?: boolean }>>
+      )[e.tagName];
+      const ent = coll?.[e.getAttribute('id') ?? ''];
+      if (ent) ent.locked = true;
+    }
   }
 
   const bad = checkRefs(floor)[0];

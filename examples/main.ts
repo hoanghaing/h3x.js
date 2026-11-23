@@ -12,6 +12,7 @@ import {
   stairParams,
   updateStair,
   type RoofPresetId,
+  type AlignEdge,
   type Stair,
   type Transform,
 } from 'h3x/core';
@@ -24,6 +25,7 @@ import {
   RoofTool,
   SelectEditTool,
   StairTool,
+  MeasureTool,
   type Tool,
   type WallReference,
 } from 'h3x/plan';
@@ -318,6 +320,35 @@ on('btn-array', () => {
     return say('Nhập số lần và khoảng x, y', true);
   if (plan.arraySelection(n, { x, y })) say(`Đã tạo ${n} bản, mỗi bản lệch ${x}, ${y} m`);
   else say('Không nhân được: có bản chồng lên đối tượng có sẵn', true);
+});
+on('btn-align', () => {
+  const edge = (document.getElementById('sel-align') as HTMLSelectElement).value as AlignEdge;
+  if (plan.selectionSet.length < 2) return say('Chọn từ hai đối tượng để căn', true);
+  if (plan.alignSelection(edge)) say('Đã căn (cột, cầu thang, đồ đạc, mái; tường không đổi)');
+  else say('Không căn được: có đối tượng bị khoá hoặc chồng lên vật khác', true);
+});
+on('btn-lock', () => {
+  if (plan.lockSelection(true)) say('Đã khoá');
+  else say('Chọn đối tượng để khoá', true);
+});
+on('btn-unlock', () => {
+  if (plan.lockSelection(false)) say('Đã mở khoá');
+  else say('Chọn đối tượng để mở khoá', true);
+});
+on('btn-measure', () => {
+  useTool(
+    new MeasureTool({
+      onChange: (m) =>
+        say(
+          m.points.length === 0
+            ? 'Đo: nhấp từng điểm'
+            : m.closed
+              ? `Diện tích ${m.area!.toFixed(2)} m², chu vi ${m.length.toFixed(2)} m`
+              : `Tổng ${m.length.toFixed(2)} m (${m.points.length} điểm)`,
+        ),
+    }),
+  );
+  say('Đo: nhấp từng điểm, nhấp lại điểm đầu để có diện tích; Backspace bỏ điểm cuối, Esc xoá');
 });
 on('btn-delete', () => {
   if (!plan.deleteSelection())

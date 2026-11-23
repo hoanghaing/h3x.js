@@ -25,6 +25,9 @@ export {
   pasteObjects,
 } from './commands/clipboard';
 export type { Clipboard } from './commands/clipboard';
+export { lockValidator, setLocked } from './commands/lock';
+export { alignObjects } from './commands/align';
+export type { AlignEdge } from './commands/align';
 export {
   addWall,
   splitWall,

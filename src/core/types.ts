@@ -16,6 +16,8 @@ export interface Wall {
   height: number;
   finishLeft?: string;
   finishRight?: string;
+  /** Locked: every edit but unlocking is rejected (`setLocked`). */
+  locked?: boolean;
 }
 export type OpeningType =
   | 'door-swing'
@@ -49,6 +51,8 @@ export interface Opening {
   leaves?: number;
   /** Share of the larger leaf of a double door, 0.5 <= split < 1. */
   split?: number;
+  /** Locked: every edit but unlocking is rejected (`setLocked`). */
+  locked?: boolean;
 }
 export interface Room {
   id: Id;
@@ -68,6 +72,8 @@ interface ItemBase {
   id: Id;
   preset: string;
   variant?: string;
+  /** Locked: every edit but unlocking is rejected (`setLocked`). */
+  locked?: boolean;
 }
 export interface FloorItem extends ItemBase {
   mount: 'floor';
@@ -102,6 +108,8 @@ export interface Column {
   rotation: number;
   /** Defaults to the floor wallHeight. */
   height?: number;
+  /** Locked: every edit but unlocking is rejected (`setLocked`). */
+  locked?: boolean;
 }
 export type StairType = 'straight' | 'L' | 'U' | 'spiral';
 export interface Stair {
@@ -121,6 +129,8 @@ export interface Stair {
   hand: 'left' | 'right';
   /** Width of each flight; ignored for spiral. */
   flightWidth: number;
+  /** Locked: every edit but unlocking is rejected (`setLocked`). */
+  locked?: boolean;
 }
 export type RoofMaterial = 'tile' | 'metal' | 'concrete' | 'glass' | 'polycarbonate';
 export type RoofEdge =
@@ -169,6 +179,8 @@ export interface Roof {
   parapet?: number;
   /** Automatic steel posts. */
   supports?: 'posts';
+  /** Locked: every edit but unlocking is rejected (`setLocked`). */
+  locked?: boolean;
   postSize?: number;
   postSpacing?: number;
 }

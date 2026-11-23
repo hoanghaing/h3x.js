@@ -3,6 +3,7 @@ import { normalizeFloors } from '../floors/stack';
 import { H3xValidationError } from '../errors';
 import { normalizeRoomOrientation } from '../rooms/normalize';
 import { layoutValidator, validateLayout } from '../validate/layout';
+import { lockValidator } from '../commands/lock';
 import { validateColumnSupport } from '../validate/floors';
 import { validateStairs } from '../validate/stairs';
 import { validateStairParams } from '../commands/stairs';
@@ -78,7 +79,7 @@ export class H3xDocument {
     // normalizeFloors guarantees a level-0 floor.
     this._activeFloorId = (project.floors.find((f) => f.level === 0) ?? project.floors[0]!).id;
     this.presets = createPresetResolver(presets);
-    this.validators.push(layoutValidator, placementValidator);
+    this.validators.push(lockValidator, layoutValidator, placementValidator);
   }
 
   static create(opts: { name?: string; presets?: PresetResolver } = {}): H3xDocument {

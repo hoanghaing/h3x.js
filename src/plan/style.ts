@@ -81,6 +81,8 @@ ${p} .${prefix}-preview-label { fill: #1d4ed8; font-size: ${DIMENSION_FONT_PX}px
 ${p} .${prefix}-roof-handle, ${p} .${prefix}-opening-handle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; }
 ${p} .${prefix}-drop-target { fill: none; stroke: #db2777; stroke-width: 2; }
 ${p} .${prefix}-guide, ${p} .${prefix}-ghost-guide { stroke: #db2777; stroke-width: 1; stroke-dasharray: 4 3; }
+${p} .${prefix}-locked { cursor: not-allowed; }
+${p} .${prefix}-locked > * { stroke-dasharray: 2 2; }
 ${p} .${prefix}-snap-mark { fill: none; stroke: #db2777; stroke-width: 1.5; pointer-events: none; }
 `.trimStart();
 }
