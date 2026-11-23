@@ -29,6 +29,8 @@ const FUNCTIONS = [
   'openingHit',
   'pieceOutline',
   'isWarningIssue',
+  'floorQuantities',
+  'projectQuantities',
   'addItem',
   'moveItem',
   'removeItem',

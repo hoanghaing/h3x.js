@@ -82,6 +82,16 @@ export {
 } from './commands/floors';
 
 export { floorOutline } from './floors/outline';
+export { floorQuantities, projectQuantities } from './quantities';
+export type {
+  FloorQuantities,
+  OpeningQuantity,
+  ProjectQuantities,
+  QuantityTotals,
+  RoofQuantity,
+  RoomQuantity,
+  WallQuantity,
+} from './quantities';
 export type { OutlineRing } from './floors/outline';
 
 export { validateLayout } from './validate/layout';

@@ -336,6 +336,22 @@ walls is removed so that it opens, the roof becomes independent with the shape i
 bodies become several roofs), in the same undo step. The same happens when drawing or deleting
 walls cuts out or absorbs a space too small to be a room. Moving walls still moves the roof.
 
+### Quantities
+
+`floorQuantities(floor)` measures one floor for estimates, and `projectQuantities(project)` does
+every floor in order and adds them up (`totals`).
+
+- **Walls** (`WallQuantity`): `length` node to node, `grossArea` = length × height (one face),
+  `openingArea` (only the part of each opening inside the wall), `netArea`, and `volume` from the
+  joined outline × height less the openings, so corners are counted once.
+- **Rooms** (`RoomQuantity`): `area` of the floor between the walls, holes excluded.
+- **Openings** (`OpeningQuantity`): grouped by type, preset, width and height, with `count` and
+  `area`, like a door and window schedule.
+- **Roofs** (`RoofQuantity`): the true area of every face, overhangs included; vertical gable ends
+  are left out.
+- **Totals** (`QuantityTotals`): `wallLength`, `wallNetArea`, `wallVolume`, `floorArea`,
+  `openingCount`, `openingArea`, `roofArea`.
+
 ### XML
 
 `projectFromXML(xml)` and `projectToXML(project, { pretty? })` convert between XML and plain
