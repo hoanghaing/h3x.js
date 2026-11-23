@@ -4,15 +4,30 @@ import { GEOM_TOL } from '../constants';
 import { H3xValidationError } from '../errors';
 import { polygonOverlapArea } from '../geometry/clip';
 import { polygonContainsPolygon, signedArea } from '../geometry/polygon';
+import { openingGeometry } from '../openings/geometry';
+import { validateOpeningParams, validateOpeningValues } from '../openings/params';
 import { roomShape } from '../rooms/detect';
-import { convexOverlap, itemFootprint, openingSpan, spanOverlap, wallOutlines } from '../shapes';
-import { inRange, openingRange, wallUsableRange } from './layout';
+import {
+  columnPolygon,
+  convexOverlap,
+  itemFootprint,
+  openingSpan,
+  spanOverlap,
+  wallOutlines,
+} from '../shapes';
+import { COLUMN_OVERLAP_AREA, inRange, openingRange, wallUsableRange } from './layout';
+import { validateSwings } from './swing';
 import type { Floor, Issue, Item, Opening, PresetResolver, Vec2 } from '../types';
 
+/**
+ * The issues that block editing `o`: `invalid-opening`, `opening-out-of-wall` (see openingRange),
+ * `opening-overlap`, `opening-too-tall` and `opening-hits-column`. `opening-swing-blocked` only
+ * warns, so only `validatePlacements` reports it.
+ */
 export function checkOpening(floor: Floor, o: Opening): Issue[] {
+  const out = validateOpeningValues(o);
   const wall = floor.walls[o.wall];
-  if (!wall) return [];
-  const out: Issue[] = [];
+  if (!wall) return out;
   if (!inRange(o.offset, openingRange(floor, o))) {
     out.push({
       code: 'opening-out-of-wall',
@@ -37,7 +52,23 @@ export function checkOpening(floor: Floor, o: Opening): Issue[] {
       message: `Opening ${o.id} (sill ${o.sill} + height ${o.height}) is taller than wall ${o.wall}`,
     });
   }
+  out.push(...columnHits(floor, o));
   return out;
+}
+
+function columnHits(floor: Floor, o: Opening): Issue[] {
+  const columns = Object.values(floor.columns);
+  // A leaf count out of range cannot be laid out; invalid-opening reports it.
+  if (columns.length === 0 || validateOpeningParams(o).length > 0) return [];
+  const cut = openingGeometry(floor, o)?.cut;
+  if (!cut) return [];
+  return columns
+    .filter((c) => polygonOverlapArea(cut, columnPolygon(c)) > COLUMN_OVERLAP_AREA)
+    .map((c) => ({
+      code: 'opening-hits-column',
+      ids: [o.id, c.id],
+      message: `Opening ${o.id} overlaps column ${c.id}`,
+    }));
 }
 
 /** Overlap area (m²) of an item footprint and a room hole at or below which they only touch. */
@@ -140,14 +171,34 @@ export function checkItem(floor: Floor, item: Item, presets: PresetResolver): Is
   return out;
 }
 
-export function validatePlacements(floor: Floor, presets: PresetResolver): Issue[] {
+/**
+ * Every placement issue of `floor`, warnings included. `above` is the floor above, which gives
+ * stairs their rise; without it a stair's whole bay can block a door's swing.
+ */
+export function validatePlacements(floor: Floor, presets: PresetResolver, above?: Floor): Issue[] {
   return [
     ...Object.values(floor.openings).flatMap((o) => checkOpening(floor, o)),
+    ...validateSwings(floor, above),
     ...Object.values(floor.items).flatMap((i) => checkItem(floor, i, presets)),
   ];
 }
 
 const noPresets: PresetResolver = () => undefined;
+
+/** The fields that place an opening; the others only choose what is in it and how it opens. */
+const PLACING_KEYS = ['wall', 'preset', 'offset', 'width', 'height', 'sill'] as const;
+
+/**
+ * What blocks the edit from `before` to `o`. One that changes only type, hinge, swing, leaves or
+ * split is blocked only by the issues it adds, so that a flagged opening stays editable.
+ */
+function editIssues(floor: Floor, before: Opening | null, o: Opening): Issue[] {
+  const issues = checkOpening(floor, o);
+  if (issues.length === 0 || !before || PLACING_KEYS.some((k) => before[k] !== o[k])) return issues;
+  const key = (i: Issue): string => `${i.code}:${i.ids.join(',')}:${i.message}`;
+  const standing = new Set(checkOpening(floor, before).map(key));
+  return issues.filter((i) => !standing.has(key(i)));
+}
 
 /** Blocking issues for openings / items created or modified by the change set (spec 5.4, R3). */
 export const placementValidator: Validator = (
@@ -162,7 +213,7 @@ export const placementValidator: Validator = (
     if (c.after === null) continue;
     if (c.kind === 'opening') {
       const o = floor.openings[c.id];
-      if (o) out.push(...checkOpening(floor, o));
+      if (o) out.push(...editIssues(floor, c.before, o));
     } else if (c.kind === 'item') {
       const it = floor.items[c.id];
       if (it) out.push(...checkItem(floor, it, presets));

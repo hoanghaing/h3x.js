@@ -55,7 +55,10 @@ describe('validation is stable across an XML round trip', () => {
 
   it('(b) door clamped at the end of a slanted wall (moveNode)', () => {
     for (const y of [0.3, 0.5, 0.7, 0.9]) {
-      const doc = mk();
+      // Swinging out of the room: inside, the corner at n1 turns acute and blocks the leaf.
+      const f = oneRoomFloor();
+      f.openings.o1!.swing = 'right';
+      const doc = mk(f);
       expect(doc.tryExecute(moveNode('n2', { x: 1.3, y })).ok).toBe(true);
       expect(codes(doc)).toEqual([]);
       const back = expectStable(doc);

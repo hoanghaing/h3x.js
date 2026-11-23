@@ -1,3 +1,4 @@
+import { XML_DECIMALS } from '../constants';
 import type { Hinge, Issue, Opening, OpeningParam, OpeningType, Swing } from '../types';
 
 export const OPENING_TYPES: readonly OpeningType[] = [
@@ -68,13 +69,18 @@ export function openingParams(o: ParamInput): readonly OpeningParam[] {
   }
 }
 
+/** A number as a file holds it. */
+const saved = (v: number): number => Number(v.toFixed(XML_DECIMALS));
+
+const invalid = (o: Opening, what: string): Issue => ({
+  code: 'invalid-opening',
+  ids: [o.id],
+  message: `Opening ${o.id} ${what}`,
+});
+
 /** Issues for a type, orientation, leaf count or split outside what the type allows. */
 export function validateOpeningParams(o: Opening): Issue[] {
-  const bad = (what: string): Issue => ({
-    code: 'invalid-opening',
-    ids: [o.id],
-    message: `Opening ${o.id} ${what}`,
-  });
+  const bad = (what: string): Issue => invalid(o, what);
   if (!OPENING_TYPES.includes(o.type)) return [bad(`has an unknown type "${String(o.type)}"`)];
   const out: Issue[] = [];
   if (o.hinge !== 'a' && o.hinge !== 'b') out.push(bad('hinge must be "a" or "b"'));
@@ -90,9 +96,30 @@ export function validateOpeningParams(o: Opening): Issue[] {
       out.push(bad(`leaves must be ${span}`));
     }
   }
-  if (o.split !== undefined && !(o.split >= 0.5 && o.split < 1)) {
+  const { split } = o;
+  if (split !== undefined && !(Number.isFinite(split) && split >= 0.5 && saved(split) < 1)) {
     out.push(bad('split must be at least 0.5 and below 1'));
   }
+  return out;
+}
+
+/**
+ * Issues for every value that an opening may not be stored with: those of `validateOpeningParams`,
+ * plus ids that are not text, numbers that are not finite, a width or height that is not above 0
+ * also as saved, and a sill below 0. A file may still hold a bad height or sill.
+ */
+export function validateOpeningValues(o: Opening): Issue[] {
+  const out = validateOpeningParams(o);
+  const check = (ok: boolean, what: string): void => {
+    if (!ok) out.push(invalid(o, what));
+  };
+  const isSize = (v: number): boolean => Number.isFinite(v) && saved(v) > 0;
+  check(typeof o.wall === 'string', 'wall must be an id');
+  check(typeof o.preset === 'string', 'preset must be an id');
+  check(Number.isFinite(o.offset), 'offset must be a finite number');
+  check(isSize(o.width), 'width must be above 0');
+  check(isSize(o.height), 'height must be above 0');
+  check(Number.isFinite(o.sill) && o.sill >= 0, 'sill must be 0 or more');
   return out;
 }
 

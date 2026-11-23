@@ -37,6 +37,12 @@ function getOpening(ctx: CommandContext, id: Id): Opening {
   return o;
 }
 
+function checkEnd(id: Id, end: Hinge): void {
+  if (end !== 'a' && end !== 'b') {
+    throw fail('invalid-opening', [id], `Opening ${id} end must be "a" or "b"`);
+  }
+}
+
 function changed(o: Opening, after: Opening): EntityChange[] {
   if (deepEqual(o, after)) return [];
   return [{ kind: 'opening', id: o.id, before: structuredClone(o), after }];
@@ -71,11 +77,7 @@ function fromPreset(
   };
   if (info.opening?.leaves !== undefined) made.leaves = info.opening.leaves;
   if (info.opening?.split !== undefined) made.split = info.opening.split;
-  const after = patched(made, over);
-  if (!(after.width > 0)) {
-    throw fail('invalid-opening', [id], `Opening ${id} width must be above 0`);
-  }
-  return after;
+  return patched(made, over);
 }
 
 /** Adds an opening as `preset` makes it; any other field given overrides the preset. */
@@ -117,12 +119,16 @@ export function updateOpening(id: Id, patch: OpeningPatch): Command {
 /** The same command as `updateOpening`. */
 export const moveOpening = updateOpening;
 
-/** Sets the width by moving the jamb at `end`; the other jamb stays still. */
+/**
+ * Sets the width by moving the jamb at `end`; the other jamb stays still. `invalid-opening` for
+ * another `end`.
+ */
 export function resizeOpening(id: Id, { end, width }: { end: Hinge; width: number }): Command {
   return {
     label: 'resizeOpening',
     run: (ctx) => {
       const o = getOpening(ctx, id);
+      checkEnd(id, end);
       // Before rounding: a stored offset need not be round, and rounding it would move the opening.
       if (Math.abs(width - o.width) <= EPS) return [];
       const { lo, hi } = openingSpan(o);
@@ -134,8 +140,8 @@ export function resizeOpening(id: Id, { end, width }: { end: Hinge; width: numbe
 
 /**
  * Moves an opening along its wall until the distance beside the jamb at `end` (see
- * `openingClearances`) is `distance`. `invalid-opening` for a negative distance;
- * `opening-overlap` for a clear distance with another opening in the way.
+ * `openingClearances`) is `distance`. `invalid-opening` for another `end` or a distance that is
+ * not 0 or more; `opening-overlap` for a clear distance with another opening in the way.
  */
 export function setOpeningDistance(
   id: Id,
@@ -145,7 +151,8 @@ export function setOpeningDistance(
     label: 'setOpeningDistance',
     run: (ctx) => {
       const o = getOpening(ctx, id);
-      if (!(distance >= 0)) {
+      checkEnd(id, end);
+      if (!(Number.isFinite(distance) && distance >= 0)) {
         throw fail('invalid-opening', [id], `Opening ${id} distance must be 0 or more`);
       }
       const by = distance - openingClearances(ctx.floor, o)[end][from];

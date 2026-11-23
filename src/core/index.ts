@@ -40,6 +40,7 @@ export {
   openingParams,
   openingLeaves,
   validateOpeningParams,
+  validateOpeningValues,
   mirrorOrientation,
   nextOrientation,
 } from './openings/params';

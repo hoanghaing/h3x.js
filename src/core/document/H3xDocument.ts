@@ -261,9 +261,13 @@ export class H3xDocument {
     ];
   }
 
-  /** All placement issues for openings and items, including pre-existing ones. */
+  /** All placement issues for openings and items, including pre-existing ones and warnings. */
   validatePlacements(): Issue[] {
-    return validatePlacements(this.floor as Floor, this.presets ?? (() => undefined));
+    return validatePlacements(
+      this.floor as Floor,
+      this.presets ?? (() => undefined),
+      this.floorAbove(this.floor.id) as Floor | undefined,
+    );
   }
 
   addValidator(v: Validator): void {

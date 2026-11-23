@@ -180,7 +180,7 @@ export function planPose(o: LocalOpening): OpeningPiece[] {
 /** The shut pose, each piece a solid: frame, leaves and glass. An empty cut holds none. */
 export function closedPose(o: LocalOpening): OpeningPiece[] {
   const { type, w, t, z0, z1 } = o;
-  if (type === 'opening' || w <= GEOM_TOL || z1 - z0 <= GEOM_TOL) return [];
+  if (type === 'opening' || !(w > GEOM_TOL && z1 - z0 > GEOM_TOL)) return []; // also for NaN
 
   const isWindow = type.startsWith('window');
   const side = frameWidth(o);

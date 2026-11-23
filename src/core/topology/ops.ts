@@ -5,7 +5,7 @@ import { EPS, add, cross, distance, dot, leftNormal, scale, sub, tidy } from '..
 import { createId } from '../ids';
 import { mirrorOrientation } from '../openings/params';
 import { openingSpan } from '../shapes';
-import { clampIntoRange, inRange, openingRange, wallUsableRange } from '../validate/layout';
+import { clampIntoRanges, inRange, openingKeptRanges, wallUsableRange } from '../validate/layout';
 import type { Floor, Id, PresetResolver, Vec2, Wall } from '../types';
 import { wallsAt } from './draft';
 
@@ -20,8 +20,8 @@ function endsOf(draft: Floor, w: Wall): [Vec2, Vec2] {
 }
 
 /**
- * Keeps every opening / wall item on `wallIds` in its usable range: in range stays,
- * otherwise it is clamped when it fits, else `code` is thrown.
+ * Keeps every opening / wall item on `wallIds` in its usable range (openings: either of
+ * openingKeptRanges): in range stays, otherwise it is clamped when it fits, else `code` is thrown.
  */
 function fitOn(
   draft: Floor,
@@ -32,7 +32,7 @@ function fitOn(
 ): void {
   for (const o of Object.values(draft.openings)) {
     if (!wallIds.includes(o.wall)) continue;
-    o.offset = clampOrFail(o.id, o.offset, openingRange(draft, o), code, why);
+    o.offset = clampOrFail(o.id, o.offset, openingKeptRanges(draft, o), code, why);
   }
   fitItemsOn(draft, wallIds, presets, code, why);
 }
@@ -49,18 +49,18 @@ function fitItemsOn(
     if (it.mount !== 'wall' || !wallIds.includes(it.wall)) continue;
     const width = presets?.(it.preset)?.footprint.w ?? 0;
     const range = wallUsableRange(draft, it.wall, { width });
-    it.offset = clampOrFail(it.id, it.offset, range, code, why);
+    it.offset = clampOrFail(it.id, it.offset, [range], code, why);
   }
 }
 
 function clampOrFail(
   id: Id,
   offset: number,
-  range: { lo: number; hi: number },
+  ranges: { lo: number; hi: number }[],
   code: string,
   why: string,
 ): number {
-  const next = clampIntoRange(offset, range);
+  const next = clampIntoRanges(offset, ranges);
   if (next === null) throw fail(code, [id], `${id} ${why}`);
   return next;
 }
@@ -72,7 +72,8 @@ const cutsOpening = (id: Id, wall: Id): Error =>
 function fittingOpenings(draft: Floor): Map<Id, Id> {
   const out = new Map<Id, Id>();
   for (const o of Object.values(draft.openings)) {
-    if (draft.walls[o.wall] && inRange(o.offset, openingRange(draft, o))) out.set(o.id, o.wall);
+    if (draft.walls[o.wall] && openingKeptRanges(draft, o).some((r) => inRange(o.offset, r)))
+      out.set(o.id, o.wall);
   }
   return out;
 }
@@ -85,7 +86,7 @@ function requireStillFitting(draft: Floor, fitting: Map<Id, Id>, walls?: Id[]): 
   for (const [id, wall] of fitting) {
     const o = draft.openings[id];
     if (!o || (walls && !walls.includes(o.wall))) continue;
-    if (!inRange(o.offset, openingRange(draft, o))) throw cutsOpening(id, wall);
+    if (!openingKeptRanges(draft, o).some((r) => inRange(o.offset, r))) throw cutsOpening(id, wall);
   }
 }
 
