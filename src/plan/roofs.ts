@@ -8,7 +8,7 @@ import {
 } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
-import { NON_SCALING, pointsAttr, screenSpaceTransform, svgEl } from './render';
+import { NON_SCALING, pointsAttr, screenSpaceTransform, svgEl } from './svg';
 import type { View } from './view';
 
 /** Half-length and half-width (px) of a slope arrow, and the label offset below it. */

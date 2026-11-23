@@ -1,6 +1,6 @@
 import type { Floor, Id } from '../core';
 import type { WallCorners } from '../shared/walls/joins';
-import { NON_SCALING, pointsAttr, svgEl } from './render';
+import { NON_SCALING, pointsAttr, svgEl } from './svg';
 import { columnShape, wallOutline } from './shapes';
 import { stairFromAbove, type StairLabels } from './stairs';
 import type { View } from './view';

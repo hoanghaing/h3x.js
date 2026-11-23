@@ -26,11 +26,19 @@ import { columnShape, itemFootprint, roomLabel, roomPath, wallOutline } from './
 import { roofOwnShapes } from './roofs';
 import { stairOwnShapes, type StairLabels } from './stairs';
 import { NODE_RADIUS_PX } from './style';
-import { NON_SCALING, pointsAttr, setAttr, setText, svgEl } from './svg';
+import { NON_SCALING, pointsAttr, screenSpaceTransform, setAttr, setText, svgEl } from './svg';
 import type { PlanKind, Rect } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
 
-export { NON_SCALING, SVG_NS, pointsAttr, setAttr, setText, svgEl } from './svg';
+export {
+  NON_SCALING,
+  SVG_NS,
+  pointsAttr,
+  screenSpaceTransform,
+  setAttr,
+  setText,
+  svgEl,
+} from './svg';
 
 /** Minor grid lines per meter (0.1 m apart) and the on-screen gap (px) below which they hide. */
 const MINOR_PER_M = 10;
@@ -43,16 +51,6 @@ const GLYPH_ADVANCE = 0.6;
 /** Plan → screen as an SVG transform (+y up, so the y axis is mirrored). */
 export function rootTransform(v: View): string {
   return `matrix(${v.scale},0,0,${-v.scale},${v.width / 2 - v.cx * v.scale},${v.height / 2 + v.cy * v.scale})`;
-}
-
-/**
- * Transform for an element inside the plan-space root that should be drawn in screen pixels
- * (upright, unscaled) at plan point `p`, rotated by `angleDeg` (plan degrees, CCW).
- */
-export function screenSpaceTransform(v: View, p: Vec2, angleDeg = 0): string {
-  const k = 1 / v.scale;
-  const base = `matrix(${k},0,0,${-k},${p.x},${p.y})`;
-  return angleDeg ? `${base} rotate(${-angleDeg})` : base;
 }
 
 /** Grid lines every `1 / perUnit` m across the visible area, skipping every `skipEvery`-th. */

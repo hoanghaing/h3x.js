@@ -1,4 +1,5 @@
 import type { Vec2 } from '../core';
+import type { View } from './view';
 
 export const SVG_NS = 'http://www.w3.org/2000/svg';
 /** Strokes keep their pixel width under the plan → screen scale. */
@@ -24,4 +25,14 @@ export function setText(e: Element, value: string): void {
 
 export function pointsAttr(pts: readonly Vec2[]): string {
   return pts.map((p) => `${p.x},${p.y}`).join(' ');
+}
+
+/**
+ * Transform for an element inside the plan-space root that should be drawn in screen pixels
+ * (upright, unscaled) at plan point `p`, rotated by `angleDeg` (plan degrees, CCW).
+ */
+export function screenSpaceTransform(v: View, p: Vec2, angleDeg = 0): string {
+  const k = 1 / v.scale;
+  const base = `matrix(${k},0,0,${-k},${p.x},${p.y})`;
+  return angleDeg ? `${base} rotate(${-angleDeg})` : base;
 }

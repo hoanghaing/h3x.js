@@ -1,6 +1,6 @@
 import { layoutStair, stairOutline, type Stair, type StairPiece, type Vec2 } from '../core';
 import { closestPointOnSegment } from '../core/geometry/segment';
-import { NON_SCALING, pointsAttr, screenSpaceTransform, svgEl } from './render';
+import { NON_SCALING, pointsAttr, screenSpaceTransform, svgEl } from './svg';
 import type { View } from './view';
 
 export interface StairLabels {
