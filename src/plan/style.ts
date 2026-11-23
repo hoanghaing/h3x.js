@@ -29,6 +29,7 @@ ${p} .${prefix}-opening.${prefix}-invalid path, ${p} .${prefix}-opening.${prefix
 ${p} .${prefix}-opening.${prefix}-rejected path { stroke-width: 3; }
 ${p} .${prefix}-opening.${prefix}-invalid .${prefix}-opening-gap, ${p} .${prefix}-opening.${prefix}-rejected .${prefix}-opening-gap { fill: #fee2e2; }
 ${p} .${prefix}-ghost { opacity: 0.8; pointer-events: none; }
+${p} .${prefix}-ghost-guides { pointer-events: none; }
 ${p} .${prefix}-ghost .${prefix}-opening-gap { fill: #dbeafe; stroke: none; }
 ${p} .${prefix}-ghost path { fill: none; stroke: #2563eb; stroke-width: 1.5; }
 ${p} .${prefix}-ghost .${prefix}-opening-arc { stroke-width: 1; stroke-dasharray: 4 3; }
@@ -72,10 +73,12 @@ ${p} .${prefix}-node circle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; op
 ${p} .${prefix}-node:hover circle, ${p} .${prefix}-node.${prefix}-selected circle { opacity: 1; }
 ${p} .${prefix}-selected polygon, ${p} .${prefix}-selected circle, ${p} .${prefix}-room.${prefix}-selected path { stroke: #2563eb; stroke-width: 2; }
 ${p} .${prefix}-invalid polygon, ${p} .${prefix}-invalid circle, ${p} .${prefix}-invalid path { stroke: #dc2626; }
+${p} .${prefix}-warning polygon, ${p} .${prefix}-warning circle, ${p} .${prefix}-warning path { stroke: #d97706; }
+${p} .${prefix}-opening.${prefix}-warning .${prefix}-opening-gap { fill: #fef3c7; }
 ${p} .${prefix}-rejected polygon, ${p} .${prefix}-rejected circle, ${p} .${prefix}-rejected path { stroke: #dc2626; stroke-width: 3; }
 ${p} .${prefix}-preview { stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 4; }
 ${p} .${prefix}-preview-label { fill: #1d4ed8; font-size: ${DIMENSION_FONT_PX}px; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: #fafaf9; stroke-width: 3px; }
-${p} .${prefix}-roof-handle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; }
+${p} .${prefix}-roof-handle, ${p} .${prefix}-opening-handle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; }
 ${p} .${prefix}-drop-target { fill: none; stroke: #db2777; stroke-width: 2; }
 ${p} .${prefix}-guide, ${p} .${prefix}-ghost-guide { stroke: #db2777; stroke-width: 1; stroke-dasharray: 4 3; }
 `.trimStart();

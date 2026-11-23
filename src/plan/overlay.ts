@@ -1,17 +1,19 @@
-import type { Floor, OpeningGeometry, PlacementGuide, Vec2 } from '../core';
+import type { Floor, Hinge, OpeningGeometry, PlacementGuide, Vec2 } from '../core';
 import { dimensionLabel, wallsShowingDimensions, type DimensionState } from './dimensions';
 import type { PlanDom } from './kinds';
-import { createOpeningSymbol, drawOpeningSymbol } from './openings';
+import { createOpeningSymbol, drawOpeningSymbol, type OpeningDistanceLabel } from './openings';
 import {
   NON_SCALING,
   createDimensionElement,
   labelRect,
   screenSpaceTransform,
+  setText,
   svgEl,
   updateDimensionElement,
 } from './render';
 import type { SnapGuide } from './snap';
 import { DIMENSION_FONT_PX } from './style';
+import type { Rect } from './types';
 import { screenToPlan, type View } from './view';
 
 /** Segments and optional label a drawing tool previews. */
@@ -76,25 +78,32 @@ export function renderPreview(
   }
 }
 
-/** The ghost of an opening being placed: its symbol, or a bar at the pointer when it has no wall. */
+/**
+ * The ghost of an opening being placed: its symbol, or a bar at the pointer when it has no wall;
+ * `null` draws only the guides.
+ */
 export interface GhostState {
-  shape: OpeningGeometry | { at: Vec2; width: number };
+  shape: OpeningGeometry | { at: Vec2; width: number } | null;
   invalid: boolean;
   guides: readonly PlacementGuide[];
 }
 
-/** Replaces the overlay layer's opening ghost and its snap ticks; `null` clears. */
+/** Replaces the overlay layer's opening ghost and its snap ticks (or the ticks alone); `null` clears. */
 export function renderGhost(layer: SVGGElement, prefix: string, ghost: GhostState | null): void {
-  for (const el of Array.from(layer.querySelectorAll(`.${prefix}-ghost`))) el.remove();
+  const old = layer.querySelectorAll(`.${prefix}-ghost, .${prefix}-ghost-guides`);
+  for (const el of Array.from(old)) el.remove();
   if (!ghost) return;
   const { shape } = ghost;
-  const free = 'at' in shape;
-  const g = svgEl('g', { class: `${prefix}-ghost` });
+  const free = shape !== null && 'at' in shape;
+  // Guides alone (a valid drag step) are not a ghost.
+  const g = svgEl('g', { class: shape ? `${prefix}-ghost` : `${prefix}-ghost-guides` });
   g.classList.toggle(`${prefix}-ghost-free`, free);
   g.classList.toggle(`${prefix}-invalid`, ghost.invalid);
-  createOpeningSymbol(g, prefix);
-  drawOpeningSymbol(g, free ? null : shape);
-  if (free) {
+  if (shape) {
+    createOpeningSymbol(g, prefix);
+    drawOpeningSymbol(g, 'at' in shape ? null : shape);
+  }
+  if (shape && 'at' in shape) {
     const { at, width } = shape;
     g.lastElementChild!.setAttribute(
       'd',
@@ -162,6 +171,63 @@ export function renderRoofHandles(
       }),
     );
   }
+}
+
+/** Half-side (px) of an opening's jamb handle (8 px squares). */
+const OPENING_HANDLE_HALF_PX = 4;
+
+/** What the selected opening shows for editing: jamb handles and clear-distance labels. */
+export interface OpeningEditState {
+  handles: ReadonlyArray<{ end: Hinge; at: Vec2 }>;
+  labels: readonly OpeningDistanceLabel[];
+}
+
+/**
+ * Replaces the overlay layer's opening handles and clear-distance labels; `null` clears.
+ * Returns the labels' screen rects, for hit testing.
+ */
+export function renderOpeningEdit(
+  layer: SVGGElement,
+  view: View,
+  prefix: string,
+  state: OpeningEditState | null,
+): Array<{ end: Hinge; rect: Rect }> {
+  const old = layer.querySelectorAll(`.${prefix}-opening-handle, .${prefix}-opening-distance`);
+  for (const el of Array.from(old)) el.remove();
+  if (!state) return [];
+  const rects: Array<{ end: Hinge; rect: Rect }> = [];
+  for (const label of state.labels) {
+    const g = svgEl('g', {
+      class: `${prefix}-dimension ${prefix}-opening-distance`,
+      'data-h3x-end': label.end,
+    });
+    const [p, q] = label.line;
+    g.append(
+      svgEl('path', { d: `M${p.x},${p.y}L${q.x},${q.y}`, ...NON_SCALING }),
+      svgEl('text', { transform: screenSpaceTransform(view, label.at, label.angle) }),
+    );
+    setText(g.lastElementChild!, label.text);
+    layer.appendChild(g);
+    rects.push({
+      end: label.end,
+      rect: labelRect(view, label.at, label.angle, label.text, DIMENSION_FONT_PX),
+    });
+  }
+  for (const h of state.handles) {
+    layer.appendChild(
+      svgEl('rect', {
+        class: `${prefix}-opening-handle`,
+        'data-h3x-end': h.end,
+        x: String(-OPENING_HANDLE_HALF_PX),
+        y: String(-OPENING_HANDLE_HALF_PX),
+        width: String(OPENING_HANDLE_HALF_PX * 2),
+        height: String(OPENING_HANDLE_HALF_PX * 2),
+        transform: screenSpaceTransform(view, h.at),
+        ...NON_SCALING,
+      }),
+    );
+  }
+  return rects;
 }
 
 /** Re-derives which walls show a length label, their geometry and screen rects. */

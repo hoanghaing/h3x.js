@@ -12,12 +12,8 @@ import {
   type Swing,
   type Vec2,
 } from '../../core';
+import { OPENING_REACH_PX as REACH_PX, OPENING_SNAP_PX as SNAP_PX } from './openingEdit';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
-
-/** How far (screen px) from a wall face the pointer may be to place on it. */
-const REACH_PX = 24;
-/** How far (screen px) from a snap the opening's centre may be to take it. */
-const SNAP_PX = 8;
 /** Width (m) of the bar shown at the pointer when the preset cannot be read. */
 const FALLBACK_WIDTH = 0.9;
 

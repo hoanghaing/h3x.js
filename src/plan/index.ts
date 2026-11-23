@@ -21,13 +21,15 @@ export {
 export { itemFootprint, junctionPolygons, roomLabel, wallOutline } from './shapes';
 export { paintOpening } from './openings';
 export { dimensionLabel, wallsShowingDimensions } from './dimensions';
-export { hitTest, type HitScene, type HitTarget } from './hit';
+export { hitTest, type HitScene, type HitTarget, type OpeningEditHits } from './hit';
 export { pickAnchor } from './anchor';
 export type { StairLabels } from './stairs';
 export {
   H3xPlan,
   type H3xPlanOptions,
   type LengthEditRequest,
+  type OpeningDistanceRequest,
+  type OpeningEditRequest,
   type RoofDetached,
   type RoofEdgeRequest,
   type SegmentLengthRequest,

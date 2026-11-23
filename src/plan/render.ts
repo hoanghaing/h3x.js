@@ -16,7 +16,7 @@ import type {
 } from '../core';
 import { openingGeometry, roofGeometry, roomShape } from '../core';
 import type { WallCorners } from '../shared/walls/joins';
-import { createOpeningSymbol, drawOpeningSymbol } from './openings';
+import { createOpeningSymbol, drawOpeningSymbol, strayOutline } from './openings';
 import { columnShape, itemFootprint, roomLabel, roomPath, wallOutline } from './shapes';
 import { roofOwnShapes } from './roofs';
 import { stairOwnShapes, type StairLabels } from './stairs';
@@ -176,8 +176,10 @@ export function updateEntityElement(g: SVGGElement, e: KindEntity, ctx: RenderCo
     }
     case 'room':
       return updateRoom(g, e.entity, ctx);
-    case 'opening':
-      return drawOpeningSymbol(g, openingGeometry(ctx.floor, e.entity));
+    case 'opening': {
+      const geometry = openingGeometry(ctx.floor, e.entity);
+      return drawOpeningSymbol(g, geometry, strayOutline(ctx.floor, e.entity, geometry));
+    }
     case 'item': {
       const fp = itemFootprint(e.entity, ctx.floor, ctx.presets);
       return setAttr(first, 'points', fp ? pointsAttr(fp) : '');

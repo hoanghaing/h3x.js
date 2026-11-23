@@ -2,6 +2,7 @@ import type {
   ChangeEvent,
   EntityChange,
   H3xDocument,
+  Hinge,
   Id,
   Issue,
   PresetResolver,
@@ -18,6 +19,7 @@ import {
   removeRoof,
   removeStair,
   removeWall,
+  setOpeningDistance,
   setSite,
   setWallLength,
   stairRise,
@@ -26,7 +28,8 @@ import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
 import { PlanInput } from './input';
 import { roofHandles } from './roofEdit';
-import { hitTest, type HitScene, type HitTarget } from './hit';
+import { hitTest, type HitScene, type HitTarget, type OpeningEditHits } from './hit';
+import { openingDistanceLabels, openingHandles } from './openings';
 import { snapDraw, snapPoint, type SnapResult } from './snap';
 import type { Tool, ToolContext } from './tools/Tool';
 import { SelectEditTool } from './tools/SelectEditTool';
@@ -43,6 +46,7 @@ import {
   renderDropTarget,
   renderGhost,
   renderGuides,
+  renderOpeningEdit,
   renderPreview,
   renderRoofHandles,
   syncDimensions,
@@ -134,6 +138,28 @@ export interface SegmentLengthRequest {
   length: number;
 }
 
+/** Asks the host for one clear distance of an opening; answer with `setOpeningDistance`. */
+export interface OpeningDistanceRequest {
+  openingId: Id;
+  /** The jamb the distance is measured from. */
+  end: Hinge;
+  from: 'face';
+  /** The current clear distance (m), unrounded. */
+  distance: number;
+  /** Centre of the clicked label, in viewport pixels. */
+  at: ScreenPoint;
+}
+
+/** Asks the host to edit an opening (its type and parameters). */
+export interface OpeningEditRequest {
+  openingId: Id;
+  /** Where it was double-clicked, in viewport pixels. */
+  at: ScreenPoint;
+}
+
+/** Issue codes that warn without blocking: drawn as warnings, not as invalid. */
+const WARNING_CODES: ReadonlySet<string> = new Set(['opening-swing-blocked']);
+
 /** The floor a change is on; undefined for the (project-level) site. */
 const floorOf = (c: EntityChange): Id | undefined => (c.kind === 'site' ? undefined : c.floorId);
 
@@ -177,6 +203,10 @@ export class H3xPlan {
   private readonly segmentEmitter = new Emitter<SegmentLengthRequest>();
   private readonly roofEdgeEmitter = new Emitter<RoofEdgeRequest>();
   private readonly roofDetachedEmitter = new Emitter<RoofDetached>();
+  private readonly openingDistanceEmitter = new Emitter<OpeningDistanceRequest>();
+  private readonly openingEditEmitter = new Emitter<OpeningEditRequest>();
+  /** Handles and distance labels of the selected opening, as last drawn. */
+  private openingEdit: (OpeningEditHits & { distances: Record<Hinge, number> }) | null = null;
   private preview: PreviewState | null = null;
   private dropTarget: Vec2 | null = null;
 
@@ -275,7 +305,8 @@ export class H3xPlan {
       showGuides: (g) => this.showGuides(g),
       showGhost: (g, invalid = false, guides = []) => {
         if (this.disposed) return;
-        renderGhost(this.dom.layers.overlay, this.prefix, g && { shape: g, invalid, guides });
+        const ghost = g || guides.length > 0 ? { shape: g, invalid, guides } : null;
+        renderGhost(this.dom.layers.overlay, this.prefix, ghost);
       },
       setDragging: (id) => {
         this.dimensionState.draggingNode = id;
@@ -315,6 +346,7 @@ export class H3xPlan {
       stairRise: this.stairRise(),
       roofsVisible: this._roofsVisible,
       roofGeometry: this.dom.roofGeometry,
+      openingEdit: this.openingEdit,
     };
     return hitTest(scene, s);
   }
@@ -475,6 +507,51 @@ export class H3xPlan {
     return res;
   }
 
+  /**
+   * Sets the distance beside one jamb of an opening by moving it along its wall (see
+   * `setOpeningDistance` in core; `from` defaults to 'face'); rejected edits are flashed.
+   */
+  setOpeningDistance(
+    openingId: Id,
+    opts: { end: Hinge; distance: number; from?: 'face' | 'axis' },
+  ): { ok: true } | { ok: false; issues: Issue[] } {
+    const res = this.doc.tryExecute(
+      setOpeningDistance(openingId, {
+        end: opts.end,
+        distance: opts.distance,
+        from: opts.from ?? 'face',
+      }),
+    );
+    this.reportRejected(res.ok ? [] : res.issues);
+    return res;
+  }
+
+  /** @internal Screen rects (px) of the selected opening's clear-distance labels. */
+  openingDistanceRects(): Array<{ id: Id; end: Hinge; rect: Rect }> {
+    const edit = this.openingEdit;
+    return edit ? edit.labels.map((l) => ({ id: edit.id, ...l })) : [];
+  }
+
+  /** @internal Asks the host for a clear distance of the selected opening (used by tools). */
+  emitOpeningDistanceRequest(openingId: Id, end: Hinge): void {
+    const edit = this.openingEdit;
+    const r = edit?.id === openingId ? edit.labels.find((l) => l.end === end)?.rect : undefined;
+    if (!edit || !r) return;
+    this.openingDistanceEmitter.emit({
+      openingId,
+      end,
+      from: 'face',
+      distance: edit.distances[end],
+      at: { x: r.x + r.width / 2, y: r.y + r.height / 2 },
+    });
+  }
+
+  /** @internal Asks the host to edit an opening (used by tools). */
+  emitOpeningEditRequest(openingId: Id, at: ScreenPoint): void {
+    if (!this.doc.floor.openings[openingId]) return;
+    this.openingEditEmitter.emit({ openingId, at: { x: at.x, y: at.y } });
+  }
+
   on(type: 'selectionchange', fn: (s: Selection | null) => void): () => void;
   on(type: 'lengthEditRequest', fn: (e: LengthEditRequest) => void): () => void;
   on(type: 'issues', fn: (e: PlanIssues) => void): () => void;
@@ -484,6 +561,10 @@ export class H3xPlan {
   on(type: 'roofdetached', fn: (e: RoofDetached) => void): () => void;
   /** Fires when a drawing tool starts a new segment; answer with `setPendingSegmentLength`. */
   on(type: 'segmentLengthRequest', fn: (e: SegmentLengthRequest) => void): () => void;
+  /** Fires when the user clicks a clear distance of the selected opening; answer with `setOpeningDistance`. */
+  on(type: 'openingDistanceRequest', fn: (e: OpeningDistanceRequest) => void): () => void;
+  /** Fires when the user double-clicks an opening. */
+  on(type: 'openingEditRequest', fn: (e: OpeningEditRequest) => void): () => void;
   on(
     type:
       | 'selectionchange'
@@ -491,14 +572,20 @@ export class H3xPlan {
       | 'issues'
       | 'segmentLengthRequest'
       | 'roofEdgeRequest'
-      | 'roofdetached',
+      | 'roofdetached'
+      | 'openingDistanceRequest'
+      | 'openingEditRequest',
     fn: ((s: Selection | null) => void) &
+      ((e: OpeningDistanceRequest) => void) &
+      ((e: OpeningEditRequest) => void) &
       ((e: LengthEditRequest) => void) &
       ((e: PlanIssues) => void) &
       ((e: SegmentLengthRequest) => void) &
       ((e: RoofEdgeRequest) => void) &
       ((e: RoofDetached) => void),
   ): () => void {
+    if (type === 'openingDistanceRequest') return this.openingDistanceEmitter.on(fn);
+    if (type === 'openingEditRequest') return this.openingEditEmitter.on(fn);
     if (type === 'roofEdgeRequest') return this.roofEdgeEmitter.on(fn);
     if (type === 'roofdetached') return this.roofDetachedEmitter.on(fn);
     if (type === 'selectionchange') return this.selectionEmitter.on(fn);
@@ -597,6 +684,7 @@ export class H3xPlan {
     }
     this.refreshDimensions();
     this.refreshRoofHandles();
+    this.refreshOpeningEdit();
     if (this.preview) renderPreview(this.dom.layers.overlay, next, this.prefix, this.preview);
     if (this.dropTarget)
       renderDropTarget(this.dom.layers.overlay, next, this.prefix, this.dropTarget);
@@ -682,9 +770,16 @@ export class H3xPlan {
     if (issueKey(this.standing) !== before) this.issuesEmitter.emit(this.issues);
   }
 
-  /** Toggles selected / invalid / rejected classes on every entity element. */
+  /**
+   * Toggles selected / invalid / warning / rejected classes on every entity element. An entity
+   * named only by warnings (`WARNING_CODES`) is marked as a warning, not as invalid.
+   */
   private refreshMarks(): void {
-    const invalid = new Set(this.standing.flatMap((i) => i.ids));
+    const blocking = this.standing.filter((i) => !WARNING_CODES.has(i.code));
+    const invalid = new Set(blocking.flatMap((i) => i.ids));
+    const warned = new Set(
+      this.standing.filter((i) => WARNING_CODES.has(i.code)).flatMap((i) => i.ids),
+    );
     const rejected = new Set(this.rejected.flatMap((i) => i.ids));
     const sel = this._selection;
     if (sel && !this.dom.elements[sel.kind].has(sel.id)) {
@@ -695,10 +790,30 @@ export class H3xPlan {
       for (const [id, g] of this.dom.elements[kind]) {
         g.classList.toggle(`${this.prefix}-selected`, sel?.kind === kind && sel.id === id);
         g.classList.toggle(`${this.prefix}-invalid`, invalid.has(id));
+        g.classList.toggle(`${this.prefix}-warning`, warned.has(id) && !invalid.has(id));
         g.classList.toggle(`${this.prefix}-rejected`, rejected.has(id));
       }
     }
     this.refreshRoofHandles();
+    this.refreshOpeningEdit();
+  }
+
+  /** Jamb handles and clear distances of the selected opening, in the overlay. */
+  private refreshOpeningEdit(): void {
+    const sel = this._selection;
+    const floor = this.doc.floor;
+    const o = sel?.kind === 'opening' ? floor.openings[sel.id] : undefined;
+    const handles = o ? openingHandles(floor, o) : [];
+    const labels = o && handles.length > 0 ? openingDistanceLabels(floor, o, this._view.scale) : [];
+    const rects = renderOpeningEdit(
+      this.dom.layers.overlay,
+      this._view,
+      this.prefix,
+      o ? { handles, labels } : null,
+    );
+    const distances = { a: NaN, b: NaN };
+    for (const l of labels) distances[l.end] = l.distance;
+    this.openingEdit = o ? { id: o.id, handles, labels: rects, distances } : null;
   }
 
   /** Vertex handles of the selected roof, in the overlay. */
