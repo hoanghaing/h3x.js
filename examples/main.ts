@@ -31,6 +31,7 @@ import townhouseXml from './layouts/townhouse-3f.xml?raw';
 import trapezoidXml from './layouts/townhouse-trapezoid.xml?raw';
 import { attachLengthInput, attachSegmentLengthInput } from './lengthInput';
 import { attachOpeningDistanceInput, attachOpeningPanel } from './openingPanel';
+import { attachQuantitiesPanel } from './quantitiesPanel';
 import { nextProjection, projectionLabel } from './projection';
 import { widenHouse } from './widen';
 
@@ -63,6 +64,7 @@ function mount(next: H3xDocument): void {
     attachSegmentLengthInput(plan, planHost),
     attachOpeningDistanceInput(plan, planHost, say),
     attachOpeningPanel(doc, plan, say),
+    attachQuantitiesPanel(doc),
     doc.on('change', refreshFloorControls),
     doc.on('activefloor', refreshFloorControls),
     doc.on('change', refreshStairControls),
