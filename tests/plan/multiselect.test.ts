@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { H3xDocument, removeWall, type Floor, type Project, type Vec2 } from '../../src/core';
+import {
+  H3xDocument,
+  addFloor,
+  removeObjects,
+  removeWall,
+  type Floor,
+  type Project,
+  type Vec2,
+} from '../../src/core';
 import { H3xPlan } from '../../src/plan/H3xPlan';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
 
@@ -167,5 +175,80 @@ describe('multiple selection', () => {
     expect(ids(plan)).toEqual(['wall:w2', 'wall:w4']);
     plan.doc.execute(removeWall('w4'));
     expect(ids(plan)).toEqual(['wall:w2']);
+  });
+});
+
+describe('copy, paste, duplicate, array', () => {
+  const ROOM_WALLS = ['w1', 'w2', 'w3', 'w4'].map((id) => ({ kind: 'wall' as const, id }));
+
+  it('Ctrl + C, then Ctrl + V pastes centred on the pointer and selects the copy', () => {
+    const plan = planOf();
+    plan.selectMany(ROOM_WALLS);
+    key(plan, 'c', { ctrlKey: true });
+    fire(plan, 'pointermove', { x: 10.02, y: 2 });
+    key(plan, 'v', { ctrlKey: true });
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(8);
+    const xs = Object.values(plan.doc.floor.nodes).map((n) => n.x);
+    expect(Math.max(...xs)).toBeCloseTo(12, 9);
+    const sel = ids(plan);
+    expect(sel.filter((s) => s.startsWith('wall:'))).toHaveLength(4);
+    expect(sel.some((s) => /wall:w[1-4]$/.test(s))).toBe(false);
+    expect(sel.filter((s) => s.startsWith('opening:'))).toHaveLength(1);
+    expect(Object.values(plan.doc.floor.rooms)).toHaveLength(2);
+    plan.doc.undo();
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(4);
+  });
+
+  it('Ctrl + Shift + V pastes in place: on top of the original it is rejected', () => {
+    const plan = planOf();
+    plan.selectMany(ROOM_WALLS);
+    key(plan, 'c', { ctrlKey: true });
+    key(plan, 'V', { ctrlKey: true, shiftKey: true });
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(4);
+    expect(plan.issues.rejected.length).toBeGreaterThan(0);
+  });
+
+  it('Ctrl + D duplicates the selection 1 m away', () => {
+    const f = oneRoomFloor();
+    f.columns.c1 = { id: 'c1', x: 1, y: 1, shape: 'round', width: 0.3, rotation: 0 };
+    const plan = planOf(f);
+    plan.select({ kind: 'column', id: 'c1' });
+    key(plan, 'd', { ctrlKey: true });
+    const cols = Object.values(plan.doc.floor.columns);
+    expect(cols).toHaveLength(2);
+    const copy = cols.find((c) => c.id !== 'c1')!;
+    expect(copy).toMatchObject({ x: 2, y: 2 });
+    expect(plan.selection).toEqual({ kind: 'column', id: copy.id });
+    expect(plan.clipboard).toBeNull();
+  });
+
+  it('the clipboard survives a floor switch, so a room can be pasted on another floor', () => {
+    const plan = planOf();
+    plan.selectMany(ROOM_WALLS);
+    expect(plan.copySelection()).not.toBeNull();
+    plan.doc.execute(addFloor({ position: 'above' }));
+    const above = plan.doc.project.floors.find((f) => f.id !== 'f1')!;
+    plan.doc.setActiveFloor(above.id);
+    plan.doc.execute(removeObjects({ walls: Object.keys(plan.doc.floor.walls) }));
+    expect(plan.paste()).toBe(true);
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(4);
+    expect(Object.values(plan.doc.floor.rooms).map((r) => r.name)).toEqual(['Phòng khách']);
+  });
+
+  it('arraySelection makes count copies', () => {
+    const f = oneRoomFloor();
+    f.columns.c1 = { id: 'c1', x: 1, y: 1, shape: 'round', width: 0.3, rotation: 0 };
+    const plan = planOf(f);
+    plan.select({ kind: 'column', id: 'c1' });
+    expect(plan.arraySelection(3, { x: 0, y: 0.5 })).toBe(true);
+    expect(Object.keys(plan.doc.floor.columns)).toHaveLength(4);
+    expect(plan.arraySelection(0, { x: 0, y: 0.5 })).toBe(false);
+  });
+
+  it('nothing to copy or paste does nothing', () => {
+    const plan = planOf();
+    expect(plan.copySelection()).toBeNull();
+    expect(plan.paste()).toBe(false);
+    expect(plan.duplicateSelection()).toBe(false);
   });
 });

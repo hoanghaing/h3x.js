@@ -1,5 +1,6 @@
 import type {
   ChangeEvent,
+  Clipboard,
   EntityChange,
   Floor,
   H3xDocument,
@@ -21,6 +22,11 @@ import {
   removeNode,
   removeObjects,
   removeOpening,
+  arrayObjects,
+  clipboardCenter,
+  clipboardIsEmpty,
+  copyObjects,
+  pasteObjects,
   removeRoof,
   removeStair,
   removeWall,
@@ -37,7 +43,7 @@ import { PlanInput } from './input';
 import { roofHandles } from './roofEdit';
 import { hitTest, type HitScene, type HitTarget, type OpeningEditHits } from './hit';
 import { openingDistanceLabels, openingHandles, type OpeningShape } from './openings';
-import { snapDraw, snapPoint, type SnapResult } from './snap';
+import { snapDraw, snapPoint, snapScalar, type SnapResult } from './snap';
 import type { Tool, ToolContext } from './tools/Tool';
 import { SelectEditTool } from './tools/SelectEditTool';
 import {
@@ -200,6 +206,7 @@ export class H3xPlan {
   private _selection: Selection | null = null;
   /** The other members of a multiple selection (the primary one is `_selection`). */
   private _extra: Selection[] = [];
+  private _clipboard: Clipboard | null = null;
   private standing: Issue[] = [];
   private rejected: Issue[] = [];
   private rejectedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -537,6 +544,81 @@ export class H3xPlan {
     const res = this.doc.tryExecute(transformObjects(this.selectionObjects(), t));
     this.reportRejected(res.ok ? [] : res.issues);
     return res.ok;
+  }
+
+  /**
+   * What `copySelection` copied last (plain data; null before any copy). An editor can set it, e.g.
+   * from the system clipboard, and it survives floor switches, so copy, switch floor, paste works.
+   */
+  get clipboard(): Clipboard | null {
+    return this._clipboard;
+  }
+  set clipboard(clip: Clipboard | null) {
+    this._clipboard = clip ? structuredClone(clip) : null;
+  }
+
+  /** Copies the selection (`copyObjects`) to `clipboard`; null (clipboard unchanged) when nothing copyable is selected. */
+  copySelection(): Clipboard | null {
+    const clip = copyObjects(this.doc.floor, this.selectionObjects());
+    if (clipboardIsEmpty(clip)) return null;
+    this._clipboard = clip;
+    return structuredClone(clip);
+  }
+
+  /**
+   * Pastes `clipboard` on the active floor (`pasteObjects`, one undo step) and selects what it
+   * created. `at` puts the clipboard's centre there (the move snaps to the grid); without it the
+   * paste lands where it was copied (on another floor: right above / below). Returns false when
+   * the clipboard is empty or the paste is rejected (flashed as for any edit).
+   */
+  paste(at?: Vec2): boolean {
+    const clip = this._clipboard;
+    const c = clip && clipboardCenter(clip);
+    if (!clip || !c) return false;
+    const grid = this.snapOptions.grid;
+    const delta = at
+      ? { x: snapScalar(at.x - c.x, grid), y: snapScalar(at.y - c.y, grid) }
+      : { x: 0, y: 0 };
+    const moved = delta.x !== 0 || delta.y !== 0;
+    const cmd = pasteObjects(clip, moved ? { kind: 'translate', delta } : undefined);
+    const res = this.doc.tryExecute(cmd);
+    this.reportRejected(res.ok ? [] : res.issues);
+    if (res.ok) this.selectObjects(cmd.created);
+    return res.ok;
+  }
+
+  /** Copies the selection and pastes it `delta` away (default 1 m right and up); selects the copy. */
+  duplicateSelection(delta: Vec2 = { x: 1, y: 1 }): boolean {
+    const keep = this._clipboard;
+    const clip = this.copySelection();
+    this._clipboard = keep;
+    const c = clip && clipboardCenter(clip);
+    if (!clip || !c) return false;
+    const cmd = pasteObjects(clip, { kind: 'translate', delta });
+    const res = this.doc.tryExecute(cmd);
+    this.reportRejected(res.ok ? [] : res.issues);
+    if (res.ok) this.selectObjects(cmd.created);
+    return res.ok;
+  }
+
+  /** `count` copies of the selection, the k-th k × `delta` away (`arrayObjects`, one undo step). */
+  arraySelection(count: number, delta: Vec2): boolean {
+    if (this.selectionSet.length === 0 || !(count >= 1)) return false;
+    const res = this.doc.tryExecute(arrayObjects(this.selectionObjects(), count, delta));
+    this.reportRejected(res.ok ? [] : res.issues);
+    return res.ok;
+  }
+
+  private selectObjects(set: ObjectSet): void {
+    const kinds: Array<[keyof ObjectSet, PlanKind]> = [
+      ['walls', 'wall'],
+      ['openings', 'opening'],
+      ['items', 'item'],
+      ['columns', 'column'],
+      ['stairs', 'stair'],
+      ['roofs', 'roof'],
+    ];
+    this.selectMany(kinds.flatMap(([k, kind]) => (set[k] ?? []).map((id) => ({ kind, id }))));
   }
 
   /** The centre of the selection's bounding box in plan metres (null when nothing is selected). */

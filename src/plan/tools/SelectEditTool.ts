@@ -177,6 +177,8 @@ export class SelectEditTool implements Tool {
   private issuing = false;
   /** The tool's last drag step or nudge was rejected and is still flashed. */
   private rejecting = false;
+  /** The pointer's last plan position over the plan (where Ctrl + V pastes). */
+  private pointer: Vec2 | null = null;
 
   constructor(opts: SelectEditToolOptions = {}) {
     this.threshold = opts.dragThresholdPx ?? 4;
@@ -196,6 +198,7 @@ export class SelectEditTool implements Tool {
   deactivate(): void {
     this.endGesture(true);
     this.press = null;
+    this.pointer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.ctx = null;
@@ -237,6 +240,7 @@ export class SelectEditTool implements Tool {
   }
 
   onPointerMove(e: PlanPointerEvent): void {
+    this.pointer = e.plan;
     const press = this.press;
     if (!this.ctx || !press || press.dead) return;
     if (!press.moved) {
@@ -299,6 +303,19 @@ export class SelectEditTool implements Tool {
   onKeyDown(e: KeyboardEvent): boolean {
     const ctx = this.ctx;
     if (!ctx) return false;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !this.gesture) {
+      const k = e.key.toLowerCase();
+      if (k === 'c') return ctx.plan.copySelection() !== null;
+      if (k === 'v' && ctx.plan.clipboard) {
+        // Ctrl + V: centred on the pointer; Ctrl + Shift + V: in place (e.g. on another floor).
+        ctx.plan.paste(e.shiftKey ? undefined : (this.pointer ?? undefined));
+        return true;
+      }
+      if (k === 'd' && ctx.plan.selectionSet.length > 0) {
+        ctx.plan.duplicateSelection();
+        return true;
+      }
+    }
     if (e.key === 'Escape') {
       if (this.gesture) {
         const { key } = this.gesture;

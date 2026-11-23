@@ -282,6 +282,37 @@ on('btn-move', () => {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return say('Nhập khoảng dời x, y (m)', true);
   transformSelection(() => ({ kind: 'translate', delta: { x, y } }), `Đã dời ${x}, ${y} m`);
 });
+on('btn-copy', () => {
+  const clip = plan.copySelection();
+  if (!clip) return say('Chọn đối tượng để sao chép', true);
+  say(
+    `Đã chép ${clip.walls.length} tường, ${clip.columns.length + clip.stairs.length + clip.items.length + clip.roofs.length} đối tượng khác`,
+  );
+});
+on('btn-paste', () => {
+  if (!plan.clipboard) return say('Chưa chép gì', true);
+  if (plan.paste()) say('Đã dán');
+  else
+    say(
+      'Không dán được: chồng lên đối tượng có sẵn (dán sang tầng khác, hoặc Ctrl + V tại con trỏ)',
+      true,
+    );
+});
+on('btn-duplicate', () => {
+  if (plan.selectionSet.length === 0) return say('Chọn đối tượng để nhân bản', true);
+  if (plan.duplicateSelection()) say('Đã nhân bản, lệch 1 m');
+  else say('Không nhân bản được: bản sao chồng lên đối tượng có sẵn', true);
+});
+on('btn-array', () => {
+  const n = (document.getElementById('in-array-count') as HTMLInputElement).valueAsNumber;
+  const x = (document.getElementById('in-move-x') as HTMLInputElement).valueAsNumber;
+  const y = (document.getElementById('in-move-y') as HTMLInputElement).valueAsNumber;
+  if (plan.selectionSet.length === 0) return say('Chọn đối tượng để nhân', true);
+  if (!(n >= 1) || !Number.isFinite(x) || !Number.isFinite(y))
+    return say('Nhập số lần và khoảng x, y', true);
+  if (plan.arraySelection(n, { x, y })) say(`Đã tạo ${n} bản, mỗi bản lệch ${x}, ${y} m`);
+  else say('Không nhân được: có bản chồng lên đối tượng có sẵn', true);
+});
 on('btn-delete', () => {
   if (!plan.deleteSelection())
     say('Chọn một đối tượng để xoá (nút, tường, cửa, cột, cầu thang, mái, khu đất)', true);

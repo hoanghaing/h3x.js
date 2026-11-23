@@ -123,6 +123,14 @@ the opening it makes.
   rooms. An invalid result rejects the whole transform. `removeObjects(set)` deletes a set in one
   step (ids already gone are skipped). `sequence(label, steps)` runs commands one after another
   as one change list.
+- Clipboard: `copyObjects(floor, set)` returns a `Clipboard` (plain, JSON-safe data): walls with
+  their nodes, openings and wall items, rooms whose walls were all copied (name and finish),
+  columns, stairs, floor / ceiling items and independent roofs (follow roofs are not copied).
+  `pasteObjects(clip, transform?)` pastes it on the active floor with fresh ids (`created` names
+  them), moved / turned / mirrored by `transform` (default: where it was copied); the walls it
+  encloses become rooms named like the copied ones. Pasted walls do not join walls already there,
+  and an overlap rejects the paste. `arrayObjects(set, count, delta)` makes `count` copies, the
+  k-th k × `delta` away. `clipboardCenter(clip)` and `clipboardIsEmpty(clip)` help placing it.
 - Structure: `addWall({ from, to, thickness, height? })` draws a wall; each end is
   `{ node: id }` or `{ at: { x, y } }`. An `at` end within `GEOM_TOL` of a node reuses it, one on
   a wall splits that wall (T-junction); the new wall is cut at every node it passes through and
@@ -538,6 +546,12 @@ both views.
   a rejection is flashed), `plan.selectionCenter()` gives the centre of its bounding box (for
   turning or mirroring in place), and `plan.deleteSelection()` removes all of it
   (`removeObjects`). `selectionchange` fires whenever the set changes, with the primary one.
+- **Clipboard.** `plan.copySelection()` copies the selection into `plan.clipboard` (settable, kept
+  across floor switches); `plan.paste(at?)` pastes it centred on `at` (the move snaps to the
+  grid) or, without `at`, where it was copied (e.g. right above it on another floor) and selects
+  the copy; `plan.duplicateSelection(delta?)` pastes a copy 1 m right and up by default without
+  touching the clipboard; `plan.arraySelection(count, delta)` runs `arrayObjects`. Each is one
+  undo step and a rejection is flashed.
 - **Events.** `plan.on(type, fn)` returns an unsubscribe function.
   - `selectionchange` receives the new primary `Selection | null`, only when the selection
     (or the multiple selection) changes.
@@ -577,6 +591,9 @@ both views.
     what it touches) added to the selection. A plain drag on empty space still pans;
   - drag any member of a multiple selection to move all of it (snapped to the grid, **Alt** for
     none; one undo step); arrow keys nudge all of it, **Delete** removes all of it;
+  - **Ctrl** + **C** copies the selection, **Ctrl** + **V** pastes it centred on the pointer,
+    **Ctrl** + **Shift** + **V** pastes it in place, **Ctrl** + **D** duplicates it 1 m away
+    (**Cmd** on macOS);
   - drag a node, or a wall (it moves along its normal). A drag snaps to a 5 cm grid and to
     alignment with other nodes (guide lines are drawn); hold **Alt** to disable snapping. The
     whole drag is one undo step;

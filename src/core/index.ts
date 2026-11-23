@@ -18,6 +18,14 @@ export { moveNode, moveWall, setWallLength } from './commands/layout';
 export { removeObjects, sequence, transformObjects } from './commands/transform';
 export type { ObjectSet, Transform } from './commands/transform';
 export {
+  arrayObjects,
+  clipboardCenter,
+  clipboardIsEmpty,
+  copyObjects,
+  pasteObjects,
+} from './commands/clipboard';
+export type { Clipboard } from './commands/clipboard';
+export {
   addWall,
   splitWall,
   removeWall,
