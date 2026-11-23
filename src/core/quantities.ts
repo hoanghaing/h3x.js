@@ -84,6 +84,8 @@ export interface QuantityTotals {
   wallNetArea: number;
   wallVolume: number;
   floorArea: number;
+  /** Sum of the room perimeters (m). */
+  skirting: number;
   openingCount: number;
   openingArea: number;
   roofArea: number;
@@ -270,6 +272,7 @@ export function floorQuantities(floor: Readonly<Floor>, below?: Readonly<Floor>)
       wallNetArea: sum(walls.map((w) => w.netArea)),
       wallVolume: sum(walls.map((w) => w.volume)),
       floorArea: sum(rooms.map((r) => r.area)),
+      skirting: sum(rooms.map((r) => r.perimeter)),
       openingCount: sum(openings.map((o) => o.count)),
       openingArea: sum(openings.map((o) => o.area)),
       roofArea: sum(roofs.map((r) => r.area)),
@@ -289,6 +292,7 @@ export function projectQuantities(project: Readonly<Project>): ProjectQuantities
     'wallNetArea',
     'wallVolume',
     'floorArea',
+    'skirting',
     'openingCount',
     'openingArea',
     'roofArea',

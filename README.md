@@ -356,8 +356,23 @@ does every floor in order and adds them up (`totals`).
 - **Roofs** (`RoofQuantity`): the true area of every face, overhangs included; vertical gable ends
   are left out.
 - **Totals** (`QuantityTotals`): `wallLength`, `wallNetArea`, `wallVolume`, `floorArea`,
-  `openingCount`, `openingArea`, `roofArea`, `slabArea`, `slabVolume`, `paintInterior`,
-  `paintExterior`.
+  `skirting`, `openingCount`, `openingArea`, `roofArea`, `slabArea`, `slabVolume`,
+  `paintInterior`, `paintExterior`.
+
+`estimate(quantities, prices)` prices a floor or a project at unit prices in any one currency (no
+defaults; a key left out is not estimated): `masonry` (wall volume, m³), `plaster` (both paint
+areas, m²), `paintInterior`, `paintExterior`, `slab` (slab volume, m³), `flooring` and `ceiling`
+(floor area, m²), `skirting` (m), `roof` (m²), and `openings` per set by preset, else by type
+(`{ byPreset, byType }`). It returns `lines` (`quantity`, `unit`, `unitPrice`, `cost`; one per
+opening group, merged across floors), `total`, and the opening groups left `unpriced`.
+
+```ts
+const { lines, total, unpriced } = estimate(projectQuantities(doc.project), {
+  masonry: 1_200_000,
+  flooring: 350_000,
+  openings: { byType: { 'door-swing': 3_500_000 } },
+});
+```
 
 ### XML
 

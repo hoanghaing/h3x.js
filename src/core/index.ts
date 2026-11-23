@@ -94,6 +94,8 @@ export type {
   WallFace,
   WallQuantity,
 } from './quantities';
+export { estimate } from './estimate';
+export type { Estimate, EstimateLine, OpeningPrices, PriceKey, PriceTable } from './estimate';
 export type { OutlineRing } from './floors/outline';
 
 export { validateLayout } from './validate/layout';
