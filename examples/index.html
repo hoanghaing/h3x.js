@@ -203,6 +203,16 @@
         <label>Dời <input id="in-move-x" type="number" step="0.1" value="1" /></label>
         <label><input id="in-move-y" type="number" step="0.1" value="0" /></label>
         <button id="btn-move" title="Dời vùng chọn theo x, y (m)">Dời</button>
+        <button id="btn-copy" title="Sao chép vùng chọn (Ctrl + C)">Sao chép</button>
+        <button
+          id="btn-paste"
+          title="Dán đúng chỗ đã chép, vd. sang tầng khác (Ctrl + Shift + V; Ctrl + V dán tại con trỏ)"
+        >
+          Dán
+        </button>
+        <button id="btn-duplicate" title="Nhân bản lệch 1 m (Ctrl + D)">Nhân bản</button>
+        <label>Nhân <input id="in-array-count" type="number" min="1" step="1" value="3" /></label>
+        <button id="btn-array" title="Tạo N bản, mỗi bản lệch thêm x, y của ô Dời">lần</button>
       </span>
       <button id="btn-wall">Vẽ tường</button>
       <button id="btn-site">Vẽ khu đất</button>
