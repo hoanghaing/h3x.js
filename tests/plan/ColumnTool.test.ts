@@ -74,10 +74,10 @@ describe('ColumnTool', () => {
   it('snaps to a node and to a wall line', () => {
     const plan = makePlan();
     click(plan, { x: 4.03, y: 0.04 });
-    click(plan, { x: 2.013, y: 0.03 });
+    click(plan, { x: 2.513, y: 0.03 });
     const [a, b] = columns(plan);
     expect(a).toMatchObject({ x: 4, y: 0 });
-    expect(b!.x).toBeCloseTo(2.013, 9);
+    expect(b!.x).toBeCloseTo(2.513, 9);
     expect(b!.y).toBeCloseTo(0, 9);
   });
 

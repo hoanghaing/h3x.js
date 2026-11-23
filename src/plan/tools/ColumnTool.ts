@@ -59,6 +59,7 @@ export class ColumnTool implements Tool {
   onPointerMove(e: PlanPointerEvent): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    ctx.showGuides(ctx.snapDraw(e.plan, undefined, (e.native as MouseEvent).altKey).guides);
+    const r = ctx.snapDraw(e.plan, undefined, (e.native as MouseEvent).altKey);
+    ctx.showGuides(r.guides, r.marks);
   }
 }

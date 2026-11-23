@@ -82,7 +82,16 @@ describe('attachSegmentLengthInput', () => {
     const input = host.querySelector('input') as HTMLInputElement;
     input.value = '2.5';
     key(input, 'Enter');
-    expect(spy).toHaveBeenCalledWith(2.5);
+    expect(spy).toHaveBeenCalledWith(2.5, undefined);
+    input.value = '3<90';
+    key(input, 'Enter');
+    expect(spy).toHaveBeenLastCalledWith(3, 90);
+    input.value = '1,5 < -45';
+    key(input, 'Enter');
+    expect(spy).toHaveBeenLastCalledWith(1.5, -45);
+    input.value = '2<';
+    key(input, 'Enter');
+    expect(spy).toHaveBeenCalledTimes(3);
 
     key(input, 'Escape');
     expect(host.querySelector('input')).toBeNull();

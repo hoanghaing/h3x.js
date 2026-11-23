@@ -57,9 +57,10 @@ export function attachLengthInput(plan: H3xPlan, host: HTMLElement): () => void 
 }
 
 /**
- * Demo code: while a wall is being drawn, shows a number input at the bottom of the plan.
- * Enter commits a segment of that length (the plan then asks for the next one, which reopens
- * the input); Esc or blur closes it. Returns a detach function.
+ * Demo code: while a wall is being drawn, shows an input at the bottom of the plan. Enter
+ * commits a segment of that length, or `length<angle` (degrees counter-clockwise from +x, e.g.
+ * `5<90` goes up 5 m); the plan then asks for the next one, which reopens the input. Esc or
+ * blur closes it. Returns a detach function.
  */
 export function attachSegmentLengthInput(plan: H3xPlan, host: HTMLElement): () => void {
   let input: HTMLInputElement | undefined;
@@ -74,9 +75,9 @@ export function attachSegmentLengthInput(plan: H3xPlan, host: HTMLElement): () =
     close();
     const el = document.createElement('input');
     input = el;
-    el.type = 'number';
-    el.step = '0.01';
-    el.placeholder = 'Độ dài (m)';
+    el.type = 'text';
+    el.inputMode = 'decimal';
+    el.placeholder = 'Dài hoặc dài<góc';
     Object.assign(el.style, {
       position: 'absolute',
       left: '12px',
@@ -90,13 +91,20 @@ export function attachSegmentLengthInput(plan: H3xPlan, host: HTMLElement): () =
       if (ev.key === 'Escape') {
         close();
       } else if (ev.key === 'Enter') {
-        const length = Number(el.value);
-        if (el.value === '' || !Number.isFinite(length) || length <= 0) {
+        const m = /^\s*([\d.,]+)\s*(?:<\s*(-?[\d.,]+))?\s*$/.exec(el.value);
+        const num = (t: string): number => Number(t.replace(',', '.'));
+        const length = m ? num(m[1]!) : NaN;
+        const angle = m?.[2] !== undefined ? num(m[2]) : undefined;
+        if (
+          !Number.isFinite(length) ||
+          length <= 0 ||
+          (angle !== undefined && !Number.isFinite(angle))
+        ) {
           el.style.borderColor = '#b3261e';
           return;
         }
         // On success the plan asks for the next segment, which replaces this input.
-        if (!plan.setPendingSegmentLength(length)) {
+        if (!plan.setPendingSegmentLength(length, angle)) {
           el.style.borderColor = '#b3261e';
           el.title = 'Giá trị không hợp lệ';
         }
@@ -106,7 +114,11 @@ export function attachSegmentLengthInput(plan: H3xPlan, host: HTMLElement): () =
       if (input === el) close();
     });
     host.appendChild(el);
-    el.focus();
+    // Focus after the click that opened it: the browser focuses the plan on mousedown, which
+    // would blur (and close) an input focused during pointerdown.
+    setTimeout(() => {
+      if (input === el) el.focus();
+    }, 0);
   };
 
   const off = plan.on('segmentLengthRequest', open);

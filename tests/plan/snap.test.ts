@@ -86,9 +86,9 @@ describe('snapDraw', () => {
   });
 
   it('snaps to the closest point on a wall center line, ignoring walls with missing nodes', () => {
-    const r = snapDraw({ x: 2.013, y: 0.07 }, floor, dopts);
+    const r = snapDraw({ x: 2.513, y: 0.07 }, floor, dopts);
     expect(r.target).toEqual({ kind: 'wall', id: 'w1' });
-    expect(r.point.x).toBeCloseTo(2.013, 9);
+    expect(r.point.x).toBeCloseTo(2.513, 9);
     expect(r.point.y).toBeCloseTo(0, 9);
     const far = snapDraw({ x: 4.0, y: -1.5 }, floor, { ...dopts, align: false });
     expect(far.target).toEqual({ kind: 'free' });
@@ -234,5 +234,71 @@ describe('snapDraw site option', () => {
     expect(r.target).toEqual({ kind: 'site-edge' });
     const far = snapDraw({ x: 15, y: 10.5 }, floor, { ...dopts, site });
     expect(far.target).toEqual({ kind: 'free' });
+  });
+});
+
+describe('snapDraw midpoint, perpendicular, extension and ortho', () => {
+  it('snaps to a wall midpoint within reach, with a midpoint mark', () => {
+    const r = snapDraw({ x: 2.04, y: 0.05 }, floor, dopts);
+    expect(r.target).toEqual({ kind: 'wall', id: 'w1' });
+    expect(r.point).toEqual({ x: 2, y: 0 });
+    expect(r.marks).toEqual([{ kind: 'midpoint', at: { x: 2, y: 0 } }]);
+  });
+
+  it('snaps to the foot of the perpendicular from the segment start', () => {
+    const from = { x: 3, y: 2 };
+    const r = snapDraw({ x: 3.05, y: 0.06 }, floor, { ...dopts, from });
+    expect(r.target).toEqual({ kind: 'wall', id: 'w1' });
+    expect(r.point).toEqual({ x: 3, y: 0 });
+    expect(r.marks).toEqual([{ kind: 'perpendicular', at: { x: 3, y: 0 }, from }]);
+  });
+
+  it('no perpendicular when its foot is off the wall or too near an end', () => {
+    const r = snapDraw({ x: 4.0, y: -0.06 }, floor, { ...dopts, from: { x: 4.02, y: 2 } });
+    expect(r.marks?.[0]?.kind).not.toBe('perpendicular');
+  });
+
+  it('snaps onto a wall extension line past its end, the distance on the grid', () => {
+    const r = snapDraw({ x: 6.02, y: 0.06 }, floor, dopts);
+    expect(r.target).toEqual({ kind: 'free' });
+    expect(r.point).toEqual({ x: 6, y: 0 });
+    expect(r.marks).toEqual([{ kind: 'extension', at: { x: 6, y: 0 }, from: { x: 4, y: 0 } }]);
+    const back = snapDraw({ x: -1.51, y: -0.04 }, floor, dopts);
+    expect(back.point).toEqual({ x: -1.5, y: 0 });
+  });
+
+  it('ortho keeps the point on the nearer axis through from', () => {
+    const from = { x: 1, y: 1 };
+    const r = snapDraw({ x: 3.02, y: 1.4 }, floor, { ...dopts, from, ortho: true, align: false });
+    expect(r.point).toEqual({ x: 3, y: 1 });
+    expect(r.marks).toEqual([{ kind: 'ray', at: { x: 3, y: 1 }, from }]);
+    const up = snapDraw({ x: 0.7, y: -1.52 }, floor, { ...dopts, from, ortho: true, align: false });
+    expect(up.point).toEqual({ x: 1, y: -1.5 });
+  });
+
+  it('ortho aligns its free coordinate to a node and hits a node or wall on the ray', () => {
+    const from = { x: 4, y: 2 };
+    const node = snapDraw({ x: 4.3, y: 0.02 }, floor, { ...dopts, from, ortho: true });
+    expect(node.target).toEqual({ kind: 'node', id: 'b' });
+    const wall = snapDraw({ x: 2.3, y: 0.03 }, floor, {
+      ...dopts,
+      from: { x: 2.3, y: 2 },
+      ortho: true,
+    });
+    expect(wall.target).toEqual({ kind: 'wall', id: 'w1' });
+    expect(wall.point).toEqual({ x: 2.3, y: 0 });
+    const aligned = snapDraw({ x: 4.03, y: 3.6 }, floor, {
+      ...dopts,
+      from: { x: 0, y: 3.6 },
+      ortho: true,
+    });
+    expect(aligned.point).toEqual({ x: 4, y: 3.6 });
+    expect(aligned.guides[0]).toMatchObject({ axis: 'x', value: 4 });
+  });
+
+  it('the 45-degree lock shows a ray mark', () => {
+    const from = { x: 10, y: 10 };
+    const r = snapDraw({ x: 11, y: 11.03 }, floor, { ...dopts, from, align: false });
+    expect(r.marks?.[0]).toMatchObject({ kind: 'ray', from });
   });
 });

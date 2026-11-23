@@ -1,7 +1,7 @@
 import type { H3xDocument, Id, OpeningGeometry, PlacementGuide, Vec2 } from '../../core';
 import type { H3xPlan } from '../H3xPlan';
 import type { HitTarget } from '../hit';
-import type { DrawSnapResult, SnapResult } from '../snap';
+import type { DrawSnapResult, SnapMark, SnapResult } from '../snap';
 import type { ScreenPoint } from '../types';
 
 export interface PlanPointerEvent {
@@ -28,10 +28,10 @@ export interface ToolContext {
     from: Vec2 | undefined,
     disabled: boolean,
     extra?: Vec2[],
-    opts?: { structure?: boolean; exclude?: Id[]; site?: boolean },
+    opts?: { structure?: boolean; exclude?: Id[]; site?: boolean; ortho?: boolean },
   ): DrawSnapResult;
-  /** Draws snap guides in the overlay; `[]` clears. */
-  showGuides(g: SnapResult['guides']): void;
+  /** Draws snap guides and snap marks (`DrawSnapResult.marks`) in the overlay; `[]` clears. */
+  showGuides(g: SnapResult['guides'], marks?: readonly SnapMark[]): void;
   /**
    * Draws the ghost of an opening being placed: its symbol, a bar `width` long at `at` when it
    * has no wall, or a closed `outline`. `invalid` draws it red; `guides` are the snap ticks across
@@ -61,5 +61,5 @@ export interface Tool {
   /** The pointer left the plan. */
   onPointerLeave?(): void;
   /** Drawing tools: commits the segment being drawn at `length`; false when there is none. */
-  setPendingSegmentLength?(length: number): boolean;
+  setPendingSegmentLength?(length: number, angle?: number): boolean;
 }
