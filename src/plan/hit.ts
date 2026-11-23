@@ -1,10 +1,10 @@
 import type { Floor, Hinge, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '../core';
-import { H3xValidationError, openingGeometry, openingHit, roomShape, stairOutline } from '../core';
+import { H3xValidationError, openingHit, roomShape, stairOutline } from '../core';
 import { GEOM_TOL } from '../core/constants';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { Junction, WallCorners } from '../shared/walls/joins';
-import { strayOutline } from './openings';
+import { openingShape, type OpeningShape } from './openings';
 import { roofHit } from './roofs';
 import { columnShape, inRoomShape, itemFootprint, wallOutline } from './shapes';
 import type { PlanKind, Rect, ScreenPoint } from './types';
@@ -42,6 +42,8 @@ export interface HitScene {
   roofsVisible?: boolean;
   /** Roof geometry cached at render time by roof id; missing entries are computed. */
   roofGeometry?: ReadonlyMap<Id, RoofGeometry>;
+  /** Opening shapes cached at render time by opening id; missing entries are computed. */
+  openingShapes?: ReadonlyMap<Id, OpeningShape>;
   /** Handles and labels of the selected opening; they are drawn on top and hit first. */
   openingEdit?: OpeningEditHits | null;
 }
@@ -103,10 +105,10 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     }
   }
 
-  const openings = Object.values(floor.openings).map((o) => {
-    const geometry = openingGeometry(floor, o);
-    return { id: o.id, geometry, stray: strayOutline(floor, o, geometry) };
-  });
+  const openings = Object.values(floor.openings).map((o) => ({
+    id: o.id,
+    ...(scene.openingShapes?.get(o.id) ?? openingShape(floor, o)),
+  }));
   // An opening wholly beyond its wall is picked on the box drawn for it.
   const openingWithin = (reach: number): Id | undefined =>
     openings.find(({ geometry, stray }) =>

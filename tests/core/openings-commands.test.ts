@@ -20,6 +20,7 @@ import {
   type Vec2,
 } from '../../src/core';
 import { closestPointOnSegment } from '../../src/core/geometry/segment';
+import { outlineClearances } from '../../src/core/openings/clearance';
 import { add, distance, leftNormal, normalize, scale, sub } from '../../src/core/geometry/vec';
 import { ctxFor, oneRoomFloor } from '../fixtures/floors';
 import { irregularFixtures } from '../fixtures/irregular';
@@ -68,7 +69,8 @@ const JAMB = 2.5;
 const crossing = (deg: number, own: number, other: number): number =>
   (other / 2 + (own / 2) * Math.cos(rad(deg))) / Math.sin(rad(deg));
 
-const faceAt = (f: Floor, end: Hinge): number => openingClearances(f, f.openings.o1!)[end].face;
+/** The outline part of the clearances: the end margin is tested on its own. */
+const faceAt = (f: Floor, end: Hinge): number => outlineClearances(f, f.openings.o1!)[end].face;
 
 function expectPoint(actual: Vec2, expected: Vec2) {
   expect(distance(actual, expected)).toBeLessThan(1e-9);
@@ -85,7 +87,7 @@ function expectMatchesOutlines(f: Floor, o: Opening) {
   const a = f.nodes[wall.a]!;
   const dir = normalize(sub(f.nodes[wall.b]!, a));
   const half = scale(leftNormal(dir), wall.thickness / 2);
-  const clearances = openingClearances(f, o);
+  const clearances = outlineClearances(f, o);
   for (const end of ENDS) {
     const { face, jamb, until } = clearances[end];
     const node = wall[end];
@@ -249,6 +251,42 @@ describe('resizeOpening', () => {
 });
 
 describe('openingClearances', () => {
+  describe('stops where the wall accepts an opening (openingRange)', () => {
+    /** w1 of oneRoomFloor with a free end at n1 (w4 gone), or w4 only 0.1 thick. */
+    const freeEnd = (): Floor => {
+      const f = oneRoomFloor();
+      delete f.walls.w4;
+      f.rooms = {};
+      return f;
+    };
+    const thinPartition = (): Floor => {
+      const f = oneRoomFloor();
+      f.walls.w4!.thickness = 0.1;
+      return f;
+    };
+
+    it.each([
+      ['a free wall end', freeEnd],
+      ['a 0.1 m meeting wall', thinPartition],
+    ])('at %s: the end margin, and distance 0 is accepted', (_, floor) => {
+      const f = floor();
+      // Jamb a at 0.75; the outline would allow 0 or 0.05, the end margin is 0.1.
+      const c = openingClearances(f, f.openings.o1!);
+      expect(c.a.face).toBeCloseTo(0.65, 9);
+      expect(c.a.until.x).toBeCloseTo(0.1, 9);
+      expect(c.a.jamb.x).toBeCloseTo(0.75, 9);
+      const doc = mk(f);
+      expect(
+        doc.tryExecute(setOpeningDistance('o1', { end: 'a', distance: 0, from: 'face' })),
+      ).toEqual({ ok: true });
+      expect(doc.floor.openings.o1!.offset).toBeCloseTo(0.55, 9);
+      expect(openingClearances(doc.floor, doc.floor.openings.o1!).a.face).toBeCloseTo(0, 9);
+      // Any nearer is out of the wall.
+      const nearer = doc.tryExecute(updateOpening('o1', { offset: 0.54 }));
+      expect(nearer.ok).toBe(false);
+    });
+  });
+
   describe.each([45, 60, 80, 90, 120])('a wall meeting at %i degrees', (deg) => {
     it.each([
       [0.2, 0.2],
@@ -260,7 +298,7 @@ describe('openingClearances', () => {
       for (const end of ENDS) {
         for (const mirror of [1, -1]) {
           const f = meeting([[mirror * deg, other]], { end, thickness: own });
-          const c = openingClearances(f, f.openings.o1!)[end];
+          const c = outlineClearances(f, f.openings.o1!)[end];
           expect(c.face).toBeCloseTo(JAMB - x, 8);
           expect(c.axis).toBeCloseTo(JAMB, 8);
           expectPoint(c.jamb, tilted(JAMB, (mirror * own) / 2));
@@ -403,7 +441,7 @@ describe('openingClearances', () => {
     it.each(ENDS)('counts at %s', (end) => {
       for (const mirror of [1, -1]) {
         const f = meeting([[mirror * deg, other, length]], { end, thickness: own });
-        const c = openingClearances(f, f.openings.o1!)[end];
+        const c = outlineClearances(f, f.openings.o1!)[end];
         expect(c.face).toBeCloseTo(JAMB - x, 8);
         expectPoint(c.jamb, tilted(JAMB, mirror * y));
         expectPoint(c.until, tilted(x, mirror * y));
@@ -414,8 +452,10 @@ describe('openingClearances', () => {
     it.each(ENDS)('a cut at distance 0 from it at %s does not overlap it', (end) => {
       const f = meeting([[deg, other, length]], { end, thickness: own });
       const ring = wallOutlines(f).m0!;
-      const cmd = setOpeningDistance('o1', { end, distance: 0, from: 'face' });
-      const at = cmd.run(ctxFor(f))[0]!.after as Opening;
+      // Flush with where the outline stops (nearer the node than the end margin allows).
+      const o = f.openings.o1!;
+      const face = outlineClearances(f, o)[end].face;
+      const at = { ...o, offset: o.offset + (end === 'a' ? -face : face) };
       const overlap = (o: Opening) => polygonOverlapArea(openingGeometry(f, o)!.cut, ring);
       expect(overlap(at)).toBeLessThan(1e-9);
       // 5 mm further toward the node it does.
@@ -427,7 +467,7 @@ describe('openingClearances', () => {
   it('stays on the left face where a tie reaches between the faces', () => {
     // A thinner continuation's end has both its corners between the faces, level with the node.
     const f = meeting([[180, 0.1]]);
-    expectPoint(openingClearances(f, f.openings.o1!).a.until, tilted(0, 0.1));
+    expectPoint(outlineClearances(f, f.openings.o1!).a.until, tilted(0, 0.1));
   });
 
   it('counts a corner between the faces at a crowded node', () => {

@@ -73,8 +73,8 @@ ${p} .${prefix}-node circle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; op
 ${p} .${prefix}-node:hover circle, ${p} .${prefix}-node.${prefix}-selected circle { opacity: 1; }
 ${p} .${prefix}-selected polygon, ${p} .${prefix}-selected circle, ${p} .${prefix}-room.${prefix}-selected path { stroke: #2563eb; stroke-width: 2; }
 ${p} .${prefix}-invalid polygon, ${p} .${prefix}-invalid circle, ${p} .${prefix}-invalid path { stroke: #dc2626; }
-${p} .${prefix}-warning polygon, ${p} .${prefix}-warning circle, ${p} .${prefix}-warning path { stroke: #d97706; }
-${p} .${prefix}-opening.${prefix}-warning .${prefix}-opening-gap { fill: #fef3c7; }
+${p} .${prefix}-warning:not(.${prefix}-selected) polygon, ${p} .${prefix}-warning:not(.${prefix}-selected) circle, ${p} .${prefix}-warning:not(.${prefix}-selected) path { stroke: #d97706; }
+${p} .${prefix}-opening.${prefix}-warning:not(.${prefix}-selected) .${prefix}-opening-gap { fill: #fef3c7; }
 ${p} .${prefix}-rejected polygon, ${p} .${prefix}-rejected circle, ${p} .${prefix}-rejected path { stroke: #dc2626; stroke-width: 3; }
 ${p} .${prefix}-preview { stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 4; }
 ${p} .${prefix}-preview-label { fill: #1d4ed8; font-size: ${DIMENSION_FONT_PX}px; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: #fafaf9; stroke-width: 3px; }

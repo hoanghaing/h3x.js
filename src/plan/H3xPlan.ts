@@ -29,7 +29,7 @@ import { computeJoins, type Joins } from '../shared/walls/joins';
 import { PlanInput } from './input';
 import { roofHandles } from './roofEdit';
 import { hitTest, type HitScene, type HitTarget, type OpeningEditHits } from './hit';
-import { openingDistanceLabels, openingHandles } from './openings';
+import { openingDistanceLabels, openingHandles, type OpeningShape } from './openings';
 import { snapDraw, snapPoint, type SnapResult } from './snap';
 import type { Tool, ToolContext } from './tools/Tool';
 import { SelectEditTool } from './tools/SelectEditTool';
@@ -225,6 +225,7 @@ export class H3xPlan {
       dimensions: new Map(),
       dimensionRects: new Map(),
       roofGeometry: new Map(),
+      openingShapes: new Map(),
     };
     this.presets = opts.presets ?? doc.presets;
     this.stairLabels = { ...DEFAULT_STAIR_LABELS, ...opts.stairLabels };
@@ -346,6 +347,7 @@ export class H3xPlan {
       stairRise: this.stairRise(),
       roofsVisible: this._roofsVisible,
       roofGeometry: this.dom.roofGeometry,
+      openingShapes: this.dom.openingShapes,
       openingEdit: this.openingEdit,
     };
     return hitTest(scene, s);
@@ -619,6 +621,11 @@ export class H3xPlan {
     this.roofDetachedEmitter.emit(e);
   }
 
+  /** @internal The shape cached when an opening was last drawn, if any. */
+  cachedOpeningShape(id: Id): OpeningShape | undefined {
+    return this.dom.openingShapes.get(id);
+  }
+
   /** @internal The geometry cached when a roof was last drawn, if any. */
   cachedRoofGeometry(id: Id): RoofGeometry | undefined {
     return this.dom.roofGeometry.get(id);
@@ -841,6 +848,7 @@ export class H3xPlan {
       site: this.doc.project.site,
       prefix: this.prefix,
       roofGeometry: this.dom.roofGeometry,
+      openingShapes: this.dom.openingShapes,
       stairs: {
         rise: this.stairRise(),
         labels: this.stairLabels,

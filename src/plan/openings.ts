@@ -1,5 +1,6 @@
 import {
   openingClearances,
+  openingGeometry,
   openingSpan,
   pieceOutline,
   type Floor,
@@ -65,6 +66,18 @@ export function drawOpeningSymbol(
   setAttr(lines!, 'd', symbol?.lines ?? '');
 }
 
+/** What an opening draws and is picked on: its geometry, and the stand-in box of a stray one. */
+export interface OpeningShape {
+  geometry: OpeningGeometry | null;
+  stray: Vec2[] | null;
+}
+
+/** The geometry of `o` and, when its cut is empty, its stray box (see `strayOutline`). */
+export function openingShape(floor: Readonly<Floor>, o: Opening): OpeningShape {
+  const geometry = openingGeometry(floor, o);
+  return { geometry, stray: strayOutline(floor, o, geometry) };
+}
+
 /** Node a and the unit direction of an opening's wall; null when the wall cannot be read. */
 export function wallFrameOf(floor: Readonly<Floor>, o: Opening): { a: Vec2; dir: Vec2 } | null {
   const wall = floor.walls[o.wall];
@@ -85,6 +98,11 @@ export function strayOutline(
   g: OpeningGeometry | null,
 ): Vec2[] | null {
   if (!g || distance(g.cut[0], g.cut[1]) > EPS) return null;
+  return spanOutline(floor, o);
+}
+
+/** The box of an opening's stored span across its wall, unclamped; null without the wall. */
+export function spanOutline(floor: Readonly<Floor>, o: Opening): Vec2[] | null {
   const frame = wallFrameOf(floor, o);
   if (!frame) return null;
   const left = leftNormal(frame.dir);

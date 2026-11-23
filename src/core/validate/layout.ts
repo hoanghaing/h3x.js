@@ -12,7 +12,7 @@ import { polygonOverlapArea } from '../geometry/clip';
 import { isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygon';
 import { segmentsIntersect } from '../geometry/segment';
 import { distance, tidy } from '../geometry/vec';
-import { wallFaceLimits } from '../openings/clearance';
+import { wallClearEnds } from '../openings/clearance';
 import { isBelowMinRoomArea, roomArea, roomPolygon } from '../rooms/detect';
 import { validateRoofs } from './roofs';
 import { circleOverlapArea, columnPolygon, columnShape } from '../shapes';
@@ -79,9 +79,9 @@ export function openingKeptRanges(
 }
 
 /**
- * Where an opening's centre is valid. Each end of the wall is shortened by
- * max(OPENING_END_MARGIN, where the clear length stops: see wallFaceLimits), so the opening is
- * clear of the drawn outline of a meeting wall. hi < lo means it cannot fit.
+ * Where an opening's centre is valid: between the wall's clear ends (`wallClearEnds`: where the
+ * clear length stops, at least OPENING_END_MARGIN from each node), so the opening is clear of the
+ * drawn outline of a meeting wall. hi < lo means it cannot fit.
  */
 export function openingRange(
   floor: Floor,
@@ -89,12 +89,8 @@ export function openingRange(
 ): { lo: number; hi: number } {
   const w = floor.walls[o.wall];
   if (!w || !floor.nodes[w.a] || !floor.nodes[w.b]) return { lo: Infinity, hi: -Infinity };
-  const limits = wallFaceLimits(floor, w);
-  const len = wallLength(floor, o.wall);
-  return {
-    lo: Math.max(OPENING_END_MARGIN, limits.a.x) + o.width / 2,
-    hi: len - Math.max(OPENING_END_MARGIN, len - limits.b.x) - o.width / 2,
-  };
+  const ends = wallClearEnds(floor, w);
+  return { lo: ends.a.x + o.width / 2, hi: ends.b.x - o.width / 2 };
 }
 
 /** True when `offset` lies in [lo, hi] within GEOM_TOL (and the range is not empty). */

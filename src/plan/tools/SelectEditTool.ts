@@ -5,7 +5,6 @@ import {
   moveNode,
   moveWall,
   nextOrientation,
-  openingGeometry,
   openingSpan,
   pushPullWall,
   resizeOpening,
@@ -40,7 +39,13 @@ import {
 } from '../roofEdit';
 import { nearestFaceVertex, snapScalar, type SnapGuide } from '../snap';
 import type { ScreenPoint } from '../types';
-import { alongWall, nudgeSign, openingMoveTarget, openingResizeWidth } from './openingEdit';
+import {
+  alongWall,
+  invalidGhost,
+  nudgeSign,
+  openingMoveTarget,
+  openingResizeWidth,
+} from './openingEdit';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
 
 export interface SelectEditToolOptions {
@@ -283,7 +288,8 @@ export class SelectEditTool implements Tool {
       const o = sel?.kind === 'opening' ? ctx.doc.floor.openings[sel.id] : undefined;
       const next = o && nextOrientation(o);
       if (this.gesture || !o || !next || e.altKey || e.ctrlKey || e.metaKey) return false;
-      this.run(updateOpening(o.id, next));
+      // A held key turns it once, not at the key-repeat rate.
+      if (!e.repeat) this.run(updateOpening(o.id, next));
       return true;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -505,8 +511,7 @@ export class SelectEditTool implements Tool {
     guides: readonly PlacementGuide[],
   ): void {
     const ctx = this.ctx!;
-    const geometry = openingGeometry(ctx.doc.floor, candidate);
-    ctx.showGhost(geometry, true, guides);
+    ctx.showGhost(invalidGhost(ctx.doc.floor, candidate), true, guides);
     this.reject(issues);
   }
 

@@ -2,7 +2,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   H3xDocument,
+  moveNode,
   openingClearances,
+  removeOpening,
   openingGeometry,
   type Floor,
   type Hinge,
@@ -15,7 +17,8 @@ import {
   type OpeningDistanceRequest,
   type OpeningEditRequest,
 } from '../../src/plan/H3xPlan';
-import { paintOpening } from '../../src/plan/openings';
+import { openingShape, paintOpening } from '../../src/plan/openings';
+import { DEFAULT_CSS } from '../../src/plan/style';
 import { oneRoomFloor, testPresets } from '../fixtures/floors';
 
 /*
@@ -423,6 +426,26 @@ describe('resizing an opening by its jamb handles', () => {
     expect(o1(plan).width).toBeCloseTo(1.05, 9);
   });
 
+  it('past the end of the wall: the red ghost spans where the jamb is dragged', () => {
+    const plan = selected();
+    drag(
+      plan,
+      { x: 1.65, y: 0 },
+      [
+        { x: 3, y: 0 },
+        { x: 4.5, y: 0 },
+      ],
+      {},
+      true,
+    );
+    expect(o1(plan).width).toBeCloseTo(2.25, 9); // the last valid step, at 3
+    const red = redGhost(plan)!;
+    expect(red.querySelector('.h3x-plan-opening-gap')!.getAttribute('points')).toBe(
+      '0.75,0.1 4.5,0.1 4.5,-0.1 0.75,-0.1',
+    );
+    fire(plan, 'pointerup', { x: 4.5, y: 0 });
+  });
+
   it('a handle beside a node wins over the node', () => {
     const f = oneRoomFloor();
     f.openings.o1!.offset = 0.55; // jamb a at 0.1, 10 px from n1
@@ -508,6 +531,18 @@ describe('keys on a selected opening', () => {
     expect(o1(plan)).toMatchObject({ hinge: 'b', swing: 'right' });
     plan.doc.undo();
     expect(o1(plan)).toMatchObject({ hinge: 'b', swing: 'left' });
+  });
+
+  it('a held Space (key repeat) turns the door once', () => {
+    const plan = makePlan();
+    click(plan, { x: 1.2, y: 0 });
+    key(plan, ' ');
+    expect(key(plan, ' ', { repeat: true }).defaultPrevented).toBe(true);
+    key(plan, ' ', { repeat: true });
+    expect(o1(plan)).toMatchObject({ hinge: 'b', swing: 'left' });
+    // Arrows still repeat.
+    key(plan, 'ArrowRight', { repeat: true });
+    expect(o1(plan).offset).toBeCloseTo(1.21, 9);
   });
 
   it('Space is not handled for a type with no hinge or swing', () => {
@@ -620,6 +655,79 @@ describe('clear distances', () => {
   });
 });
 
+describe('the end of the clear distance is where the wall accepts the opening', () => {
+  const freeEnd = (): Floor => {
+    const f = oneRoomFloor();
+    delete f.walls.w4;
+    f.rooms = {};
+    return f;
+  };
+  const thinPartition = (): Floor => {
+    const f = oneRoomFloor();
+    f.walls.w4!.thickness = 0.1;
+    return f;
+  };
+
+  it.each([
+    ['a free wall end', freeEnd],
+    ['a 0.1 m meeting wall', thinPartition],
+  ])('at %s: label, jamb snap and a typed 0 agree', (_, floor) => {
+    const plan = makePlan(floor());
+    click(plan, { x: 1.2, y: 0 });
+    expect(label(plan, 'a')).toBe('0.65');
+    // The jamb snaps onto 0.1 and the document takes it.
+    drag(plan, { x: 0.75, y: 0 }, [
+      { x: 0.4, y: 0 },
+      { x: 0.13, y: 0 },
+    ]);
+    expect(redGhost(plan)).toBeNull();
+    expect(o1(plan).width).toBeCloseTo(1.55, 9);
+    expect(label(plan, 'a')).toBe('0.00');
+    plan.doc.undo();
+    expect(plan.setOpeningDistance('o1', { end: 'a', distance: 0 })).toEqual({ ok: true });
+    expect(o1(plan).offset).toBeCloseTo(0.55, 9);
+  });
+});
+
+describe('opening shapes cached for hit testing', () => {
+  /** Every cached shape equals a fresh one, removed openings have none, and hits agree. */
+  function expectFresh(plan: H3xPlan): void {
+    const floor = plan.doc.floor;
+    for (const o of Object.values(floor.openings)) {
+      expect(plan.cachedOpeningShape(o.id), o.id).toEqual(openingShape(floor, o));
+      const g = openingShape(floor, o).geometry!;
+      const centre = {
+        x: (g.cut[0].x + g.cut[2].x) / 2,
+        y: (g.cut[0].y + g.cut[2].y) / 2,
+      };
+      expect(plan.hitAt(plan.planToScreen(centre))).toEqual({ kind: 'opening', id: o.id });
+    }
+  }
+
+  it('follow edits of the opening, its wall, a neighbouring wall, undo and delete', () => {
+    const f = oneRoomFloor();
+    f.openings.o1!.offset = 0.55; // flush with the corner at n1
+    f.openings.o2 = { ...f.openings.o1!, id: 'o2', wall: 'w2', offset: 2 };
+    const plan = makePlan(f);
+    expectFresh(plan);
+    const doc = plan.doc;
+    // n4 is not on w1, but w4 meets w1 at n1: the corner (and o1's cut) moves.
+    doc.execute(moveNode('n4', { x: -1, y: 4 }));
+    expectFresh(plan);
+    doc.execute(moveNode('n3', { x: 4.5, y: 4 }));
+    expectFresh(plan);
+    plan.setOpeningDistance('o2', { end: 'a', distance: 1 });
+    expectFresh(plan);
+    doc.undo();
+    doc.undo();
+    expectFresh(plan);
+    doc.execute(removeOpening('o2'));
+    expect(plan.cachedOpeningShape('o2')).toBeUndefined();
+    expect(plan.hitAt(plan.planToScreen({ x: 4, y: 2 }))).toEqual({ kind: 'wall', id: 'w2' });
+    expectFresh(plan);
+  });
+});
+
 describe('an opening wholly beyond its wall', () => {
   function stray(): H3xPlan {
     const f = oneRoomFloor();
@@ -653,6 +761,17 @@ describe('an opening wholly beyond its wall', () => {
 });
 
 describe('swing warnings', () => {
+  it('give way to the selection colour, as invalid does not', () => {
+    const css = DEFAULT_CSS('h3x-plan');
+    const warningRules = css.split(/\r?\n/).filter((l) => l.includes('-warning'));
+    expect(warningRules.length).toBeGreaterThan(0);
+    for (const rule of warningRules) {
+      const selectors = rule.slice(0, rule.indexOf('{')).split(',');
+      for (const sel of selectors)
+        expect(sel).toContain('.h3x-plan-warning:not(.h3x-plan-selected)');
+    }
+  });
+
   it('mark the opening and what blocks it as a warning, not as invalid', () => {
     const f = oneRoomFloor();
     // A column right in front of the door, inside its swing.

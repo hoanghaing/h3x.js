@@ -83,7 +83,7 @@ export function renderPreview(
  * `null` draws only the guides.
  */
 export interface GhostState {
-  shape: OpeningGeometry | { at: Vec2; width: number } | null;
+  shape: OpeningGeometry | { at: Vec2; width: number } | { outline: readonly Vec2[] } | null;
   invalid: boolean;
   guides: readonly PlacementGuide[];
 }
@@ -101,7 +101,8 @@ export function renderGhost(layer: SVGGElement, prefix: string, ghost: GhostStat
   g.classList.toggle(`${prefix}-invalid`, ghost.invalid);
   if (shape) {
     createOpeningSymbol(g, prefix);
-    drawOpeningSymbol(g, 'at' in shape ? null : shape);
+    if ('outline' in shape) drawOpeningSymbol(g, null, shape.outline);
+    else drawOpeningSymbol(g, 'at' in shape ? null : shape);
   }
   if (shape && 'at' in shape) {
     const { at, width } = shape;

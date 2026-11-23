@@ -14,9 +14,14 @@ import type {
   Vec2,
   Wall,
 } from '../core';
-import { openingGeometry, roofGeometry, roomShape } from '../core';
+import { roofGeometry, roomShape } from '../core';
 import type { WallCorners } from '../shared/walls/joins';
-import { createOpeningSymbol, drawOpeningSymbol, strayOutline } from './openings';
+import {
+  createOpeningSymbol,
+  drawOpeningSymbol,
+  openingShape,
+  type OpeningShape,
+} from './openings';
 import { columnShape, itemFootprint, roomLabel, roomPath, wallOutline } from './shapes';
 import { roofOwnShapes } from './roofs';
 import { stairOwnShapes, type StairLabels } from './stairs';
@@ -101,6 +106,8 @@ export interface RenderContext {
   prefix?: string;
   /** Where roof geometry is cached for hit testing (written when a roof is drawn). */
   roofGeometry?: Map<Id, RoofGeometry>;
+  /** Where opening shapes are cached for hit testing (written when an opening is drawn). */
+  openingShapes?: Map<Id, OpeningShape>;
   stairs?: { rise: number; labels: StairLabels; prefix: string };
 }
 
@@ -177,8 +184,9 @@ export function updateEntityElement(g: SVGGElement, e: KindEntity, ctx: RenderCo
     case 'room':
       return updateRoom(g, e.entity, ctx);
     case 'opening': {
-      const geometry = openingGeometry(ctx.floor, e.entity);
-      return drawOpeningSymbol(g, geometry, strayOutline(ctx.floor, e.entity, geometry));
+      const shape = openingShape(ctx.floor, e.entity);
+      ctx.openingShapes?.set(e.entity.id, shape);
+      return drawOpeningSymbol(g, shape.geometry, shape.stray);
     }
     case 'item': {
       const fp = itemFootprint(e.entity, ctx.floor, ctx.presets);

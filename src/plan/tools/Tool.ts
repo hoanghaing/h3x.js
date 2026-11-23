@@ -33,11 +33,12 @@ export interface ToolContext {
   /** Draws snap guides in the overlay; `[]` clears. */
   showGuides(g: SnapResult['guides']): void;
   /**
-   * Draws the ghost of an opening being placed: its symbol, or a bar `width` long at `at` when it
-   * has no wall. `invalid` draws it red; `guides` are the snap ticks across the wall. `null` clears.
+   * Draws the ghost of an opening being placed: its symbol, a bar `width` long at `at` when it
+   * has no wall, or a closed `outline`. `invalid` draws it red; `guides` are the snap ticks across
+   * the wall. `null` draws the guides alone, and with no guides clears.
    */
   showGhost(
-    g: OpeningGeometry | { at: Vec2; width: number } | null,
+    g: OpeningGeometry | { at: Vec2; width: number } | { outline: readonly Vec2[] } | null,
     invalid?: boolean,
     guides?: readonly PlacementGuide[],
   ): void;

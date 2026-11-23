@@ -1,16 +1,19 @@
 import {
   openingClearances,
   openingSpan,
+  openingGeometry,
   resolvePlacement,
   type Floor,
+  type OpeningGeometry,
   type Hinge,
   type Id,
   type Opening,
   type Placement,
   type Vec2,
 } from '../../core';
-import { EPS, dot, sub, tidy } from '../../core/geometry/vec';
-import { wallFrameOf } from '../openings';
+import { GEOM_TOL } from '../../core/constants';
+import { EPS, distance, dot, sub, tidy } from '../../core/geometry/vec';
+import { spanOutline, wallFrameOf } from '../openings';
 
 /** How far (screen px) from a wall face the pointer may be to place an opening on it. */
 export const OPENING_REACH_PX = 24;
@@ -84,6 +87,22 @@ export function openingResizeWidth(
         : Math.round(width / OPENING_WIDTH_GRID) * OPENING_WIDTH_GRID;
   }
   return tidy(Math.max(OPENING_MIN_WIDTH, width));
+}
+
+/**
+ * What the red ghost of an opening that may not go there draws: its symbol, or, where the wall
+ * would cut it shorter than it is (past a wall face or end), the box of its stored span, so the
+ * ghost reaches where the pointer put it.
+ */
+export function invalidGhost(
+  floor: Readonly<Floor>,
+  o: Opening,
+): OpeningGeometry | { outline: Vec2[] } | null {
+  const g = openingGeometry(floor, o);
+  // A cut flush with a face is GEOM_TOL short at that jamb; anything shorter is clamped.
+  const clamped = !g || distance(g.cut[0], g.cut[1]) < o.width - 2 * GEOM_TOL - EPS;
+  const outline = clamped ? spanOutline(floor, o) : null;
+  return outline ? { outline } : g;
 }
 
 /** +1 / -1: the way along the opening's wall an arrow (plan direction) points; 0 across it. */

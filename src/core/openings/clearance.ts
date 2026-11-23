@@ -1,4 +1,5 @@
 import { notFound } from '../commands/shared';
+import { OPENING_END_MARGIN } from '../constants';
 import { EPS, add, distance, dot, leftNormal, normalize, scale, sub, tidy } from '../geometry/vec';
 import { openingSpan, wallOutline } from '../shapes';
 import type { Floor, Hinge, Opening, Vec2, Wall } from '../types';
@@ -67,16 +68,47 @@ export function wallFaceLimits(floor: Readonly<Floor>, wall: Wall): Record<Hinge
 }
 
 /**
+ * Where an opening may reach to at each end of `wall`, from node a: the clear length
+ * (`wallFaceLimits`), and never nearer the node than OPENING_END_MARGIN. `openingRange`, the
+ * clearances and `setOpeningDistance` all stop there. `v` is the clear length's level.
+ */
+export function wallClearEnds(floor: Readonly<Floor>, wall: Wall): Record<Hinge, WallFaceLimit> {
+  const limits = wallFaceLimits(floor, wall);
+  const len = distance(floor.nodes[wall.a]!, floor.nodes[wall.b]!);
+  return {
+    a: { x: Math.max(OPENING_END_MARGIN, limits.a.x), v: limits.a.v },
+    b: { x: len - Math.max(OPENING_END_MARGIN, len - limits.b.x), v: limits.b.v },
+  };
+}
+
+/**
  * The room beside each jamb of `o`. `face`: the clear distance to the nearer jamb of the next
- * opening, or to where the wall's clear length stops; negative when `o` reaches past it. `axis`:
- * to the wall's end node, whatever stands between. `jamb` and `until` are the ends of the `face`
+ * opening, or to where the wall accepts an opening (`wallClearEnds`: where the clear length
+ * stops, at least OPENING_END_MARGIN from the node); negative when `o` reaches past it, so a
+ * `face` of 0 or more at both ends is never out of the wall. `axis`: to the wall's end node,
+ * whatever stands between. `jamb` and `until` are the ends of the `face`
  * distance, level with what stops the clear length: on a face, or between them where a corner of
  * a meeting wall does. Throws `not-found` without the wall.
  */
-export function openingClearances(
+export function openingClearances(floor: Readonly<Floor>, o: Opening): Clearances {
+  return clearancesTo(floor, o, wallClearEnds);
+}
+
+/**
+ * `openingClearances` measured to the clear length itself (`wallFaceLimits`), without the end
+ * margin: what the drawn outlines alone leave.
+ */
+export function outlineClearances(floor: Readonly<Floor>, o: Opening): Clearances {
+  return clearancesTo(floor, o, wallFaceLimits);
+}
+
+type Clearances = Record<Hinge, { face: number; axis: number; jamb: Vec2; until: Vec2 }>;
+
+function clearancesTo(
   floor: Readonly<Floor>,
   o: Opening,
-): Record<Hinge, { face: number; axis: number; jamb: Vec2; until: Vec2 }> {
+  ends: (floor: Readonly<Floor>, wall: Wall) => Record<Hinge, WallFaceLimit>,
+): Clearances {
   const wall = floor.walls[o.wall];
   if (!wall) throw notFound('Wall', o.wall);
   const a = floor.nodes[wall.a]!;
@@ -88,7 +120,7 @@ export function openingClearances(
   const others = Object.values(floor.openings).filter((p) => p.id !== o.id && p.wall === o.wall);
   const before = others.filter((p) => p.offset < o.offset).map((p) => openingSpan(p).hi);
   const after = others.filter((p) => p.offset > o.offset).map((p) => openingSpan(p).lo);
-  const limits = wallFaceLimits(floor, wall);
+  const limits = ends(floor, wall);
   const from = Math.max(limits.a.x, ...before);
   const to = Math.min(limits.b.x, ...after);
   const va = limits.a.v;

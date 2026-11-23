@@ -1,5 +1,6 @@
 import type { Floor, Id, RoofGeometry, Site } from '../core';
 import type { PlanKind, Rect } from './types';
+import type { OpeningShape } from './openings';
 
 /** Layers, bottom to top. */
 export const LAYERS = [
@@ -68,4 +69,6 @@ export interface PlanDom {
   dimensionRects: Map<Id, Rect>;
   /** Roof geometry computed when each roof was drawn; hit testing reuses it. */
   roofGeometry: Map<Id, RoofGeometry>;
+  /** Opening geometry (and stray boxes) computed when each opening was drawn; hit testing reuses it. */
+  openingShapes: Map<Id, OpeningShape>;
 }
