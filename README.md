@@ -114,6 +114,15 @@ the opening it makes.
   moves node `b`; `'b'` keeps node `b` fixed and moves node `a`). Openings and wall items stay
   where they are relative to the end that stays, whichever end that is, and are re-fitted into
   range on a resized wall. These do not re-sync rooms.
+- Groups: `transformObjects(set, transform)` moves (`{ kind: 'translate', delta }`), turns
+  (`{ kind: 'rotate', center, angle }`) or mirrors (`{ kind: 'mirror', a, b }`, across the line
+  a–b) an `ObjectSet` (`{ walls?, nodes?, rooms?, columns?, stairs?, items?, roofs? }`, ids of the
+  active floor) as one undo step. The nodes of its walls (and rooms) move and walls attached to
+  them stretch; openings and wall items ride their walls. A mirror flips door swings, wall item
+  sides and stair hands and keeps rooms and roofs counter-clockwise; follow roofs follow their
+  rooms. An invalid result rejects the whole transform. `removeObjects(set)` deletes a set in one
+  step (ids already gone are skipped). `sequence(label, steps)` runs commands one after another
+  as one change list.
 - Structure: `addWall({ from, to, thickness, height? })` draws a wall; each end is
   `{ node: id }` or `{ at: { x, y } }`. An `at` end within `GEOM_TOL` of a node reuses it, one on
   a wall splits that wall (T-junction); the new wall is cut at every node it passes through and
