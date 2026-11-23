@@ -2,8 +2,13 @@ import type { Command, CommandContext, EntityChange } from '../document/changes'
 import { MIN_WALL_LENGTH } from '../constants';
 import { enclosedRooms } from '../rooms/sync';
 import { EPS, add, distance, dot, leftNormal, scale, sub, tidy } from '../geometry/vec';
-import { clampIntoRange, openingRange, wallUsableRange } from '../validate/layout';
-import type { Floor, Id, PlanNode, Vec2, WallItem } from '../types';
+import {
+  clampIntoRange,
+  clampIntoRanges,
+  openingKeptRanges,
+  wallUsableRange,
+} from '../validate/layout';
+import type { Floor, Id, Vec2, WallItem } from '../types';
 import { fail, notFound } from './shared';
 
 /**
@@ -16,6 +21,11 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
   const { floor } = ctx;
   const changes: EntityChange[] = [];
   const pos = (id: Id): Vec2 | undefined => moves.get(id) ?? floor.nodes[id];
+  // The floor as the moves leave it, for the ranges that depend on the walls meeting another.
+  const moved: Floor = { ...(floor as Floor), nodes: { ...floor.nodes } };
+  for (const [id, to] of moves) {
+    if (floor.nodes[id]) moved.nodes[id] = { id, x: to.x, y: to.y };
+  }
   for (const [id, to] of moves) {
     const n = floor.nodes[id];
     if (!n) throw notFound('Node', id);
@@ -36,7 +46,7 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
     for (const o of Object.values(floor.openings)) {
       if (o.wall !== w.id) continue;
       const start = by === 0 ? o.offset : tidy(o.offset + by);
-      const offset = clampIntoRange(start, openingRange(floor, o, len)) ?? start;
+      const offset = clampIntoRanges(start, openingKeptRanges(moved, o)) ?? start;
       if (offset === o.offset) continue;
       changes.push({
         kind: 'opening',
@@ -56,11 +66,8 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
       changes.push({ kind: 'item', id: it.id, before: structuredClone(it), after });
     }
   }
-  const nodes = changes.filter((c) => c.kind === 'node');
-  if (nodes.length === 0) return changes;
-  const after: Floor = { ...floor, nodes: { ...floor.nodes } };
-  for (const c of nodes) after.nodes[c.id] = c.after as PlanNode;
-  return [...changes, ...enclosedRooms(floor, after)];
+  if (!changes.some((c) => c.kind === 'node')) return changes;
+  return [...changes, ...enclosedRooms(floor, moved)];
 }
 
 export function moveNode(nodeId: Id, to: Vec2): Command {

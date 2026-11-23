@@ -4,19 +4,26 @@ import {
   moveColumn,
   moveNode,
   moveWall,
+  nextOrientation,
+  openingSpan,
   pushPullWall,
+  resizeOpening,
   splitWall,
   stairOutline,
+  updateOpening,
   updateStair,
   type Command,
+  type Hinge,
   type Id,
   type Issue,
+  type Opening,
+  type PlacementGuide,
   type Roof,
   type RoofEdge,
   type Stair,
   type Vec2,
 } from '../../core';
-import { add, dot, leftNormal, scale, sub } from '../../core/geometry/vec';
+import { add, dot, leftNormal, scale, sub, tidy } from '../../core/geometry/vec';
 import type { HitTarget } from '../hit';
 import {
   ROOF_EDGE_PX,
@@ -32,6 +39,13 @@ import {
 } from '../roofEdit';
 import { nearestFaceVertex, snapScalar, type SnapGuide } from '../snap';
 import type { ScreenPoint } from '../types';
+import {
+  alongWall,
+  invalidGhost,
+  nudgeSign,
+  openingMoveTarget,
+  openingResizeWidth,
+} from './openingEdit';
 import type { PlanPointerEvent, Tool, ToolContext } from './Tool';
 
 export interface SelectEditToolOptions {
@@ -63,7 +77,16 @@ type Drop = { node: Id; at: Vec2 } | { wall: Id; at: Vec2 };
 interface Gesture {
   key: string;
   /** 'push' is a Shift + wall drag (push / pull). */
-  kind: 'node' | 'wall' | 'push' | 'column' | 'stair' | 'roof' | 'roofVertex';
+  kind:
+    | 'node'
+    | 'wall'
+    | 'push'
+    | 'column'
+    | 'stair'
+    | 'roof'
+    | 'roofVertex'
+    | 'opening'
+    | 'openingResize';
   id: Id;
   /** Wall drags: unit left normal at gesture start. */
   normal: Vec2;
@@ -78,6 +101,17 @@ interface Gesture {
   vertex?: RoofVertexRef;
   /** Roof drags: the translation currently applied. */
   shift?: Vec2;
+  /** Opening drags: the opening at gesture start. */
+  opening?: Opening;
+  /**
+   * Opening drags: the pointer minus the centre (moves) or minus the dragged jamb (resizes),
+   * along the wall, at the press.
+   */
+  grab?: number;
+  /** Opening resizes: the jamb being dragged. */
+  end?: Hinge;
+  /** Opening moves: the host of the last step, kept against nearby walls. */
+  host?: Id;
 }
 
 const SNAP_RADIUS_PX = 8;
@@ -109,9 +143,12 @@ const selectable = (kind: string): kind is Selectable => SELECTABLE.has(kind);
  * Selects nodes, walls, columns, stairs, roofs, openings, items and the site; drags nodes, walls, columns, stairs
  * and independent roofs (one undo step per drag; a vertex handle of a selected roof moves that
  * vertex, detaching a follow roof first; a click on an edge of the selected roof asks the host to
- * edit it), nudges with arrow keys. Shift + wall drag pushes / pulls the wall, a node dropped onto
- * another node or a wall joins it, double-click on a wall inserts a point, Delete / Backspace
- * removes the selection. Node and wall drags compute each step from the start of the drag, so
+ * edit it), nudges with arrow keys. Openings are dragged along and between walls (an invalid
+ * spot keeps the last valid one and shows a red ghost), resized by their jamb handles, nudged
+ * along their wall by the arrows and turned with Space; a click on a clear distance or a
+ * double-click on an opening asks the host to edit it. Shift + wall drag pushes / pulls the
+ * wall, a node dropped onto another node or a wall joins it, double-click on a wall inserts a
+ * point, Delete / Backspace removes the selection. Node and wall drags compute each step from the start of the drag, so
  * dragging back puts openings back too.
  */
 export class SelectEditTool implements Tool {
@@ -166,6 +203,8 @@ export class SelectEditTool implements Tool {
     if (this.press.roofVertex || this.press.roofEdge) return true;
     const kind = e.hit?.kind;
     return (
+      kind === 'openingHandle' ||
+      kind === 'openingDistance' ||
       kind === 'roof' ||
       kind === 'node' ||
       kind === 'wall' ||
@@ -205,7 +244,12 @@ export class SelectEditTool implements Tool {
     }
     if (press.roofVertex) return;
     const t = press.target;
-    if (t && selectable(t.kind)) this.ctx.plan.select({ kind: t.kind, id: t.id });
+    if (t?.kind === 'openingDistance') {
+      this.ctx.plan.emitOpeningDistanceRequest(t.id, t.end);
+      return;
+    }
+    if (t?.kind === 'openingHandle') this.ctx.plan.select({ kind: 'opening', id: t.id });
+    else if (t && selectable(t.kind)) this.ctx.plan.select({ kind: t.kind, id: t.id });
     else if (t?.kind !== 'dimension') this.ctx.plan.select(null);
   }
 
@@ -214,6 +258,8 @@ export class SelectEditTool implements Tool {
     if (!ctx || this.gesture) return;
     if (e.hit?.kind === 'dimension') {
       ctx.plan.emitLengthEditRequest(e.hit.id, e.plan);
+    } else if (e.hit?.kind === 'opening' || e.hit?.kind === 'openingHandle') {
+      ctx.plan.emitOpeningEditRequest(e.hit.id, e.screen);
     } else if (e.hit?.kind === 'wall') {
       // Insert point; the wall projects the point onto its center line.
       const cmd = splitWall(e.hit.id, e.plan);
@@ -238,6 +284,14 @@ export class SelectEditTool implements Tool {
       return true;
     }
     const sel = ctx.plan.selection;
+    if (e.key === ' ') {
+      const o = sel?.kind === 'opening' ? ctx.doc.floor.openings[sel.id] : undefined;
+      const next = o && nextOrientation(o);
+      if (this.gesture || !o || !next || e.altKey || e.ctrlKey || e.metaKey) return false;
+      // A held key turns it once, not at the key-repeat rate.
+      if (!e.repeat) this.run(updateOpening(o.id, next));
+      return true;
+    }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (this.gesture || !sel || !selectable(sel.kind) || e.altKey || e.ctrlKey || e.metaKey) {
         return false;
@@ -263,6 +317,12 @@ export class SelectEditTool implements Tool {
       const st = ctx.doc.floor.stairs[sel.id];
       if (!st) return false;
       cmd = updateStair(sel.id, { x: st.x + d.x, y: st.y + d.y });
+    } else if (sel?.kind === 'opening') {
+      // Along the wall only: the arrow's direction picks the way, its step the distance.
+      const o = ctx.doc.floor.openings[sel.id];
+      const sign = o ? nudgeSign(ctx.doc.floor, o, dir) : 0;
+      if (!o || sign === 0) return false;
+      cmd = updateOpening(o.id, { offset: tidy(o.offset + sign * Math.hypot(d.x, d.y)) });
     } else {
       return false;
     }
@@ -279,8 +339,25 @@ export class SelectEditTool implements Tool {
     let start: Vec2 = { x: 0, y: 0 };
     let roof: Roof | undefined;
     let vertex: RoofVertexRef | undefined;
+    let opening: Pick<Gesture, 'opening' | 'grab' | 'end'> | undefined;
     const sel = ctx.plan.selection;
-    if (press.roofVertex && sel?.kind === 'roof') {
+    if (t?.kind === 'opening' || t?.kind === 'openingHandle') {
+      const o = floor.openings[t.id];
+      const x = o ? alongWall(floor, o, press.plan) : NaN;
+      if (!o || !Number.isFinite(x)) return;
+      const { lo, hi } = openingSpan(o);
+      if (!('end' in t)) {
+        kind = 'opening';
+        opening = { opening: structuredClone(o), grab: x - o.offset };
+      } else {
+        kind = 'openingResize';
+        opening = {
+          opening: structuredClone(o),
+          grab: x - (t.end === 'a' ? lo : hi),
+          end: t.end,
+        };
+      }
+    } else if (press.roofVertex && sel?.kind === 'roof') {
       roof = floor.roofs[sel.id];
       if (!roof) return;
       kind = 'roofVertex';
@@ -325,8 +402,10 @@ export class SelectEditTool implements Tool {
       drop: null,
       ...(roof ? { roof: structuredClone(roof), shift: { x: 0, y: 0 } } : {}),
       ...(vertex ? { vertex } : {}),
+      ...opening,
     };
-    ctx.plan.select({ kind: roof ? 'roof' : (t!.kind as Selectable), id });
+    const selKind = roof ? 'roof' : opening ? 'opening' : (t!.kind as Selectable);
+    ctx.plan.select({ kind: selKind, id });
     if (kind === 'node') ctx.setDragging(id);
   }
 
@@ -339,7 +418,101 @@ export class SelectEditTool implements Tool {
     else if (g.kind === 'roofVertex') this.stepRoofVertex(g, e.plan, free);
     else if (g.kind === 'roof') this.stepRoof(g, e.plan, free);
     else if (g.kind === 'push') this.stepPush(g, e.plan, free);
+    else if (g.kind === 'opening') this.stepOpening(g, e.plan, free);
+    else if (g.kind === 'openingResize') this.stepOpeningResize(g, e.plan, free);
     else this.stepWall(g, e.plan, free);
+  }
+
+  /**
+   * Moves the dragged opening where the placement module puts it (along its wall or onto
+   * another). Each step runs from the start of the drag. An invalid spot (or no wall in reach)
+   * leaves the document at the last valid one and shows a red ghost there instead.
+   */
+  private stepOpening(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const floor = ctx.doc.floor;
+    const cur = floor.openings[g.id];
+    if (!cur || !g.opening) return;
+    const target = openingMoveTarget(floor, g.opening, g.grab ?? 0, p, {
+      pxPerM: ctx.plan.view.scale,
+      grid: ctx.plan.snapOptions.grid,
+      free,
+      ...(g.host !== undefined ? { current: g.host } : {}),
+    });
+    if (!target) {
+      this.clearRejection();
+      ctx.showGhost({ at: p, width: g.opening.width }, true);
+      return;
+    }
+    const { opening, placement } = target;
+    g.host = placement.wall;
+    if (placement.issues.length > 0) {
+      this.showInvalidOpening(opening, placement.issues, placement.guides);
+      return;
+    }
+    const { wall, offset, hinge, swing } = opening;
+    const same =
+      cur.wall === wall && cur.offset === offset && cur.hinge === hinge && cur.swing === swing;
+    if (same) this.showValidOpening(placement.guides);
+    else
+      this.stepOpeningCommand(
+        g,
+        updateOpening(g.id, { wall, offset, hinge, swing }),
+        opening,
+        placement.guides,
+      );
+  }
+
+  /** Moves the dragged jamb of an opening; the other stays. Invalid widths show a red ghost. */
+  private stepOpeningResize(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const floor = ctx.doc.floor;
+    const cur = floor.openings[g.id];
+    const start = g.opening;
+    if (!cur || !start || !g.end) return;
+    const x = alongWall(floor, start, p) - (g.grab ?? 0);
+    if (!Number.isFinite(x)) return;
+    const width = openingResizeWidth(floor, start, g.end, x, {
+      pxPerM: ctx.plan.view.scale,
+      free,
+    });
+    const { lo, hi } = openingSpan(start);
+    const offset = tidy(g.end === 'a' ? hi - width / 2 : lo + width / 2);
+    if (cur.width === width && cur.offset === offset) {
+      this.showValidOpening([]);
+      return;
+    }
+    const cmd = resizeOpening(g.id, { end: g.end, width });
+    this.stepOpeningCommand(g, cmd, { ...start, width, offset }, []);
+  }
+
+  /** Runs an opening drag step from the start of the drag; on rejection shows `candidate` red. */
+  private stepOpeningCommand(
+    g: Gesture,
+    cmd: Command,
+    candidate: Opening,
+    guides: readonly PlacementGuide[],
+  ): void {
+    const ctx = this.ctx!;
+    const res = this.issue(() => ctx.doc.tryExecute(cmd, { coalesceKey: g.key, restart: true }));
+    if (res.ok) this.showValidOpening(guides);
+    else this.showInvalidOpening(candidate, res.issues, guides);
+  }
+
+  private showValidOpening(guides: readonly PlacementGuide[]): void {
+    this.clearRejection();
+    this.ctx!.showGhost(null, false, guides);
+  }
+
+  /** The red ghost of where an opening may not go, and why (flashed). */
+  private showInvalidOpening(
+    candidate: Opening,
+    issues: Issue[],
+    guides: readonly PlacementGuide[],
+  ): void {
+    const ctx = this.ctx!;
+    ctx.showGhost(invalidGhost(ctx.doc.floor, candidate), true, guides);
+    this.reject(issues);
   }
 
   /**
@@ -613,6 +786,7 @@ export class SelectEditTool implements Tool {
     if (this.press) this.press.dead = true;
     if (seal) ctx.doc.endCoalesce();
     ctx.showGuides([]);
+    ctx.showGhost(null);
     ctx.plan.showDropTarget(null);
     ctx.setDragging(null);
   }

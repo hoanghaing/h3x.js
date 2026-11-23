@@ -99,7 +99,13 @@ This example is run by the test suite (`tests/core/public-api.test.ts`); keep bo
   `column-unsupported` for a column with none below it.
 
 Item and opening sizes come from a `PresetResolver` (`(presetId) => PresetInfo | undefined`)
-passed as `presets`.
+passed as `presets`. The document also resolves the built-in opening presets
+(`OPENING_PRESETS`: `door-single-01`, `door-double-01`, `door-double-unequal-01`,
+`door-sliding-01`, `door-folding-01`, `door-rolling-01`, `opening-01`, `window-01`,
+`window-casement-01`, `window-sliding-01`, `window-awning-01`) after the host's own;
+`createPresetResolver(host?)` builds the same lookup. An opening preset's `PresetInfo.opening`
+gives its initial type, hinge, swing, leaves and split, and `presetOpening(info, base, sill?)`
+the opening it makes.
 
 ### Commands
 
@@ -135,9 +141,31 @@ passed as `presets`.
   follow roofs over them. Rejections:
   `split-too-short`, `split-cuts-opening`, `merge-drops-opening`, `push-pull-cuts-opening`,
   `invalid-target`.
-- Openings: `addOpening({ wall, preset, offset, flip?, sill? })`,
-  `moveOpening(id, { offset?, sill?, flip? })`, `removeOpening(id)`. A width of 0 or less is
-  `invalid-opening` (also in `fromProject`; a parse error in XML).
+- Openings: an `Opening` has a `type` (`door-swing`, `door-double`, `door-sliding`,
+  `door-folding`, `door-rolling`, `opening`, `window-casement`, `window-sliding`,
+  `window-awning`, `window-fixed`), a `hinge` (`'a' | 'b'`, the wall end nearer the hinge), a
+  `swing` (`'left' | 'right'` of the wall `a -> b`) and optional `leaves` and `split`; see
+  [docs/xml-format.md](docs/xml-format.md) for which applies to which type. `openingParams(o)`
+  lists the parameters that shape `o` (an editor disables the other inputs), `openingLeaves(o)`
+  the leaf count, `nextOrientation(o)` the next hinge / swing in a cycle (null when none
+  applies) and `mirrorOrientation(o)` the same opening seen from the other wall direction.
+  Commands:
+  - `addOpening({ wall, preset, offset, ...fields })`: the preset gives size, sill, type, leaves
+    and split; any field passed overrides it.
+  - `updateOpening(id, patch)` changes any field but the id, `wall` included (`moveOpening` is
+    the same command). A new `type` drops a stored `leaves` the type cannot take, back to the
+    type's default, unless the patch sets `leaves` too.
+  - `resizeOpening(id, { end, width })` moves the jamb at `end` and keeps the other.
+  - `setOpeningDistance(id, { end, distance, from })` moves the opening so the clear distance
+    from the jamb at `end` is `distance`: to the wall face or next opening (`from: 'face'`), or
+    to the end node (`'axis'`); the width stays.
+  - `applyOpeningPreset(id, preset)`: same id, wall and centre, size and type from the preset.
+  - `removeOpening(id)`.
+
+  Values an opening may not hold are `invalid-opening` (`validateOpeningValues(o)`,
+  `validateOpeningParams(o)`; also in `fromProject`, a parse error in XML).
+  `normalizeOpening(raw)` fills an older opening (no type, maybe `flip`).
+
 - Items: `addItem(newItem)` (floor, wall or ceiling mount), `moveItem(id, patch)`,
   `removeItem(id)`. `addOpening` / `addItem` expose `createdId`.
 - Columns and site: `addColumn({ x, y, shape, width, depth?, rotation?, height? })` (exposes
@@ -249,6 +277,9 @@ instead. Only entities touched by a change can block it.
 | `opening-out-of-wall`              | opening does not fit in its wall's usable range                                                                           |
 | `opening-overlap`                  | two openings on one wall overlap                                                                                          |
 | `opening-too-tall`                 | sill + height above the wall height                                                                                       |
+| `opening-hits-column`              | an opening's cut overlaps a column                                                                                        |
+| `opening-swing-blocked`            | a leaf cannot move clear of a wall, column, stair or another leaf (a warning, never blocks)                               |
+| `invalid-opening`                  | an opening value outside what its type allows (type, hinge, swing, leaves, split, sizes, sill)                            |
 | `wall-item-out-of-range`           | wall item outside its wall's usable range or height                                                                       |
 | `wall-item-on-opening`             | wall item covers an opening                                                                                               |
 | `outside-room`                     | floor / ceiling item not fully inside a room                                                                              |
@@ -272,10 +303,15 @@ instead. Only entities touched by a change can block it.
 | `non-finite-number`                | `projectToXML` was given a non-finite number                                                                              |
 
 The usable range along a wall is shortened at each end by half the thickness of the thickest
-other wall meeting there (and, for openings, at least `OPENING_END_MARGIN`), so nothing sits
-inside a corner. Standalone checks: `validateLayout(floor)`,
-`validatePlacements(floor, presets)`, `checkOpening(floor, opening)`,
-`checkItem(floor, item, presets)`.
+other wall meeting there, so nothing sits inside a corner. An opening's range ends where the
+wall's clear length stops (the drawn outline of a meeting wall), and at least
+`OPENING_END_MARGIN` from the node; `openingClearances(floor, opening)` (`OpeningClearances`)
+gives the clear distance from each jamb to that end or the next opening (`face`) and to the end
+node (`axis`). `isWarningIssue(issue)` (codes in `WARNING_CODES`, today `opening-swing-blocked`)
+tells a warning from a problem.
+Standalone checks: `validateLayout(floor)`, `validatePlacements(floor, presets, above?)`,
+`checkOpening(floor, opening)`, `checkItem(floor, item, presets)`. Details in
+[docs/validation.md](docs/validation.md).
 
 ### Rooms
 
@@ -316,6 +352,14 @@ validators (overlap and containment): `wallOutline(corners)` / `wallOutlines(flo
 outline as drawn), `columnShape(column)` / `columnPolygon(column)`, `itemFootprint(item, floor,
 presets)`, `openingSpan(opening)` and `stairOutline(stair, rise)`; `convexOverlap(a, b)` and
 `circleOverlapArea(a, b)` are the overlap tests (touching is not overlap).
+`openingGeometry(floor, opening)` is the one shape of an opening, used by the plan symbol, its
+hit area, the 3D parts and the checks: the `cut` through the wall, frame / leaf / glass pieces
+closed and open, and the swept areas of its leaves (null without its wall); `openingHit(g, p,
+reach)` and `pieceOutline(piece)` work on it. `resolvePlacement(floor, request)` places an
+opening near a point, independent of any view: it picks the host wall within `reach`, snaps the
+centre (wall ends, middle, other openings' jambs, free gaps, grid; `free` turns snapping off),
+clamps it into range, keeps the space a door opened into when it moves to another wall, and
+returns `{ wall, offset, hinge, swing, guides, issues }`.
 `createId()` makes 10-character nanoid ids.
 
 ## h3x/three
@@ -358,8 +402,15 @@ viewer.viewFromAxis('y'); // top view
   with the ones below it, or the whole house (default `'all'`); read it with `scene.viewMode`.
   `getWallMesh(id, floorId?)`, `getFloorMesh(id, floorId?)` and `getSlabMesh(floorId?)` default
   to the active floor; `buildSlabGeometry` is exported too.
+- **Doors and windows.** Each opening gets frame, leaf and glass meshes (those its type has,
+  named `h3x-opening-<id>-<part>`, in the floor's `h3x-openings` group) built from
+  `openingGeometry` by `buildOpeningParts(floor, geometry)`, plus an invisible `pick`
+  box over the cut that rays still hit. `scene.getOpeningMeshes(id, floorId?)` returns them in
+  `OPENING_PARTS` order (`frame`, `leaf`, `glass`, `pick`). Materials: `openingFrame()`,
+  `openingLeaf()`, `openingGlass()` (translucent) and `pick()` on `MaterialLibrary`.
 - **Picking.** Meshes carry
-  `userData = { h3xKind: 'wall' | 'room' | 'join' | 'column' | 'slab', h3xId, h3xFloorId }`.
+  `userData = { h3xKind: 'wall' | 'room' | 'join' | 'column' | 'slab' | 'opening', h3xId,
+h3xFloorId }`.
   Ids can repeat across floors, so picking must read `h3xFloorId` as well as `h3xId`; both sit on
   the mesh itself, no parent walk needed. A `join` mesh closes the top of a T or X junction (or the
   slot of a very acute corner); its `h3xId` is the node id. A `slab` mesh's `h3xId` is the floor id.
@@ -423,6 +474,13 @@ both views.
   - `issues` receives `{ rejected, standing }`. `rejected` holds the issues of the last
     rejected edit (flashed for 600 ms, then cleared with another event). `standing` holds the
     layout and placement issues of the document as it is now.
+  - `openingDistanceRequest` receives `{ openingId, end, from: 'face', distance, at }` when the
+    user clicks a clear distance of the selected opening (`at`: the label centre in px). Answer
+    with `plan.setOpeningDistance(openingId, { end, distance, from? })`, which runs
+    `setOpeningDistance` (`from` defaults to `'face'`), returns `{ ok: true }` or
+    `{ ok: false, issues }` and flashes a rejection.
+  - `openingEditRequest` receives `{ openingId, at }` when the user double-clicks an opening, so
+    the editor can show its type and parameter inputs.
 - **The library ships no inputs; the editor attaches them.** The plan never creates a text
   field. On `lengthEditRequest` your editor shows its own input, then calls
   `plan.setWallLength(wallId, length, { anchor? })`. That runs `setWallLength` through
@@ -450,7 +508,15 @@ both views.
   - **Delete** / **Backspace** removes the selected node (`removeNode`), wall (`removeWall`),
     column (`removeColumn`) or site outline (`setSite(null)`);
   - **Shift** + drag a wall pushes / pulls it (`pushPullWall`), growing a bump-out or recess;
-  - drag a column to move it (`moveColumn`).
+  - drag a column to move it (`moveColumn`);
+  - drag a door or window along its wall or onto another wall within reach (same snaps as
+    `OpeningTool`, **Alt** for none); drag a jamb handle to resize it (the other jamb stays; it
+    snaps to the clear-distance end and to a 5 cm width). An invalid spot leaves the opening at
+    the last valid one, shows a red ghost and flashes the reason. Each drag is one undo step,
+    and dragging back leaves none. Arrow keys nudge it along its wall (1 cm, **Shift** 10 cm),
+    **Space** cycles its hinge / swing, a click on a clear-distance label fires
+    `openingDistanceRequest`, a double-click fires `openingEditRequest`. An opening standing
+    wholly beyond its wall is drawn as a red box so it can still be selected and dragged back.
 
   Drawing tools, activated with `plan.setTool(...)`:
 
@@ -463,6 +529,12 @@ both views.
     **Enter** or double-click closes it (`setSite`); **Esc** cancels.
   - `new ColumnTool({ shape?, width?, depth? })` (`'square'` 0.3 m by default): one click places a
     column (`addColumn`) and selects it.
+  - `new OpeningTool({ preset })`: a ghost of the preset follows the pointer onto the nearest wall
+    within reach, snapped by `resolvePlacement` (ticks show the snap), red where it cannot go. A
+    click places it (`addOpening`, one undo step) and selects it; on an invalid spot or with no
+    wall in reach (`placement-no-host`) nothing is added and the reason is flashed. The side of
+    the wall the pointer is on is the side it opens to; **Space** cycles hinge / swing, **Alt**
+    turns snapping off, **Esc** clears the ghost. `setOptions({ preset })` switches the preset.
 
   `DrawWallTool` fires `segmentLengthRequest` (`{ from, direction, length }`) whenever a new
   segment starts. The editor shows its own input, then calls
@@ -486,8 +558,14 @@ presets?, tool?, stairLabels? })`. Defaults: grid shown, `snap` 0.05 m with alig
   `h3x-plan-<kind>` (`node`, `wall`, `room`, `opening`, `item`, `column`, `site`) and
   attributes `data-h3x-kind` and `data-h3x-id`. Junction fills carry `data-h3x-node` (class `h3x-plan-join`) and dimension
   labels `data-h3x-wall` (class `h3x-plan-dimension`). State classes on entity elements:
-  `h3x-plan-selected`, `h3x-plan-invalid` (the entity is in a standing issue) and
-  `h3x-plan-rejected` (flashed after a rejected edit).
+  `h3x-plan-selected`, `h3x-plan-invalid` (the entity is in a blocking standing issue),
+  `h3x-plan-warning` (only in warnings, `isWarningIssue`; drawn amber) and
+  `h3x-plan-rejected` (flashed after a rejected edit). An opening symbol has `-opening-gap`,
+  `-opening-lines` (frame and leaves) and `-opening-arc` paths; `paintOpening(geometry)` gives
+  their path data. The selected opening shows `h3x-plan-opening-handle` squares at its jambs and
+  `h3x-plan-opening-distance` labels (also `-dimension`, with `data-h3x-end`). A placement ghost
+  is `h3x-plan-ghost` (plus `-ghost-free` with no wall in reach, `-invalid` when red); snap ticks
+  are `h3x-plan-ghost-guide` lines, in `h3x-plan-ghost-guides` when shown without a ghost.
 - **Ownership.** One plan per container: it appends its own `<svg>` (`plan.svg`) and removes it
   on `dispose()`, which also drops the document subscription and listeners and can be called
   more than once. It does not dispose the document.
@@ -502,9 +580,12 @@ active floor commits an in-progress drag as it stands (one undo step), resets th
 clears the selection and redraws.
 
 The example page shows the plan and the 3D view side by side on one document, with a throwaway
-toolbar (select, draw wall, draw site, columns, stair, clear, sample houses), controls for the
-selected stair (type, turn, hand, flight width, rotate 90°), demo inputs wired to
-`lengthEditRequest` and `segmentLengthRequest`, and a floor bar (floor picker, add above / below,
+toolbar (select, draw wall, draw site, columns, stair, doors and windows with a preset picker,
+clear, sample houses), controls for the selected stair (type, turn, hand, flight width, rotate
+90°) and for the selected door or window (type, width, height, sill, hinge, swing, leaves,
+split; inputs a type does not use are disabled), demo inputs wired to `lengthEditRequest`,
+`segmentLengthRequest` and `openingDistanceRequest`, rejection reasons in the status line, and a
+floor bar (floor picker, add above / below,
 remove, wall height, slab thickness, ground elevation and view mode). It opens a sample
 three-storey townhouse with a basement (`examples/layouts/townhouse-3f.xml`) (`pnpm dev`). A second
 sample, a four-storey townhouse on a trapezoid lot (`examples/layouts/townhouse-trapezoid.xml`),

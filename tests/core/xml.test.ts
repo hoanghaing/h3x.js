@@ -64,16 +64,18 @@ describe('xml', () => {
   it('round-trips optional attributes byte-identically', () => {
     const p = sampleProject();
     const f = p.floors[0]!;
-    f.openings.o1!.flip = true;
+    f.openings.o1!.hinge = 'b';
+    f.openings.o1!.swing = 'right';
     f.walls.w1!.finishLeft = 'paint-white';
     f.walls.w1!.finishRight = 'paint-cream';
     f.rooms.r1!.floorFinish = 'wood-oak';
     f.items.i1!.variant = 'grey';
     const xml = projectToXML(p);
-    expect(xml).toContain('flip="1"');
+    expect(xml).toContain('hinge="b"');
+    expect(xml).toContain('swing="right"');
     expect(xml).toContain('variant="grey"');
     const back = projectFromXML(xml);
-    expect(back.floors[0]!.openings.o1!.flip).toBe(true);
+    expect(back.floors[0]!.openings.o1).toMatchObject({ hinge: 'b', swing: 'right' });
     expect(projectToXML(back)).toBe(xml);
   });
 
@@ -125,7 +127,7 @@ describe('xml', () => {
     expect(Object.keys(f.nodes)).toHaveLength(4);
     expect(Object.keys(f.walls)).toHaveLength(4);
     expect(Object.keys(f.openings)).toHaveLength(1);
-    expect(f.openings.o1!.flip).toBe(false);
+    expect(f.openings.o1).toMatchObject({ type: 'door-swing', hinge: 'a', swing: 'left' });
     expect(f.rooms.r1!.name).toBe('Phòng khách');
     expect(f.rooms.r1!.floorFinish).toBe('wood-oak');
     expect(f.walls.w1!.finishLeft).toBe('paint-white');

@@ -17,23 +17,20 @@ import type {
 import { roofGeometry, roomShape } from '../core';
 import type { WallCorners } from '../shared/walls/joins';
 import {
-  columnShape,
-  itemFootprint,
+  createOpeningSymbol,
+  drawOpeningSymbol,
   openingShape,
-  roomLabel,
-  roomPath,
-  wallOutline,
   type OpeningShape,
-} from './shapes';
+} from './openings';
+import { columnShape, itemFootprint, roomLabel, roomPath, wallOutline } from './shapes';
 import { roofOwnShapes } from './roofs';
 import { stairOwnShapes, type StairLabels } from './stairs';
 import { NODE_RADIUS_PX } from './style';
+import { NON_SCALING, pointsAttr, setAttr, setText, svgEl } from './svg';
 import type { PlanKind, Rect } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
 
-export const SVG_NS = 'http://www.w3.org/2000/svg';
-/** Strokes keep their pixel width under the plan → screen scale. */
-export const NON_SCALING = { 'vector-effect': 'non-scaling-stroke' };
+export { NON_SCALING, SVG_NS, pointsAttr, setAttr, setText, svgEl } from './svg';
 
 /** Minor grid lines per meter (0.1 m apart) and the on-screen gap (px) below which they hide. */
 const MINOR_PER_M = 10;
@@ -42,28 +39,6 @@ const MINOR_MIN_PX = 6;
 const LABEL_PAD_PX = 3;
 /** Average glyph advance as a fraction of the font size (labels are digits and a dot). */
 const GLYPH_ADVANCE = 0.6;
-
-export function svgEl<K extends keyof SVGElementTagNameMap>(
-  tag: K,
-  attrs: Record<string, string> = {},
-): SVGElementTagNameMap[K] {
-  const e = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  return e;
-}
-
-/** Sets an attribute only when its value differs, so unchanged entities are not touched. */
-export function setAttr(e: Element, name: string, value: string): void {
-  if (e.getAttribute(name) !== value) e.setAttribute(name, value);
-}
-
-export function setText(e: Element, value: string): void {
-  if (e.textContent !== value) e.textContent = value;
-}
-
-export function pointsAttr(pts: readonly Vec2[]): string {
-  return pts.map((p) => `${p.x},${p.y}`).join(' ');
-}
 
 /** Plan → screen as an SVG transform (+y up, so the y axis is mirrored). */
 export function rootTransform(v: View): string {
@@ -119,21 +94,6 @@ export function labelRect(v: View, at: Vec2, angleDeg: number, text: string, fon
   return { x: c.x - bw / 2, y: c.y - bh / 2, width: bw, height: bh };
 }
 
-/** Path data (plan space) for each part of an opening symbol; '' for parts it lacks. */
-export function openingPaths(s: OpeningShape): {
-  gap: string;
-  leaf: string;
-  arc: string;
-  lines: string;
-} {
-  const leaf = s.leaf ? `M${s.leaf[0].x},${s.leaf[0].y}L${s.leaf[1].x},${s.leaf[1].y}` : '';
-  const arc = s.arc
-    ? `M${s.arc.from.x},${s.arc.from.y}A${s.arc.r},${s.arc.r} 0 0 ${s.arc.sweep} ${s.arc.to.x},${s.arc.to.y}`
-    : '';
-  const lines = (s.lines ?? []).map(([p, q]) => `M${p.x},${p.y}L${q.x},${q.y}`).join('');
-  return { gap: pointsAttr(s.gap), leaf, arc, lines };
-}
-
 /** What the element updaters read besides the entity itself. */
 export interface RenderContext {
   floor: Readonly<Floor>;
@@ -146,6 +106,8 @@ export interface RenderContext {
   prefix?: string;
   /** Where roof geometry is cached for hit testing (written when a roof is drawn). */
   roofGeometry?: Map<Id, RoofGeometry>;
+  /** Where opening shapes are cached for hit testing (written when an opening is drawn). */
+  openingShapes?: Map<Id, OpeningShape>;
   stairs?: { rise: number; labels: StairLabels; prefix: string };
 }
 
@@ -183,12 +145,7 @@ export function createEntityElement(kind: PlanKind, id: Id, prefix: string): SVG
       );
       break;
     case 'opening':
-      g.append(
-        svgEl('polygon', { class: `${prefix}-opening-gap`, ...NON_SCALING }),
-        svgEl('path', { class: `${prefix}-opening-leaf`, ...NON_SCALING }),
-        svgEl('path', { class: `${prefix}-opening-arc`, ...NON_SCALING }),
-        svgEl('path', { class: `${prefix}-opening-lines`, ...NON_SCALING }),
-      );
+      createOpeningSymbol(g, prefix);
       break;
   }
   return g;
@@ -227,12 +184,9 @@ export function updateEntityElement(g: SVGGElement, e: KindEntity, ctx: RenderCo
     case 'room':
       return updateRoom(g, e.entity, ctx);
     case 'opening': {
-      const parts = openingPaths(openingShape(ctx.floor, e.entity));
-      const [gap, leaf, arc, lines] = Array.from(g.children);
-      setAttr(gap!, 'points', parts.gap);
-      setAttr(leaf!, 'd', parts.leaf);
-      setAttr(arc!, 'd', parts.arc);
-      return setAttr(lines!, 'd', parts.lines);
+      const shape = openingShape(ctx.floor, e.entity);
+      ctx.openingShapes?.set(e.entity.id, shape);
+      return drawOpeningSymbol(g, shape.geometry, shape.stray);
     }
     case 'item': {
       const fp = itemFootprint(e.entity, ctx.floor, ctx.presets);

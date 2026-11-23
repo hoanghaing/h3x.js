@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
-import { removeOpening } from '../../src/core/commands/objects';
+import { removeOpening } from '../../src/core/commands/openings';
 import { pushPullWall, splitWall } from '../../src/core/commands/structure';
 import { H3xValidationError } from '../../src/core/errors';
 import { openingRange } from '../../src/core/validate/layout';
@@ -52,7 +52,9 @@ const opening = (id: string, wall: string, offset: number, width = 0.9): Opening
   width,
   height: 2.1,
   sill: 0,
-  flip: false,
+  type: 'door-swing',
+  hinge: 'a',
+  swing: 'left',
 });
 
 function withOpeningOnW2(offset: number): Floor {

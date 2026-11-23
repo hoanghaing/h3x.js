@@ -119,7 +119,9 @@ describe('outlines: opening (openingSpan)', () => {
       width: 0.9,
       height: 2.1,
       sill: 0,
-      flip: false,
+      type: 'door-swing',
+      hinge: 'a',
+      swing: 'left',
     }) as Opening;
 
   it('openings whose drawn gaps touch do not overlap; 1 cm in do', () => {

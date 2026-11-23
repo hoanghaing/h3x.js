@@ -139,6 +139,18 @@ describe('hit region = drawn outline', () => {
     probeEdges(plan, ring, { kind: 'room', id: 'r1' }, 1);
   });
 
+  it('opening: its drawn leaf, with the reach of a line', () => {
+    const plan = makePlan();
+    const d = group(plan, 'opening', 'o1').querySelector(`.${P}-opening-lines`)!.getAttribute('d')!;
+    const [a, b] = parsePoints(d.slice(1).replace('L', ' '));
+    const m = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+    const target = { kind: 'opening', id: 'o1' };
+    for (const side of [-1, 1]) {
+      expect(hit(plan, { x: m.x + side * 0.03, y: m.y })).toEqual(target); // 3 px
+      expect(hit(plan, { x: m.x + side * 0.05, y: m.y })).not.toEqual(target); // 5 px
+    }
+  });
+
   it('opening: its drawn gap', () => {
     const plan = makePlan();
     const gap = group(plan, 'opening', 'o1').querySelector(`.${P}-opening-gap`)!;

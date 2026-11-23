@@ -4,7 +4,6 @@ import {
   columnShape,
   itemFootprint,
   junctionPolygons,
-  openingShape,
   roomLabel,
   roomPath,
   wallOutline,
@@ -101,61 +100,6 @@ describe('roomLabel', () => {
     const inArm1 = at.x > 0.1 && at.x < 3.9 && at.y > 0.1 && at.y < 0.9;
     const inArm2 = at.x > 0.1 && at.x < 0.9 && at.y > 0.1 && at.y < 3.9;
     expect(inArm1 || inArm2).toBe(true);
-  });
-});
-
-describe('openingShape', () => {
-  it('builds a door with hinge at the near end', () => {
-    const floor = oneRoomFloor();
-    const s = openingShape(floor, floor.openings['o1']!);
-    expect(s.kind).toBe('door');
-    expect(Math.min(...xs(s.gap))).toBeCloseTo(0.75);
-    expect(Math.max(...xs(s.gap))).toBeCloseTo(1.65);
-    expect(s.leaf![0].x).toBeCloseTo(0.75);
-    expect(s.leaf![1].y).toBeCloseTo(0.9);
-    expect(s.arc!.r).toBeCloseTo(0.9);
-    expect(s.arc!.center.x).toBeCloseTo(0.75);
-    expect(s.lines).toBeUndefined();
-  });
-
-  it('mirrors the door when flipped', () => {
-    const floor = oneRoomFloor();
-    const o = { ...floor.openings['o1']!, flip: true };
-    const s = openingShape(floor, o);
-    expect(s.leaf![0].x).toBeCloseTo(1.65);
-    expect(s.leaf![1].y).toBeCloseTo(-0.9);
-    expect(s.arc!.center.x).toBeCloseTo(1.65);
-  });
-
-  it.each([
-    [false, { x: 0.75, y: 0.9 }, { x: 1.65, y: 0 }, { x: 0.75, y: 0 }],
-    [true, { x: 1.65, y: -0.9 }, { x: 0.75, y: 0 }, { x: 1.65, y: 0 }],
-  ])('arc geometry for flip=%s', (flip, from, to, center) => {
-    const floor = oneRoomFloor();
-    const s = openingShape(floor, { ...floor.openings['o1']!, flip });
-    const arc = s.arc!;
-    expect(arc.from.x).toBeCloseTo(from.x);
-    expect(arc.from.y).toBeCloseTo(from.y);
-    expect(arc.to.x).toBeCloseTo(to.x);
-    expect(arc.to.y).toBeCloseTo(to.y);
-    expect(arc.center.x).toBeCloseTo(center.x);
-    expect(arc.center.y).toBeCloseTo(center.y);
-    // both go clockwise in plan space (+y up), so the SVG flag is 0
-    expect(arc.sweep).toBe(0);
-  });
-
-  it('builds a window with three lines', () => {
-    const floor = oneRoomFloor();
-    const o = { ...floor.openings['o1']!, sill: 0.9 };
-    const s = openingShape(floor, o);
-    expect(s.kind).toBe('window');
-    expect(s.arc).toBeUndefined();
-    expect(s.leaf).toBeUndefined();
-    expect(s.lines).toHaveLength(3);
-    const lineYs = s.lines!.map((l) => l[0].y).sort((a, b) => a - b);
-    expect(lineYs[0]).toBeCloseTo(-0.1);
-    expect(lineYs[1]).toBeCloseTo(0);
-    expect(lineYs[2]).toBeCloseTo(0.1);
   });
 });
 

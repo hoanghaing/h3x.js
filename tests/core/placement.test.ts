@@ -1,14 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { H3xDocument } from '../../src/core/document/H3xDocument';
-import {
-  addItem,
-  addOpening,
-  moveItem,
-  moveOpening,
-  removeItem,
-  removeOpening,
-} from '../../src/core/commands/objects';
+import { addItem, moveItem, removeItem } from '../../src/core/commands/objects';
+import { addOpening, moveOpening, removeOpening } from '../../src/core/commands/openings';
 import { moveNode, moveWall, setWallLength } from '../../src/core/commands/layout';
 import { H3xValidationError } from '../../src/core/errors';
 import type { Floor, Project } from '../../src/core/types';
@@ -177,8 +171,8 @@ describe('wall items and openings', () => {
     expect(codes(doc.tryExecute(moveOpening('o1', { offset: 0.1 })))).toContain(
       'opening-out-of-wall',
     );
-    expect(doc.tryExecute(moveOpening('o1', { offset: 2, flip: true })).ok).toBe(true);
-    expect(doc.floor.openings.o1!.flip).toBe(true);
+    expect(doc.tryExecute(moveOpening('o1', { offset: 2 })).ok).toBe(true);
+    expect(doc.floor.openings.o1!.offset).toBe(2);
     doc.execute(removeOpening('o1'));
     expect(doc.floor.openings.o1).toBeUndefined();
   });

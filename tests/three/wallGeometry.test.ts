@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import type { Floor, Opening } from '../../src/core';
+import { openingGeometry, type Floor, type Opening } from '../../src/core';
 import { wallUsableRange } from '../../src/core/validate/layout';
 import { computeWallCorners, type WallCorners } from '../../src/three/walls/joins';
 import { WALL_GROUP, buildWallGeometry } from '../../src/three/walls/wallGeometry';
 import { oneRoomFloor } from '../fixtures/floors';
+import { OPENING_CASES } from '../fixtures/openings';
 import {
   gableWallEdges,
   groupArea,
@@ -82,7 +83,9 @@ describe('buildWallGeometry', () => {
       width: 1.2,
       height: 1.4,
       sill: 0.9,
-      flip: false,
+      type: 'window-fixed',
+      hinge: 'a',
+      swing: 'left',
     };
     const before = build(f, 'w3');
     f.openings.o2 = win;
@@ -127,7 +130,14 @@ describe('buildWallGeometry', () => {
 
   it('touching doors are both cut', () => {
     const f = isolatedFloor();
-    const door = { preset: 'door-single-01', wall: 'w', sill: 0, flip: false } as const;
+    const door = {
+      preset: 'door-single-01',
+      wall: 'w',
+      sill: 0,
+      type: 'door-swing',
+      hinge: 'a',
+      swing: 'left',
+    } as const;
     f.openings.d1 = { ...door, id: 'd1', offset: 1.0, width: 0.8, height: 2.1 };
     f.openings.d2 = { ...door, id: 'd2', offset: 1.8, width: 0.8, height: 2.0 };
     const g = build(f, 'w');
@@ -137,7 +147,14 @@ describe('buildWallGeometry', () => {
 
   it('touching windows are both cut', () => {
     const f = isolatedFloor();
-    const win = { preset: 'window-01', wall: 'w', sill: 0.9, flip: false } as const;
+    const win = {
+      preset: 'window-01',
+      wall: 'w',
+      sill: 0.9,
+      type: 'window-fixed',
+      hinge: 'a',
+      swing: 'left',
+    } as const;
     f.openings.o1 = { ...win, id: 'o1', offset: 1.0, width: 0.8, height: 1.4 };
     f.openings.o2 = { ...win, id: 'o2', offset: 1.8, width: 0.8, height: 1.4 };
     const g = build(f, 'w');
@@ -183,6 +200,38 @@ describe('buildWallGeometry', () => {
   });
 });
 
+describe('buildWallGeometry: the cut is the opening geometry', () => {
+  describe.each([
+    ['full height', 3.2, 1.2],
+    ['low wall', 1, 1.2],
+    ['clamped at a corner', 3.2, 0.3],
+    ['low wall, clamped at a corner', 1, 0.3],
+  ] as const)('%s', (_, height, offset) => {
+    it.each(OPENING_CASES)('$name', ({ over }) => {
+      const f = oneRoomFloor();
+      f.walls.w1!.height = height;
+      f.openings.o1 = { ...f.openings.o1!, offset, ...over };
+      const { cut, z0, z1 } = openingGeometry(f, f.openings.o1)!;
+      const g = build(f, 'w1');
+
+      const pos = g.getAttribute('position');
+      const { start, count } = g.groups[WALL_GROUP.trim]!;
+      const reveals = Array.from({ length: count }, (_, i) =>
+        new Vector3().fromBufferAttribute(pos, start + i),
+      );
+      for (const c of cut) {
+        for (const z of [z0, z1]) {
+          const want = new Vector3(c.x, z, -c.y);
+          expect(reveals.some((p) => p.distanceTo(want) < 1e-6)).toBe(true);
+        }
+      }
+      const cutArea = Math.hypot(cut[1].x - cut[0].x, cut[1].y - cut[0].y) * (z1 - z0);
+      expectNear(area(g, 'left'), 3.8 * height - cutArea, 1e-5);
+      expectNear(area(g, 'right'), 4.2 * height - cutArea, 1e-5);
+    });
+  });
+});
+
 describe('buildWallGeometry: gable walls', () => {
   function gableFloor(): Floor {
     const f = roofRoom(6, 4);
@@ -225,7 +274,9 @@ describe('buildWallGeometry: gable walls', () => {
       width: 1.2,
       height: 1.4,
       sill: 0.9,
-      flip: false,
+      type: 'window-fixed',
+      hinge: 'a',
+      swing: 'left',
     };
     const after = build(f, 'w2');
     expectNear(area(before, 'left') - area(after, 'left'), 1.2 * 1.4, 1e-4);

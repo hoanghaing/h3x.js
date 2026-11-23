@@ -12,6 +12,7 @@ import { polygonOverlapArea } from '../geometry/clip';
 import { isSimple, polygonContainsPolygon, signedArea } from '../geometry/polygon';
 import { segmentsIntersect } from '../geometry/segment';
 import { distance, tidy } from '../geometry/vec';
+import { wallClearEnds } from '../openings/clearance';
 import { isBelowMinRoomArea, roomArea, roomPolygon } from '../rooms/detect';
 import { validateRoofs } from './roofs';
 import { circleOverlapArea, columnPolygon, columnShape } from '../shapes';
@@ -36,8 +37,8 @@ function meetHalf(floor: Floor, wallId: Id, node: Id): number {
 /**
  * Valid centre-offset range for something `width` wide on wall `wallId`. Each
  * end is shortened by max(margin, half the thickness of the thickest other
- * wall meeting at that end node), so nothing sits inside a meeting wall.
- * Openings use margin OPENING_END_MARGIN, wall items 0. `length` overrides the
+ * wall meeting at that end node), so nothing sits inside a wall meeting it at a right angle.
+ * Openings use margin OPENING_END_MARGIN for auto-fit, wall items 0. `length` overrides the
  * current wall length (layout re-fit). hi < lo means it cannot fit.
  */
 export function wallUsableRange(
@@ -53,18 +54,64 @@ export function wallUsableRange(
   return { lo: startCut + opts.width / 2, hi: len - endCut - opts.width / 2 };
 }
 
-/** Opening centre range on its wall (see wallUsableRange). */
+/**
+ * An opening centre range that goes by half the thickest meeting wall at each end, whatever its
+ * angle (see wallUsableRange): where layout edits used to keep openings. `openingRange` is where
+ * an opening is valid.
+ */
+export function openingFitRange(
+  floor: Floor,
+  o: { wall: Id; width: number },
+): { lo: number; hi: number } {
+  return wallUsableRange(floor, o.wall, { width: o.width, margin: OPENING_END_MARGIN });
+}
+
+/**
+ * The ranges layout edits keep an opening in, for `clampIntoRanges`: `openingRange`, then
+ * `openingFitRange`. An opening in either is not moved, so neither an older file nor an opening
+ * placed by the outlines is; one that must move goes where it is valid when it can.
+ */
+export function openingKeptRanges(
+  floor: Floor,
+  o: { wall: Id; width: number },
+): { lo: number; hi: number }[] {
+  return [openingRange(floor, o), openingFitRange(floor, o)];
+}
+
+/**
+ * Where an opening's centre is valid: between the wall's clear ends (`wallClearEnds`: where the
+ * clear length stops, at least OPENING_END_MARGIN from each node), so the opening is clear of the
+ * drawn outline of a meeting wall. hi < lo means it cannot fit.
+ */
 export function openingRange(
   floor: Floor,
   o: { wall: Id; width: number },
-  length?: number,
 ): { lo: number; hi: number } {
-  return wallUsableRange(floor, o.wall, { width: o.width, margin: OPENING_END_MARGIN, length });
+  const w = floor.walls[o.wall];
+  if (!w || !floor.nodes[w.a] || !floor.nodes[w.b]) return { lo: Infinity, hi: -Infinity };
+  const ends = wallClearEnds(floor, w);
+  return { lo: ends.a.x + o.width / 2, hi: ends.b.x - o.width / 2 };
 }
 
 /** True when `offset` lies in [lo, hi] within GEOM_TOL (and the range is not empty). */
 export function inRange(offset: number, r: { lo: number; hi: number }): boolean {
   return r.hi >= r.lo - GEOM_TOL && offset >= r.lo - GEOM_TOL && offset <= r.hi + GEOM_TOL;
+}
+
+/**
+ * `offset` when in one of `ranges`, else clamped into the first of them that is not empty (see
+ * clampIntoRange); null when all are empty.
+ */
+export function clampIntoRanges(
+  offset: number,
+  ranges: { lo: number; hi: number }[],
+): number | null {
+  if (ranges.some((r) => inRange(offset, r))) return offset;
+  for (const r of ranges) {
+    const c = clampIntoRange(offset, r);
+    if (c !== null) return c;
+  }
+  return null;
 }
 
 /**
@@ -167,7 +214,7 @@ function roomIssue(floor: Floor, roomId: Id): Issue | null {
 
 /** Overlap areas (m2) at or below this count as touching. */
 const HOLE_OVERLAP_AREA = 1e-6;
-const COLUMN_OVERLAP_AREA = 1e-5;
+export const COLUMN_OVERLAP_AREA = 1e-5;
 
 function columnSizeIssues(floor: Floor, ids: Iterable<Id>): Issue[] {
   const out: Issue[] = [];

@@ -1,14 +1,30 @@
-import type { Floor, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '../core';
-import { H3xValidationError, roomShape, stairOutline } from '../core';
+import type { Floor, Hinge, Id, PresetResolver, Room, RoofGeometry, Site, Vec2 } from '../core';
+import { H3xValidationError, openingHit, roomShape, stairOutline } from '../core';
+import { GEOM_TOL } from '../core/constants';
 import { closestPointOnSegment } from '../core/geometry/segment';
 import { pointInPolygon } from '../core/geometry/polygon';
 import type { Junction, WallCorners } from '../shared/walls/joins';
+import { openingShape, type OpeningShape } from './openings';
 import { roofHit } from './roofs';
-import { columnShape, inRoomShape, itemFootprint, openingShape, wallOutline } from './shapes';
+import { columnShape, inRoomShape, itemFootprint, wallOutline } from './shapes';
 import type { PlanKind, Rect, ScreenPoint } from './types';
 import { planToScreen, screenToPlan, type View } from './view';
 
-export type HitTarget = { kind: PlanKind; id: Id } | { kind: 'dimension'; id: Id } | null;
+export type HitTarget =
+  | { kind: PlanKind; id: Id }
+  | { kind: 'dimension'; id: Id }
+  /** A jamb handle of the selected opening. */
+  | { kind: 'openingHandle'; id: Id; end: Hinge }
+  /** A clear-distance label of the selected opening. */
+  | { kind: 'openingDistance'; id: Id; end: Hinge }
+  | null;
+
+/** The edit aids of the selected opening: jamb handles (plan) and distance labels (screen px). */
+export interface OpeningEditHits {
+  id: Id;
+  handles: ReadonlyArray<{ end: Hinge; at: Vec2 }>;
+  labels: ReadonlyArray<{ end: Hinge; rect: Rect }>;
+}
 
 export interface HitScene {
   floor: Floor;
@@ -26,14 +42,40 @@ export interface HitScene {
   roofsVisible?: boolean;
   /** Roof geometry cached at render time by roof id; missing entries are computed. */
   roofGeometry?: ReadonlyMap<Id, RoofGeometry>;
+  /** Opening shapes cached at render time by opening id; missing entries are computed. */
+  openingShapes?: ReadonlyMap<Id, OpeningShape>;
+  /** Handles and labels of the selected opening; they are drawn on top and hit first. */
+  openingEdit?: OpeningEditHits | null;
 }
 
 const NODE_TOLERANCE_PX = 8;
+/** Reach (px) of an opening's jamb handle. */
+export const OPENING_HANDLE_PX = 8;
 const WALL_TOLERANCE_PX = 4;
 
 export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
   const { floor, view } = scene;
   const p = screenToPlan(view, s);
+
+  const edit = scene.openingEdit;
+  if (edit) {
+    let end: Hinge | undefined;
+    let best = OPENING_HANDLE_PX;
+    for (const h of edit.handles) {
+      const q = planToScreen(view, h.at);
+      const d = Math.hypot(q.x - s.x, q.y - s.y);
+      if (d <= best) {
+        end = h.end;
+        best = d;
+      }
+    }
+    if (end) return { kind: 'openingHandle', id: edit.id, end };
+    for (const { end, rect: r } of edit.labels) {
+      if (s.x >= r.x && s.x <= r.x + r.width && s.y >= r.y && s.y <= r.y + r.height) {
+        return { kind: 'openingDistance', id: edit.id, end };
+      }
+    }
+  }
 
   let nearestNode: Id | undefined;
   let nearestNodeDist = NODE_TOLERANCE_PX;
@@ -63,9 +105,19 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     }
   }
 
-  for (const o of Object.values(floor.openings)) {
-    if (pointInPolygon(p, openingShape(floor, o).gap)) return { kind: 'opening', id: o.id };
-  }
+  const openings = Object.values(floor.openings).map((o) => ({
+    id: o.id,
+    ...(scene.openingShapes?.get(o.id) ?? openingShape(floor, o)),
+  }));
+  // An opening wholly beyond its wall is picked on the box drawn for it.
+  const openingWithin = (reach: number): Id | undefined =>
+    openings.find(({ geometry, stray }) =>
+      stray ? pointInPolygon(p, stray) : geometry && openingHit(geometry, p, reach),
+    )?.id;
+  // What is drawn under the pointer comes before any pick aid: an opening's cut, panel or line,
+  // then a wall body or junction fill, and only then the reach around a leaf.
+  const onOpening = openingWithin(GEOM_TOL);
+  if (onOpening !== undefined) return { kind: 'opening', id: onOpening };
 
   for (const w of Object.values(floor.walls)) {
     const c = scene.corners[w.id];
@@ -76,6 +128,8 @@ export function hitTest(scene: HitScene, s: ScreenPoint): HitTarget {
     const id = nearestWallAt(floor, node, p);
     if (id !== undefined) return { kind: 'wall', id };
   }
+  const nearLeaf = openingWithin(WALL_TOLERANCE_PX / view.scale);
+  if (nearLeaf !== undefined) return { kind: 'opening', id: nearLeaf };
   // Pick aid for walls drawn thinner than 2 × WALL_TOLERANCE_PX: within that distance of the
   // centre line. For a wall drawn wider this band lies inside its outline, so it adds nothing.
   let nearestWall: Id | undefined;

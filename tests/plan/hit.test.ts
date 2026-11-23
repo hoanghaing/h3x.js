@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { pointInPolygon } from '../../src/core/geometry/polygon';
 import { wallOutline } from '../../src/core/shapes';
+import { openingRange } from '../../src/core/validate/layout';
 import { computeJoins } from '../../src/shared/walls/joins';
 import { hitTest, type HitScene } from '../../src/plan/hit';
 import { planToScreen, type View } from '../../src/plan/view';
-import { holedRoomFloor, oneRoomFloor, testPresets } from '../fixtures/floors';
+import { holedRoomFloor, oneRoomFloor, testPresets, twoRoomFloor } from '../fixtures/floors';
+import { openingFloor } from '../fixtures/openings';
 import type { Floor, FloorItem } from '../../src/core';
 
 const view: View = { cx: 2, cy: 2, scale: 50, width: 400, height: 400 };
@@ -233,5 +235,91 @@ describe('hitTest columns, site and holes', () => {
     const s = holed({ site });
     expect(hitTest(s, bigAt(5, -2))).toEqual({ kind: 'site', id: 'site' });
     expect(hitTest(s, bigAt(-1, 5))).toBeNull();
+  });
+});
+
+describe('a leaf reach does not cover what is drawn under it', () => {
+  function probe(floor: Floor, scale: number) {
+    const { corners, junctions } = computeJoins(floor);
+    const v = { ...view, scale };
+    const s = scene({ floor, corners, junctions, view: v });
+    return {
+      junctions,
+      hit: (x: number, y: number) => hitTest(s, planToScreen(v, { x, y })),
+      /** Within the 8 px of a node, which wins over everything. */
+      byNode: (x: number, y: number) =>
+        Object.values(floor.nodes).some((n) => Math.hypot(n.x - x, n.y - y) * scale <= 8),
+    };
+  }
+  const ACROSS = [-0.95, -0.5, 0, 0.5, 0.95];
+
+  describe.each([25, 50, 100, 200, 800])('at %i px/m', (scale) => {
+    describe.each([0.1, 0.2])('%s m walls', (thickness) => {
+      it.each([
+        ['a', 'w4', 0],
+        ['b', 'w2', 4],
+      ] as const)('corner door hinged at %s: the next wall keeps its body', (hinge, id, x) => {
+        const floor = oneRoomFloor();
+        for (const w of Object.values(floor.walls)) w.thickness = thickness;
+        const { lo, hi } = openingRange(floor, floor.openings.o1!);
+        floor.openings.o1 = { ...floor.openings.o1!, hinge, offset: hinge === 'a' ? lo : hi };
+        const { hit, byNode } = probe(floor, scale);
+        let probed = 0;
+        for (let y = thickness / 2 + 0.005; y <= 0.95; y += 0.02) {
+          for (const k of ACROSS) {
+            const px = x + (k * thickness) / 2;
+            if (byNode(px, y)) continue;
+            expect(hit(px, y), `${px},${y}`).toEqual({ kind: 'wall', id });
+            probed++;
+          }
+        }
+        expect(probed).toBeGreaterThan(0);
+      });
+
+      it.each([
+        ['a', 'left'],
+        ['a', 'right'],
+        ['b', 'left'],
+        ['b', 'right'],
+      ] as const)('one-leaf slider %s %s: its own wall keeps its body', (hinge, swing) => {
+        const over = { type: 'door-sliding', leaves: 1, hinge, swing } as const;
+        const { hit, byNode } = probe(openingFloor(over, { thickness }), scale);
+        for (let d = 0.005; d <= 0.8; d += 0.015) {
+          const x = hinge === 'a' ? 1.4 - d : 2.6 + d;
+          for (const k of ACROSS) {
+            const y = (k * thickness) / 2;
+            if (byNode(x, y)) continue;
+            expect(hit(x, y), `${x},${y}`).toEqual({ kind: 'wall', id: 'w' });
+          }
+        }
+      });
+    });
+  });
+
+  it.each([100, 200])('a junction fill beside a hinge is a wall at %i px/m', (scale) => {
+    const floor = twoRoomFloor();
+    const door = { ...oneRoomFloor().openings.o1!, wall: 'w2' };
+    floor.openings = { o1: { ...door, offset: openingRange(floor, door).lo } };
+    const { hit, byNode, junctions } = probe(floor, scale);
+    const { points } = junctions.n2!;
+    let probed = 0;
+    for (let x = 3.903; x < 4.099; x += 0.004) {
+      for (let y = -0.097; y < 0.099; y += 0.004) {
+        if (byNode(x, y) || !pointInPolygon({ x, y }, points)) continue;
+        expect(hit(x, y)?.kind, `${x},${y}`).toBe('wall');
+        probed++;
+      }
+    }
+    expect(probed).toBeGreaterThan(0);
+  });
+
+  it('beats the pick aid around a thin wall outside its outline', () => {
+    const floor = oneRoomFloor();
+    for (const w of Object.values(floor.walls)) w.thickness = 0.05;
+    floor.openings.o1!.offset = openingRange(floor, floor.openings.o1!).lo;
+    const { hit } = probe(floor, 25);
+    // outside the wall's body, within 4 px of both its centre line and the leaf
+    expect(hit(0.07, 0.6)).toEqual({ kind: 'opening', id: 'o1' });
+    expect(hit(0.01, 0.6)).toEqual({ kind: 'wall', id: 'w4' });
   });
 });

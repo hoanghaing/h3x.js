@@ -1,6 +1,7 @@
 import { BufferGeometry, Float32BufferAttribute, Vector2, Vector3 } from 'three';
-import type { Floor, Id, Vec2 } from '../../core';
+import type { Floor, Id, Vec2, Wall } from '../../core';
 import { GEOM_TOL } from '../../core/constants';
+import { openingCut } from '../../core/openings/geometry';
 import { gableProfile } from '../../core/roofs/geometry';
 import { add, dot, leftNormal, normalize, scale, sub } from '../../core/geometry/vec';
 import { toWorld } from '../coords';
@@ -29,14 +30,11 @@ interface Face {
  * Clamped opening cuts sorted along the wall. A cut overlapping an earlier one by
  * more than GEOM_TOL (validation normally prevents this) is skipped rather than merged.
  */
-function openingCuts(floor: Floor, wallId: Id, xMin: number, xMax: number, h: number): Cut[] {
+function openingCuts(floor: Floor, wall: Wall, a: Vec2, dir: Vec2, corners: WallCorners): Cut[] {
   const raw: Cut[] = [];
   for (const o of Object.values(floor.openings)) {
-    if (o.wall !== wallId) continue;
-    const x0 = Math.max(o.offset - o.width / 2, xMin);
-    const x1 = Math.min(o.offset + o.width / 2, xMax);
-    const v0 = o.sill <= GEOM_TOL ? 0 : Math.min(o.sill, h - GEOM_TOL);
-    const v1 = Math.min(o.sill + o.height, h - GEOM_TOL);
+    if (o.wall !== wall.id) continue;
+    const { x0, x1, z0: v0, z1: v1 } = openingCut(o, a, dir, wall.height, corners);
     if (x1 - x0 <= GEOM_TOL || v1 - v0 <= GEOM_TOL) continue;
     raw.push({ x0, x1, v0, v1 });
   }
@@ -217,10 +215,8 @@ export function buildWallGeometry(
       s: along(corners.startRight),
       len: dot(sub(corners.endRight, corners.startRight), dir),
     };
-    // Clamp cuts so they lie strictly inside both faces (keeps reveals flush with both).
-    const xMin = Math.max(left.s, right.s) + GEOM_TOL;
-    const xMax = Math.min(left.s + left.len, right.s + right.len) - GEOM_TOL;
-    const cuts = openingCuts(floor, wallId, xMin, xMax, h);
+    // Cuts are clamped strictly inside both faces (keeps reveals flush with both).
+    const cuts = openingCuts(floor, wall, a, dir, corners);
     const top = raisedTop(profile === undefined ? gableProfile(floor, wallId) : profile, h, elev);
     const hAt = (p: Vec2): number => (top ? top.at(along(p)) : h);
 

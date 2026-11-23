@@ -2,7 +2,9 @@
 import {
   H3xDocument,
   addFloor,
+  applyOpeningPreset,
   applyRoofPreset,
+  isWarningIssue,
   removeFloor,
   setFloorHeight,
   setGroundElevation,
@@ -17,6 +19,7 @@ import {
   DrawSiteTool,
   DrawWallTool,
   H3xPlan,
+  OpeningTool,
   RoofTool,
   SelectEditTool,
   StairTool,
@@ -26,6 +29,7 @@ import layoutXml from './layouts/nha-ong-4x16.h3x?raw';
 import townhouseXml from './layouts/townhouse-3f.xml?raw';
 import trapezoidXml from './layouts/townhouse-trapezoid.xml?raw';
 import { attachLengthInput, attachSegmentLengthInput } from './lengthInput';
+import { attachOpeningDistanceInput, attachOpeningPanel } from './openingPanel';
 import { nextProjection, projectionLabel } from './projection';
 import { widenHouse } from './widen';
 
@@ -53,6 +57,8 @@ function mount(next: H3xDocument): void {
   teardown = [
     attachLengthInput(plan, planHost),
     attachSegmentLengthInput(plan, planHost),
+    attachOpeningDistanceInput(plan, planHost, say),
+    attachOpeningPanel(doc, plan, say),
     doc.on('change', refreshFloorControls),
     doc.on('activefloor', refreshFloorControls),
     doc.on('change', refreshStairControls),
@@ -62,12 +68,29 @@ function mount(next: H3xDocument): void {
       // Show the selected roof's kind in the preset select.
       const preset = sel?.kind === 'roof' ? doc.floor.roofs[sel.id]?.preset : undefined;
       if (preset) roofPresetSelect.value = preset;
+      // The same for the selected door or window.
+      const opening = sel?.kind === 'opening' ? doc.floor.openings[sel.id] : undefined;
+      if (opening && openingPresetSelect.querySelector(`option[value="${opening.preset}"]`)) {
+        openingPresetSelect.value = opening.preset;
+      }
     }),
     plan.on('roofdetached', () => say('Mái đã tách khỏi tường, giờ là đa giác độc lập')),
     plan.on('roofEdgeRequest', (r) => say(`Cạnh mái ${r.wallId ?? r.index}: ${r.current.kind}`)),
-    plan.on('issues', ({ standing }) => {
-      if (standing.length > 0) say(`${standing.length} vấn đề tồn tại`, true);
-      else say('');
+    plan.on('issues', ({ rejected, standing }) => {
+      // A rejected edit (a click or drag of a tool) shows its reasons until the flash ends.
+      if (rejected.length > 0) {
+        const reasons = [...new Set(rejected.map((i) => i.message))];
+        say(`Không hợp lệ: ${reasons.join('; ')}`, true);
+      } else {
+        // Warnings (a door leaf that cannot open fully) are counted apart from real problems.
+        const warnings = standing.filter(isWarningIssue).length;
+        const problems = standing.length - warnings;
+        const parts = [
+          problems > 0 ? `${problems} vấn đề tồn tại` : '',
+          warnings > 0 ? `${warnings} cảnh báo` : '',
+        ].filter(Boolean);
+        say(parts.join(', '), problems > 0);
+      }
     }),
     () => plan.dispose(),
     () => viewer.dispose(),
@@ -163,6 +186,7 @@ const viewSelect = document.getElementById('sel-view') as HTMLSelectElement;
 const roofsCheck = document.getElementById('chk-roofs') as HTMLInputElement;
 const roofPresetSelect = document.getElementById('sel-roof-preset') as HTMLSelectElement;
 const roofModeSelect = document.getElementById('sel-roof-mode') as HTMLSelectElement;
+const openingPresetSelect = document.getElementById('sel-opening-preset') as HTMLSelectElement;
 
 mount(H3xDocument.fromXML(townhouseXml));
 
@@ -189,7 +213,9 @@ viewSelect.addEventListener('change', () => scene.setViewMode(viewSelect.value a
 
 on('btn-select', () => {
   plan.setTool(new SelectEditTool());
-  say('Chọn: kéo nút / tường, nhấp đúp tường để thêm điểm, Shift + kéo tường để đẩy / kéo');
+  say(
+    'Chọn: kéo nút / tường / cửa, nhấp đúp tường để thêm điểm, Shift + kéo tường để đẩy / kéo, nhấp số khoảng cách cửa để sửa',
+  );
 });
 on('btn-wall', () => {
   plan.setTool(new DrawWallTool());
@@ -201,7 +227,7 @@ on('btn-site', () => {
 });
 on('btn-delete', () => {
   if (!plan.deleteSelection())
-    say('Chọn một đối tượng để xoá (nút, tường, cột, cầu thang, mái, khu đất)', true);
+    say('Chọn một đối tượng để xoá (nút, tường, cửa, cột, cầu thang, mái, khu đất)', true);
   else say('Đã xoá');
 });
 // Delete / Backspace also works after using the toolbar (focus left the plan): the plan handles
@@ -260,6 +286,25 @@ on('btn-column-square', () => {
 on('btn-stair', () => {
   plan.setTool(new StairTool({ type: 'U', turn: 'landing', hand: 'right', flightWidth: 0.9 }));
   say('Cầu thang: kéo một ô chữ nhật (bám góc mặt tường), chọn rồi chỉnh kiểu ở góc phải dưới');
+});
+/** The OpeningTool in use, so the preset select can change it without re-creating it. */
+let openingTool: OpeningTool | null = null;
+on('btn-opening', () => {
+  openingTool = new OpeningTool({ preset: openingPresetSelect.value });
+  plan.setTool(openingTool);
+  say('Cửa: nhấp lên tường để đặt; Space đổi chiều mở, giữ Alt để bỏ bám');
+});
+// A new preset replaces the selected door or window's preset at once (same wall and centre) and
+// applies to the next ones the tool places.
+openingPresetSelect.addEventListener('change', () => {
+  const preset = openingPresetSelect.value;
+  openingTool?.setOptions({ preset });
+  const sel = plan.selection;
+  if (sel?.kind === 'opening') {
+    const r = doc.tryExecute(applyOpeningPreset(sel.id, preset));
+    if (r.ok) say('Đã đổi mẫu cửa');
+    else say(`Không hợp lệ: ${r.issues.map((i) => i.message).join('; ')}`, true);
+  }
 });
 stairTypeSelect.addEventListener('change', () =>
   patchStair({ type: stairTypeSelect.value as Stair['type'] }, 'Đã đổi kiểu cầu thang'),

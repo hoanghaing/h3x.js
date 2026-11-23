@@ -11,7 +11,7 @@ import { FloorView, type FloorContext } from './floorView';
 import { MaterialLibrary, type FinishResolver } from './materials';
 import { buildSiteLine } from './site';
 
-export type { H3xKind } from './floorView';
+export { OPENING_PARTS, type H3xKind, type OpeningPart } from './floorView';
 
 const FLOOR_GEOMETRY_KINDS = new Set([
   'node',
@@ -33,7 +33,7 @@ export type H3xViewMode = 'active' | 'cutaway' | 'all';
 /**
  * A three.js scene graph kept in sync with an H3xDocument: one Group per floor
  * (`h3x-floor-<id>`, lowest first) holding its walls, room floors, joins, columns, stairs,
- * roofs and slab, plus the site line on the root. The slab and room floors of a floor are cut by the stair
+ * roofs, openings and slab, plus the site line on the root. The slab and room floors of a floor are cut by the stair
  * outlines (`stairOutline`) of the floor below.
  */
 export class H3xScene {
@@ -103,6 +103,16 @@ export class H3xScene {
       const mesh = m.get(id);
       return mesh ? [mesh] : [];
     });
+  }
+
+  /**
+   * The meshes of an opening, shut: frame (`h3x-opening-<id>-frame`, also a rolling door's
+   * box), leaf (`-leaf`: leaves, sashes, shutter), glass (`-glass`, translucent) when it has
+   * them, and always last the invisible pick (`-pick`) filling the cut. A plain `opening` has
+   * only the pick. Empty when its wall is missing.
+   */
+  getOpeningMeshes(id: Id, floorId?: Id): Mesh[] {
+    return this.view(floorId)?.openingMeshes(id) ?? [];
   }
 
   getWallMesh(id: Id, floorId?: Id): Mesh | undefined {

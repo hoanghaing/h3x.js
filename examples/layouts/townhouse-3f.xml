@@ -19,7 +19,7 @@
     <wall id="wl1" a="l1" b="l0" thickness="0.2" height="2.8"/>
     <wall id="wp1" a="l1" b="r1" thickness="0.1" height="2.8"/>
     <opening id="d-front" wall="wf" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
-    <opening id="d-p1" wall="wp1" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
+    <opening id="d-p1" wall="wp1" preset="door-single-01" offset="1.2" width="0.9" height="2.1" sill="0"/>
     <column id="c1" x="2.5" y="7.5" shape="square" width="0.25" depth="0.25"/>
   <stair id="st1" x="1.8" y="12.475" width="3.4" depth="4.85" type="U" turn="landing" hand="right" flightWidth="0.9"/>
   </floor>
@@ -47,7 +47,7 @@
     <opening id="win-l2" wall="wl2" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="win-l3" wall="wl3" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="d-p1" wall="wp1" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
-    <opening id="d-p2" wall="wp2" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
+    <opening id="d-p2" wall="wp2" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0" swing="right"/>
     <column id="c1" x="2.5" y="7.5" shape="square" width="0.25" depth="0.25"/>
   <stair id="st1" x="1.8" y="12.475" width="3.4" depth="4.85" type="U" turn="landing" hand="right" flightWidth="0.9"/>
   </floor>
@@ -74,7 +74,7 @@
     <opening id="win-l2" wall="wl2" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="win-l3" wall="wl3" preset="window-01" offset="2.5" width="1.2" height="1.4" sill="0.9"/>
     <opening id="d-p1" wall="wp1" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
-    <opening id="d-p2" wall="wp2" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0"/>
+    <opening id="d-p2" wall="wp2" preset="door-single-01" offset="2.5" width="0.9" height="2.1" sill="0" swing="right"/>
     <column id="c1" x="2.5" y="7.5" shape="square" width="0.25" depth="0.25"/>
   <stair id="st1" x="1.8" y="12.475" width="3.4" depth="4.85" type="U" turn="landing" hand="right" flightWidth="0.9"/>
   </floor>

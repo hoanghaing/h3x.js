@@ -47,6 +47,8 @@ export class PlanInput {
     this.on('keydown', (e) => {
       if (host.tool?.onKeyDown?.(e as KeyboardEvent)) e.preventDefault();
     });
+    this.on('keyup', (e) => host.tool?.onKeyUp?.(e as KeyboardEvent));
+    this.on('pointerleave', () => host.tool?.onPointerLeave?.());
   }
 
   /** Forgets the gesture in progress (the tool was swapped); the held pointer is ignored until released. */

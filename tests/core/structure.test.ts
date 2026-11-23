@@ -196,7 +196,7 @@ describe('removeNode', () => {
     expect(f.rooms.r1!.walls).toHaveLength(4);
   });
 
-  it('re-bases offsets and mirrors side / flip on the reversed wall', () => {
+  it('re-bases offsets and mirrors side / hinge / swing on the reversed wall', () => {
     const base = oneRoomFloor().openings.o1!;
     const floor: Floor = {
       ...oneRoomFloor(),
@@ -222,22 +222,23 @@ describe('removeNode', () => {
     expect(f.walls.wb).toBeUndefined();
     expect(f.walls.wa).toMatchObject({ a: 'q', b: 'p' });
     // wa (n -> p) keeps its direction; wb (n -> q) runs against the merged q -> p wall.
-    expect(f.openings.oa).toMatchObject({ wall: 'wa', offset: 4, flip: false });
-    expect(f.openings.ob).toMatchObject({ wall: 'wa', offset: 2, flip: true });
+    expect(f.openings.oa).toMatchObject({ wall: 'wa', offset: 4, hinge: 'a', swing: 'left' });
+    expect(f.openings.ob).toMatchObject({ wall: 'wa', offset: 2, hinge: 'b', swing: 'right' });
     expect(f.items.ia).toMatchObject({ wall: 'wa', offset: 3.5, side: 'left' });
     expect(f.items.ib).toMatchObject({ wall: 'wa', offset: 1, side: 'right' });
   });
 
-  it('keeps side / flip when the other wall runs with the merged wall', () => {
+  it('keeps side / hinge / swing when the other wall runs with the merged wall', () => {
     const floor = oneRoomFloor();
     floor.openings.o1!.offset = 3;
-    floor.openings.o1!.flip = true;
+    floor.openings.o1!.hinge = 'b';
+    floor.openings.o1!.swing = 'right';
     floor.items.i1 = outlet('i1', 'w1', 3.5);
     const doc = mk(floor);
     const split = splitWall('w1', { x: 1.5, y: 0 });
     doc.execute(split);
     doc.execute(removeNode(split.createdId));
-    expect(doc.floor.openings.o1!.flip).toBe(true);
+    expect(doc.floor.openings.o1).toMatchObject({ hinge: 'b', swing: 'right' });
     expect((doc.floor.items.i1 as WallItem).side).toBe('left');
   });
 

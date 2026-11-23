@@ -1,4 +1,4 @@
-import type { H3xDocument, Id, Vec2 } from '../../core';
+import type { H3xDocument, Id, OpeningGeometry, PlacementGuide, Vec2 } from '../../core';
 import type { H3xPlan } from '../H3xPlan';
 import type { HitTarget } from '../hit';
 import type { DrawSnapResult, SnapResult } from '../snap';
@@ -32,6 +32,16 @@ export interface ToolContext {
   ): DrawSnapResult;
   /** Draws snap guides in the overlay; `[]` clears. */
   showGuides(g: SnapResult['guides']): void;
+  /**
+   * Draws the ghost of an opening being placed: its symbol, a bar `width` long at `at` when it
+   * has no wall, or a closed `outline`. `invalid` draws it red; `guides` are the snap ticks across
+   * the wall. `null` draws the guides alone, and with no guides clears.
+   */
+  showGhost(
+    g: OpeningGeometry | { at: Vec2; width: number } | { outline: readonly Vec2[] } | null,
+    invalid?: boolean,
+    guides?: readonly PlacementGuide[],
+  ): void;
   /** Marks a node as being dragged so its walls show their lengths; `null` ends it. */
   setDragging(nodeId: Id | null): void;
 }
@@ -47,6 +57,9 @@ export interface Tool {
   onDoubleClick?(e: PlanPointerEvent): void;
   /** Return true when handled. */
   onKeyDown?(e: KeyboardEvent): boolean;
+  onKeyUp?(e: KeyboardEvent): void;
+  /** The pointer left the plan. */
+  onPointerLeave?(): void;
   /** Drawing tools: commits the segment being drawn at `length`; false when there is none. */
   setPendingSegmentLength?(length: number): boolean;
 }

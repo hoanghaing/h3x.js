@@ -1,4 +1,4 @@
-import type { Floor, Id, Vec2 } from '../types';
+import type { Floor, Id, Vec2, Wall } from '../types';
 import { GEOM_TOL, MITER_LIMIT } from '../constants';
 import { EPS, cross, distance, dot, leftNormal, normalize, sub } from '../geometry/vec';
 
@@ -257,6 +257,22 @@ export function computeJoins(floor: Floor): Joins {
     };
   }
   return { corners, junctions, risers };
+}
+
+/** One wall's corners: they depend only on the walls meeting at its two nodes. */
+export function cornersOfWall(floor: Readonly<Floor>, wall: Wall): WallCorners {
+  return cornersOfWalls(floor, [wall])[0]!;
+}
+
+/** The corners of each of `of`, in that order, from one pass over the walls meeting them. */
+export function cornersOfWalls(floor: Readonly<Floor>, of: readonly Wall[]): WallCorners[] {
+  const ends = new Set(of.flatMap((w) => [w.a, w.b]));
+  const walls: Floor['walls'] = {};
+  for (const [id, w] of Object.entries(floor.walls)) {
+    if (ends.has(w.a) || ends.has(w.b)) walls[id] = w;
+  }
+  const { corners } = computeJoins({ ...floor, walls });
+  return of.map((w) => corners[w.id]!);
 }
 
 /** Wall outline corners in plan space, keyed by wall id. */
