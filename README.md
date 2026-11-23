@@ -408,6 +408,26 @@ viewer.viewFromAxis('y'); // top view
   box over the cut that rays still hit. `scene.getOpeningMeshes(id, floorId?)` returns them in
   `OPENING_PARTS` order (`frame`, `leaf`, `glass`, `pick`). Materials: `openingFrame()`,
   `openingLeaf()`, `openingGlass()` (translucent) and `pick()` on `MaterialLibrary`.
+- **Editing doors and windows in 3D.** `new H3xViewer(el, scene, { editing: true })` lets the
+  pointer select, place and drag openings of the active floor (default off: the pointer only
+  orbits). Presses on other floors or on anything else orbit as usual, and the orbit is
+  suspended only while an opening or a handle is being dragged. Placement and drags use the
+  plan's rules (`resolvePlacement`, validation), so a rejected edit leaves the document unchanged;
+  each gesture is one undo step. Esc clears the selection or cancels a drag, Delete removes the
+  selected opening.
+
+  ```ts
+  const viewer = new H3xViewer(el, scene, { editing: true });
+  viewer.on('selectionchange', (sel) => console.log(sel)); // { kind: 'opening', id } | null
+  viewer.on('issues', (issues) => showReasons(issues)); // reasons of a rejected edit; [] clears
+  viewer.select({ kind: 'opening', id }); // or null; no event if nothing changes
+  viewer.setPlacement({ preset: 'door-single-01' }); // a press on a wall places; null to select
+  scene.document; // the H3xDocument being edited
+  ```
+
+  To share the selection with a plan, forward each side's `selectionchange` to the other after
+  comparing ids, so the change is not echoed back.
+
 - **Picking.** Meshes carry
   `userData = { h3xKind: 'wall' | 'room' | 'join' | 'column' | 'slab' | 'opening', h3xId,
 h3xFloorId }`.
