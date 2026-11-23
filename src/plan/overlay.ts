@@ -11,10 +11,13 @@ import {
   svgEl,
   updateDimensionElement,
 } from './render';
-import type { SnapGuide } from './snap';
+import type { SnapGuide, SnapMark } from './snap';
 import { DIMENSION_FONT_PX } from './style';
 import type { Rect } from './types';
 import { screenToPlan, type View } from './view';
+
+/** Half-size (screen px) of a snap mark glyph. */
+const SNAP_MARK_PX = 5;
 
 /** Segments and optional label a drawing tool previews. */
 export interface PreviewState {
@@ -28,8 +31,42 @@ export function renderGuides(
   view: View,
   prefix: string,
   guides: readonly SnapGuide[],
+  marks: readonly SnapMark[] = [],
 ): void {
-  for (const el of Array.from(layer.querySelectorAll(`.${prefix}-guide`))) el.remove();
+  for (const el of Array.from(layer.querySelectorAll(`.${prefix}-guide, .${prefix}-snap-mark`))) {
+    el.remove();
+  }
+  // Marks: the line they lock onto, and a glyph at the point (a square for a midpoint, a right
+  // angle for a perpendicular foot, a cross at the end a wall is extended from).
+  const r = SNAP_MARK_PX / view.scale;
+  for (const m of marks) {
+    if (m.from) {
+      layer.appendChild(
+        svgEl('line', {
+          class: `${prefix}-guide`,
+          x1: String(m.from.x),
+          y1: String(m.from.y),
+          x2: String(m.at.x),
+          y2: String(m.at.y),
+          ...NON_SCALING,
+        }),
+      );
+    }
+    const { x, y } = m.at;
+    const d =
+      m.kind === 'midpoint'
+        ? `M${x - r} ${y - r}H${x + r}V${y + r}H${x - r}Z`
+        : m.kind === 'perpendicular'
+          ? `M${x - r} ${y + r}V${y - r}H${x + r}`
+          : m.kind === 'extension' && m.from
+            ? `M${m.from.x - r} ${m.from.y - r}L${m.from.x + r} ${m.from.y + r}M${m.from.x - r} ${m.from.y + r}L${m.from.x + r} ${m.from.y - r}`
+            : '';
+    if (d) {
+      layer.appendChild(
+        svgEl('path', { class: `${prefix}-snap-mark ${prefix}-snap-${m.kind}`, d, ...NON_SCALING }),
+      );
+    }
+  }
   const min = screenToPlan(view, { x: 0, y: view.height });
   const max = screenToPlan(view, { x: view.width, y: 0 });
   for (const g of guides) {

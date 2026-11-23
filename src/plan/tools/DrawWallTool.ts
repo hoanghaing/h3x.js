@@ -20,7 +20,8 @@ type OwnCall = { kind: 'commit'; created: Set<Id>; changed: boolean } | { kind: 
  * wall (`addWall`, one undo step) and continues from its end. Clicking the chain's start node or
  * an existing node / wall ends the chain; so do double-click and Enter. Esc drops the preview and
  * ends the chain (committed walls stay). Backspace undoes the chain's last click while the
- * newest history entry is that click. Alt disables snapping.
+ * newest history entry is that click. Alt disables snapping; Shift keeps the segment horizontal
+ * or vertical.
  *
  * Whenever a new segment starts, the plan fires `segmentLengthRequest` (length 0, direction of
  * the last preview or zero) so a host can offer a length input; the live length is in the
@@ -69,7 +70,7 @@ export class DrawWallTool implements Tool {
     const ctx = this.ctx;
     if (!ctx) return;
     const r = this.snap(e);
-    ctx.showGuides(r.guides);
+    ctx.showGuides(r.guides, r.marks);
     const last = this.chain.last;
     if (!last) return;
     const len = distance(last.at, r.point);
@@ -108,15 +109,29 @@ export class DrawWallTool implements Tool {
    * Commits the current segment at `length` along the preview direction; false without one or
    * when `length` is not a finite positive number.
    */
-  setPendingSegmentLength(length: number): boolean {
+  setPendingSegmentLength(length: number, angle?: number): boolean {
     const last = this.chain.last;
-    if (!this.ctx || !last || !this.dir) return false;
+    if (!this.ctx || !last) return false;
     if (!(Number.isFinite(length) && length > 0)) return false;
-    return this.commit(add(last.at, scale(this.dir, length)), { kind: 'free' });
+    if (angle !== undefined) {
+      if (!Number.isFinite(angle)) return false;
+      const rad = (angle * Math.PI) / 180;
+      this.dir = { x: Math.cos(rad), y: Math.sin(rad) };
+    }
+    if (!this.dir) return false;
+    const to = add(last.at, scale(this.dir, length));
+    return this.commit(
+      { x: Math.round(to.x * 1e9) / 1e9, y: Math.round(to.y * 1e9) / 1e9 },
+      { kind: 'free' },
+    );
   }
 
+  /** Alt: no snapping; Shift: horizontal / vertical from the last point. */
   private snap(e: PlanPointerEvent) {
-    return this.ctx!.snapDraw(e.plan, this.chain.last?.at, (e.native as MouseEvent).altKey);
+    const m = e.native as MouseEvent;
+    return this.ctx!.snapDraw(e.plan, this.chain.last?.at, m.altKey, undefined, {
+      ortho: m.shiftKey,
+    });
   }
 
   private click(point: Vec2, target: DrawSnapTarget): void {

@@ -624,11 +624,12 @@ export class SelectEditTool implements Tool {
     g.drop = drop;
     ctx.plan.showDropTarget(drop ? drop.at : null);
     if (drop) {
-      ctx.showGuides(r.guides);
+      ctx.showGuides(r.guides, r.marks);
       this.clearRejection();
       return;
     }
-    ctx.showGuides(this.run(moveNode(g.id, r.point), g.key, true) ? r.guides : []);
+    const okMove = this.run(moveNode(g.id, r.point), g.key, true);
+    ctx.showGuides(okMove ? r.guides : [], okMove ? r.marks : []);
   }
 
   private stepColumn(g: Gesture, p: Vec2, free: boolean): void {
@@ -638,7 +639,7 @@ export class SelectEditTool implements Tool {
     const r = ctx.snapDraw(add(g.start, sub(p, this.press!.plan)), undefined, free);
     const same = r.point.x === c.x && r.point.y === c.y;
     const ok = same || this.run(moveColumn(g.id, { x: r.point.x, y: r.point.y }), g.key);
-    ctx.showGuides(ok ? r.guides : []);
+    ctx.showGuides(ok ? r.guides : [], ok ? r.marks : []);
   }
 
   private stepStair(g: Gesture, p: Vec2, free: boolean): void {
@@ -668,7 +669,7 @@ export class SelectEditTool implements Tool {
       const cmd = detachAndMoveVertex(g.id, g.vertex.index, r.point);
       const ok = this.run(cmd, g.key);
       if (ok) ctx.plan.emitRoofDetached({ roofId: g.id, newIds: [...cmd.newIds] });
-      ctx.showGuides(ok ? r.guides : []);
+      ctx.showGuides(ok ? r.guides : [], ok ? r.marks : []);
       return;
     }
     const at = roofHandles(roof, ctx.doc.floor).find(
@@ -676,7 +677,7 @@ export class SelectEditTool implements Tool {
     )?.at;
     const same = at && at.x === r.point.x && at.y === r.point.y;
     const ok = same || this.run(moveRoofVertex(g.id, roof, g.vertex, r.point), g.key);
-    ctx.showGuides(ok ? r.guides : []);
+    ctx.showGuides(ok ? r.guides : [], ok ? r.marks : []);
   }
 
   /** Moves an independent roof; the pointer delta snaps to the grid like a stair drag. */

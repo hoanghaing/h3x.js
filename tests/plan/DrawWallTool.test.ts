@@ -368,3 +368,42 @@ describe('DrawWallTool', () => {
     expect(hasWallBetween(plan, a, b)).toBe(true);
   });
 });
+
+describe('DrawWallTool ortho and angle input', () => {
+  const shiftFire = (plan: H3xPlan, type: string, p: Vec2): void => {
+    const s = plan.planToScreen(p);
+    const e = new MouseEvent(type, {
+      clientX: s.x,
+      clientY: s.y,
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+      shiftKey: true,
+    });
+    Object.defineProperty(e, 'pointerId', { value: 1 });
+    plan.svg.dispatchEvent(e);
+  };
+
+  it('Shift keeps the wall horizontal or vertical', () => {
+    const plan = makePlan();
+    plan.fitToContent();
+    click(plan, { x: 6, y: 1 });
+    shiftFire(plan, 'pointermove', { x: 8.02, y: 1.7 });
+    shiftFire(plan, 'pointerdown', { x: 8.02, y: 1.7 });
+    shiftFire(plan, 'pointerup', { x: 8.02, y: 1.7 });
+    const n = Object.values(plan.doc.floor.nodes).find((x) => x.x === 8);
+    expect(n).toMatchObject({ x: 8, y: 1 });
+    expect(plan.svg.querySelectorAll('.h3x-plan-guide').length).toBeGreaterThan(0);
+  });
+
+  it('a typed length with an angle draws at that angle', () => {
+    const plan = makePlan();
+    plan.fitToContent();
+    click(plan, { x: 6, y: 1 });
+    expect(plan.setPendingSegmentLength(2, 90)).toBe(true);
+    expect(Object.values(plan.doc.floor.nodes).some((n) => n.x === 6 && n.y === 3)).toBe(true);
+    expect(plan.setPendingSegmentLength(2, 0)).toBe(true);
+    expect(Object.values(plan.doc.floor.nodes).some((n) => n.x === 8 && n.y === 3)).toBe(true);
+    expect(plan.setPendingSegmentLength(2, Number.NaN)).toBe(false);
+  });
+});

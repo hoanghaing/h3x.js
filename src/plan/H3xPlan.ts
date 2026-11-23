@@ -43,7 +43,7 @@ import { PlanInput } from './input';
 import { roofHandles } from './roofEdit';
 import { hitTest, type HitScene, type HitTarget, type OpeningEditHits } from './hit';
 import { openingDistanceLabels, openingHandles, type OpeningShape } from './openings';
-import { snapDraw, snapPoint, snapScalar, type SnapResult } from './snap';
+import { snapDraw, snapPoint, snapScalar, type SnapMark, type SnapResult } from './snap';
 import type { Tool, ToolContext } from './tools/Tool';
 import { SelectEditTool } from './tools/SelectEditTool';
 import {
@@ -314,9 +314,10 @@ export class H3xPlan {
           ...(o?.structure === false ? { structure: false } : {}),
           ...(o?.exclude ? { exclude: o.exclude } : {}),
           ...(doc.project.site && o?.site !== false ? { site: doc.project.site.points } : {}),
+          ...(o?.ortho ? { ortho: true } : {}),
         });
       },
-      showGuides: (g) => this.showGuides(g),
+      showGuides: (g, marks) => this.showGuides(g, marks),
       showGhost: (g, invalid = false, guides = []) => {
         if (this.disposed) return;
         const ghost = g || guides.length > 0 ? { shape: g, invalid, guides } : null;
@@ -366,8 +367,8 @@ export class H3xPlan {
     return hitTest(scene, s);
   }
 
-  private showGuides(guides: SnapResult['guides']): void {
-    renderGuides(this.dom.layers.overlay, this._view, this.prefix, guides);
+  private showGuides(guides: SnapResult['guides'], marks: readonly SnapMark[] = []): void {
+    renderGuides(this.dom.layers.overlay, this._view, this.prefix, guides, marks);
   }
 
   /** @internal Draws a drawing tool's preview segments and label in the overlay; `null` clears. */
@@ -804,13 +805,14 @@ export class H3xPlan {
   }
 
   /**
-   * Commits the segment the active drawing tool is drawing at `length` (meters) along the
-   * current preview direction. False when no segment is being drawn, `length` is not a finite
-   * positive number, or it was rejected.
+   * Commits the segment the active drawing tool is drawing at `length` (meters), along the
+   * current preview direction or, with `angle`, at that many degrees counter-clockwise from +x.
+   * False when no segment is being drawn, `length` is not a finite positive number, `angle` is
+   * not finite, or it was rejected.
    */
-  setPendingSegmentLength(length: number): boolean {
+  setPendingSegmentLength(length: number, angle?: number): boolean {
     if (this.disposed) return false;
-    return this._tool?.setPendingSegmentLength?.(length) ?? false;
+    return this._tool?.setPendingSegmentLength?.(length, angle) ?? false;
   }
 
   /** @internal Asks the host for a segment length (used by drawing tools). */

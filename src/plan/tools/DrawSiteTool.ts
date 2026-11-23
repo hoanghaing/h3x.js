@@ -48,7 +48,7 @@ export class DrawSiteTool implements Tool {
     const ctx = this.ctx;
     if (!ctx) return;
     const r = this.snap(e);
-    ctx.showGuides(r.guides);
+    ctx.showGuides(r.guides, r.marks);
     this.refresh(r.point);
   }
 
@@ -75,7 +75,7 @@ export class DrawSiteTool implements Tool {
       this.points[this.points.length - 1],
       (e.native as MouseEvent).altKey,
       this.points,
-      { structure: false, site: false },
+      { structure: false, site: false, ortho: (e.native as MouseEvent).shiftKey },
     );
   }
 

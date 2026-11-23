@@ -683,12 +683,12 @@ describe('SelectEditTool structural gestures', () => {
     plan.doc.execute(add);
     const before = structuredClone(plan.doc.floor);
     const free = add.endNodeId;
-    drag(plan, { x: 2, y: 3 }, { x: 2.01, y: 4.02 }, 5, {}, true);
+    drag(plan, { x: 2, y: 3 }, { x: 2.51, y: 4.02 }, 5, {}, true);
     expect(at(plan, free).y).toBeLessThan(4);
     expect(dropMarks(plan)).toBe(1);
-    fire(plan, 'pointerup', { x: 2.01, y: 4.02 });
+    fire(plan, 'pointerup', { x: 2.51, y: 4.02 });
     expect(plan.doc.floor.nodes[free]).toBeUndefined();
-    const t = nodeAt(plan, { x: 2.01, y: 4 });
+    const t = nodeAt(plan, { x: 2.51, y: 4 });
     expect(t).toBeDefined();
     expect(wallBetween(plan, t!, 'n3')).toBeDefined();
     expect(wallBetween(plan, t!, 'n4')).toBeDefined();

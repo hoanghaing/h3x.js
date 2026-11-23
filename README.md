@@ -622,7 +622,17 @@ both views.
     click to set the start, every further click commits a wall (`addWall`, one undo step) and
     continues from its end. A click on the chain's start, a node or a wall ends the chain, as do
     double-click and **Enter**; **Esc** drops the preview (committed walls stay); **Backspace**
-    undoes the last click; **Alt** disables snapping.
+    undoes the last click; **Alt** disables snapping; **Shift** keeps the segment horizontal or
+    vertical (its length on the grid or aligned to a node). `DrawSiteTool` and `RoofTool` take
+    **Shift** the same way.
+
+  Drawing snaps (`snapDraw`, reach 8 px), in order: a node; a wall's midpoint; the foot of the
+  perpendicular from the segment start onto a wall; the nearest point of a wall centre line; a
+  site corner, then edge; a wall's extension line past either end (distance on the grid);
+  alignment with nodes; the 45° lock from the segment start; the grid. Midpoint and
+  perpendicular are skipped closer than `MIN_WALL_LENGTH` to a wall end. Each result may carry
+  `marks` (`midpoint`, `perpendicular`, `extension`, `ray`) that the overlay draws as a small
+  glyph and the line it locks onto (classes `<prefix>-snap-mark` and `<prefix>-guide`).
   - `new DrawSiteTool()`: click the vertices of the site outline; a click on the first vertex,
     **Enter** or double-click closes it (`setSite`); **Esc** cancels.
   - `new ColumnTool({ shape?, width?, depth? })` (`'square'` 0.3 m by default): one click places a
@@ -636,9 +646,10 @@ both views.
 
   `DrawWallTool` fires `segmentLengthRequest` (`{ from, direction, length }`) whenever a new
   segment starts. The editor shows its own input, then calls
-  `plan.setPendingSegmentLength(length)`, which commits a wall of exactly that length along the
-  preview direction and returns `false` when nothing is pending or `length` is not a finite
-  number above 0.
+  `plan.setPendingSegmentLength(length, angle?)`, which commits a wall of exactly that length
+  along the preview direction, or at `angle` degrees counter-clockwise from +x, and returns
+  `false` when nothing is pending, `length` is not a finite number above 0 or `angle` is not
+  finite. The example's input takes `5` or `5<90`.
 
   Length labels show on the selected wall, on the walls of a selected or dragged node, and,
   with nothing selected, on walls that border fewer than two rooms.
