@@ -174,18 +174,20 @@ function inUse(floor: Readonly<Floor>, id: Id): boolean {
  * from the start at every step, keeps one id.
  */
 export function enclosedRooms(before: Readonly<Floor>, after: Readonly<Floor>): EntityChange[] {
-  const known = [
-    ...detectRooms(before as Floor).map((f) => f.walls),
-    ...Object.values(before.rooms).map((r) => r.walls),
-  ];
-  const isKnown = (walls: Id[]): boolean =>
-    known.some((k) => sameCycle(k, walls) || sameCycle([...k].reverse(), walls));
+  // Sorted wall ids name a loop whatever wall it starts from and whichever way it runs.
+  const loopKey = (walls: readonly Id[]): string => [...walls].sort().join(',');
+  const stored = new Set(Object.values(before.rooms).map((r) => loopKey(r.walls)));
+  const fresh = detectRooms(after as Floor).filter((f) => !stored.has(loopKey(f.walls)));
+  if (fresh.length === 0) return [];
+  const found = new Set(detectRooms(before as Floor).map((f) => loopKey(f.walls)));
+  // A roof may still list a room that is gone; a new room must not take that id and join it.
+  const listed = new Set(Object.values(before.roofs).flatMap((r) => r.rooms ?? []));
   const added = new Set<Id>();
   const changes: EntityChange[] = [];
-  for (const face of detectRooms(after as Floor)) {
-    if (isKnown(face.walls)) continue;
-    const key = [...face.walls].sort().join(',');
-    const id = idFor(key, (k) => added.has(k) || inUse(before, k));
+  for (const face of fresh) {
+    const key = loopKey(face.walls);
+    if (found.has(key)) continue;
+    const id = idFor(key, (k) => added.has(k) || listed.has(k) || inUse(before, k));
     added.add(id);
     const room: Room = { id, name: '', walls: [...face.walls] };
     if (face.holes.length > 0) room.holes = face.holes.map((h) => [...h]);

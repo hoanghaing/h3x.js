@@ -154,6 +154,30 @@ describe('a wall loop dragged larger becomes a room', () => {
     expect(doc.floor.nodes[id]).toEqual({ id, x: 20, y: 20 });
   });
 
+  it('does not take an id a roof still lists, so no roof joins the new room', () => {
+    const first = mk(smallBoxFloor());
+    first.execute(moveWall('be', { x: 3, y: 0 }));
+    const id = rooms(first)[0]!.id;
+    const floor = smallBoxFloor();
+    floor.roofs.r1 = {
+      id: 'r1',
+      kind: 'pitched',
+      follow: true,
+      rooms: [id],
+      pitch: 45,
+      base: 0,
+      overhang: 0,
+      gableOverhang: 0,
+      thickness: 0.1,
+      material: 'tile',
+    };
+    const doc = mk(floor);
+    doc.execute(moveWall('be', { x: 3, y: 0 }));
+    expect(rooms(doc)).toHaveLength(1);
+    expect(rooms(doc)[0]!.id).not.toBe(id);
+    expect(doc.floor.roofs.r1!.rooms).toEqual([id]);
+  });
+
   it('a loop grown inside a room becomes a room; the outer room is unchanged', () => {
     const floor = oneRoomFloor();
     floor.openings = {};
