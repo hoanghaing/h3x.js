@@ -1,9 +1,18 @@
 import { Group, Mesh, type BufferGeometry } from 'three';
-import { layoutStair, stairRise, type Floor, type Id, type Vec2 } from '../core';
+import {
+  layoutStair,
+  openingGeometry,
+  stairRise,
+  type Floor,
+  type Id,
+  type OpeningGeometry,
+  type Vec2,
+} from '../core';
 import { buildRoof, gableProfileFrom, type RoofGeometry, type Vec3 } from '../core/roofs/geometry';
 import { buildColumnGeometry } from './columns';
 import { buildFloorGeometry } from './floors';
 import type { MaterialLibrary } from './materials';
+import { buildOpeningParts, type OpeningParts } from './openingParts';
 import { buildRoofParts } from './roofs';
 import { buildSlabGeometry } from './slab';
 import { buildHandrailGeometry, buildStairGeometry } from './stairs';
@@ -15,7 +24,11 @@ import { buildWallGeometry } from './walls/wallGeometry';
  * userData.h3xKind of the meshes an H3xScene creates. Every mesh also carries
  * `userData.h3xId` (entity id, unique only within its floor) and `userData.h3xFloorId`.
  */
-export type H3xKind = 'wall' | 'room' | 'join' | 'column' | 'slab' | 'stair' | 'roof';
+export type H3xKind = 'wall' | 'room' | 'join' | 'column' | 'slab' | 'stair' | 'roof' | 'opening';
+
+/** The meshes of an opening, in this order; `h3x-opening-<id>-<part>`. */
+export const OPENING_PARTS = ['frame', 'leaf', 'glass', 'pick'] as const;
+export type OpeningPart = (typeof OPENING_PARTS)[number];
 
 /** What a floor's geometry needs from its neighbours. */
 export interface FloorContext {
@@ -28,6 +41,12 @@ export interface FloorContext {
 interface Built {
   geom: BufferGeometry;
   material: Mesh['material'];
+}
+
+/** The meshes of one opening and the geometry they were built from. */
+interface OpeningView {
+  key: string;
+  meshes: Map<OpeningPart, Mesh>;
 }
 
 /**
@@ -43,6 +62,7 @@ export class FloorView {
   private readonly stairsGroup = new Group();
   /** Roof bodies, frames and posts; hidden as a whole by `roofsVisible`. */
   private readonly roofsGroup = new Group();
+  private readonly openingsGroup = new Group();
   readonly wallMeshes = new Map<Id, Mesh>();
   readonly floorMeshes = new Map<Id, Mesh>();
   private readonly joinMeshes = new Map<Id, Mesh>();
@@ -55,6 +75,7 @@ export class FloorView {
   readonly roofMeshes = new Map<Id, Mesh>();
   readonly roofFrameMeshes = new Map<Id, Mesh>();
   readonly roofPostMeshes = new Map<Id, Mesh>();
+  readonly openings = new Map<Id, OpeningView>();
 
   constructor(
     readonly floorId: Id,
@@ -68,6 +89,7 @@ export class FloorView {
     this.columnsGroup.name = 'h3x-columns';
     this.stairsGroup.name = 'h3x-stairs';
     this.roofsGroup.name = 'h3x-roofs';
+    this.openingsGroup.name = 'h3x-openings';
     this.group.add(
       this.wallsGroup,
       this.floorsGroup,
@@ -75,6 +97,7 @@ export class FloorView {
       this.columnsGroup,
       this.stairsGroup,
       this.roofsGroup,
+      this.openingsGroup,
     );
   }
 
@@ -194,6 +217,77 @@ export class FloorView {
     }
     for (const [id, m] of this.roofFrameMeshes) m.name = 'h3x-roof-' + id + '-frame';
     for (const [id, m] of this.roofPostMeshes) m.name = 'h3x-roof-' + id + '-posts';
+    this.syncOpenings(f);
+  }
+
+  /** The meshes of an opening in `OPENING_PARTS` order; empty when it is not drawn. */
+  openingMeshes(id: Id): Mesh[] {
+    const view = this.openings.get(id);
+    if (!view) return [];
+    return OPENING_PARTS.flatMap((part) => {
+      const mesh = view.meshes.get(part);
+      return mesh ? [mesh] : [];
+    });
+  }
+
+  /**
+   * Rebuilds the parts of the openings whose geometry (or the floor elevation) changed since
+   * the last rebuild; the others keep their buffers.
+   */
+  private syncOpenings(f: Floor): void {
+    const seen = new Set<Id>();
+    for (const o of Object.values(f.openings)) {
+      const g = openingGeometry(f, o);
+      if (!g) continue;
+      seen.add(o.id);
+      const key = openingKey(f.elevation, g);
+      let view = this.openings.get(o.id);
+      if (view?.key === key) continue;
+      if (!view) {
+        view = { key, meshes: new Map() };
+        this.openings.set(o.id, view);
+      }
+      view.key = key;
+      const parts = buildOpeningParts(f, o, g);
+      for (const part of OPENING_PARTS) {
+        const geom = parts[part as keyof OpeningParts];
+        const mesh = view.meshes.get(part);
+        if (!geom) {
+          if (mesh) {
+            mesh.geometry.dispose();
+            mesh.removeFromParent();
+            view.meshes.delete(part);
+          }
+          continue;
+        }
+        if (mesh) {
+          const old = mesh.geometry;
+          mesh.geometry = geom;
+          old.dispose();
+          continue;
+        }
+        const created = new Mesh(geom, this.openingMaterial(part));
+        // Glass lets light through; the pick is never drawn.
+        created.castShadow = part === 'frame' || part === 'leaf';
+        created.receiveShadow = part !== 'pick';
+        created.name = 'h3x-opening-' + o.id + '-' + part;
+        created.userData = { h3xKind: 'opening', h3xId: o.id, h3xFloorId: this.floorId };
+        this.openingsGroup.add(created);
+        view.meshes.set(part, created);
+      }
+    }
+    for (const [id, view] of this.openings) {
+      if (seen.has(id)) continue;
+      disposeAll(view.meshes);
+      this.openings.delete(id);
+    }
+  }
+
+  private openingMaterial(part: OpeningPart): Mesh['material'] {
+    if (part === 'frame') return this.materials.openingFrame();
+    if (part === 'leaf') return this.materials.openingLeaf();
+    if (part === 'glass') return this.materials.openingGlass();
+    return this.materials.pick();
   }
 
   /** Disposes every geometry and detaches the group. Materials belong to the library. */
@@ -216,6 +310,8 @@ export class FloorView {
       }
       meshes.clear();
     }
+    for (const view of this.openings.values()) disposeAll(view.meshes);
+    this.openings.clear();
     this.group.removeFromParent();
   }
 }
@@ -227,6 +323,19 @@ function profileOf(floor: Floor, wallId: Id, gables: Vec3[][]): Vec2[] | null {
   } catch {
     return null;
   }
+}
+
+/** What an opening's parts are built from: its geometry at the floor elevation. */
+function openingKey(elevation: number, g: OpeningGeometry): string {
+  return JSON.stringify([elevation, g.cut, g.z0, g.z1, g.closed]);
+}
+
+function disposeAll(meshes: Map<unknown, Mesh>): void {
+  for (const mesh of meshes.values()) {
+    mesh.geometry.dispose();
+    mesh.removeFromParent();
+  }
+  meshes.clear();
 }
 
 function sync(

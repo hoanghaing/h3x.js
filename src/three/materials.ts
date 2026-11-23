@@ -1,4 +1,4 @@
-import { Color, DoubleSide, MeshStandardMaterial } from 'three';
+import { Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial } from 'three';
 import type { RoofMaterial } from '../core';
 
 export interface FinishInfo {
@@ -23,6 +23,7 @@ const ROOF_LOOK: Record<
 /** Cached standard materials keyed by kind and resolved colour. */
 export class MaterialLibrary {
   private readonly cache = new Map<string, MeshStandardMaterial>();
+  private pickMaterial: MeshBasicMaterial | undefined;
   private readonly resolveFinish: FinishResolver | undefined;
   private readonly defaults: Record<Kind, string>;
 
@@ -92,9 +93,56 @@ export class MaterialLibrary {
     return m;
   }
 
+  /** Door and window frames (`opening-frame`), also the box of a rolling door. */
+  openingFrame(): MeshStandardMaterial {
+    return this.named('opening-frame', { color: '#6b6560', roughness: 0.6, metalness: 0.3 });
+  }
+
+  /** Door leaves, sash members and shutters (`opening-leaf`). */
+  openingLeaf(): MeshStandardMaterial {
+    return this.named('opening-leaf', { color: '#8b6a4e', roughness: 0.7, metalness: 0 });
+  }
+
+  /** Window panes (`opening-glass`): translucent, double-sided, no depth write. */
+  openingGlass(): MeshStandardMaterial {
+    let m = this.cache.get('opening-glass');
+    if (!m) {
+      m = this.named('opening-glass', { color: '#b9dbe8', roughness: 0.1, metalness: 0 });
+      m.transparent = true;
+      m.opacity = 0.3;
+      m.depthWrite = false;
+      m.side = DoubleSide;
+    }
+    return m;
+  }
+
+  /** Never drawn (`visible` false), yet rays still hit meshes using it (`opening-pick`). */
+  pick(): MeshBasicMaterial {
+    if (!this.pickMaterial) {
+      this.pickMaterial = new MeshBasicMaterial({ visible: false });
+      this.pickMaterial.name = 'opening-pick';
+    }
+    return this.pickMaterial;
+  }
+
   dispose(): void {
     for (const m of this.cache.values()) m.dispose();
     this.cache.clear();
+    this.pickMaterial?.dispose();
+    this.pickMaterial = undefined;
+  }
+
+  private named(
+    key: string,
+    look: { color: string; roughness: number; metalness: number },
+  ): MeshStandardMaterial {
+    let m = this.cache.get(key);
+    if (!m) {
+      m = new MeshStandardMaterial({ ...look, color: new Color(look.color) });
+      m.name = key;
+      this.cache.set(key, m);
+    }
+    return m;
   }
 
   private resolveColor(kind: Kind, finishId?: string): string {
