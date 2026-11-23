@@ -625,6 +625,12 @@ both views.
     undoes the last click; **Alt** disables snapping; **Shift** keeps the segment horizontal or
     vertical (its length on the grid or aligned to a node). `DrawSiteTool` and `RoofTool` take
     **Shift** the same way.
+    `reference: 'left' | 'right'` (default `'center'`; `setOptions({ reference })` switches it and
+    ends the chain) draws a wall face instead of the centre line: the clicks are the face left /
+    right of the drawing direction and the wall stands on the other side. The first wall is
+    offset by half the thickness; each further click moves the shared node to where the two
+    offset centre lines meet (one undo step), and a click on the first face point closes the
+    outline the same way. Face points do not snap onto nodes or walls.
 
   Drawing snaps (`snapDraw`, reach 8 px), in order: a node; a wall's midpoint; the foot of the
   perpendicular from the segment start onto a wall; the nearest point of a wall centre line; a
