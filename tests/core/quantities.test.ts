@@ -7,8 +7,25 @@ import {
   projectQuantities,
   type Floor,
   type Project,
+  type Stair,
 } from '../../src/core';
+import { signedArea } from '../../src/core/geometry/polygon';
+import { stairOutline } from '../../src/core/stairs/layout';
 import { oneRoomFloor, testPresets, twoRoomFloor } from '../fixtures/floors';
+
+const stair = (x: number, y: number): Stair => ({
+  id: 's1',
+  x,
+  y,
+  width: 1,
+  depth: 3,
+  rotation: 0,
+  type: 'straight',
+  turn: 'landing',
+  hand: 'left',
+  flightWidth: 1,
+});
+const above = (): Floor => ({ ...oneRoomFloor(), id: 'f2', level: 1, elevation: 3.35 });
 
 const project = (...floors: Floor[]): Project =>
   ({
@@ -44,6 +61,72 @@ describe('floorQuantities', () => {
     for (const r of q.rooms) expect(r.area).toBeCloseTo(3.8 * 3.8, 6);
     expect(q.rooms.find((r) => r.id === 'r1')!.name).toBe('Room 1');
     expect(q.totals.floorArea).toBeCloseTo(2 * 3.8 * 3.8, 6);
+  });
+
+  it('measures the slab to the outer wall faces', () => {
+    const q = floorQuantities(oneRoomFloor());
+    expect(q.slab.area).toBeCloseTo(4.2 ** 2, 9);
+    expect(q.slab.holeArea).toBe(0);
+    expect(q.slab.volume).toBeCloseTo(4.2 ** 2 * 0.15, 9);
+    expect(q.totals.slabArea).toBeCloseTo(4.2 ** 2, 9);
+    expect(q.totals.slabVolume).toBeCloseTo(4.2 ** 2 * 0.15, 9);
+  });
+
+  it('cuts the stair holes of the floor below out of the slab', () => {
+    const below = oneRoomFloor();
+    below.stairs.s1 = stair(2, 2);
+    const q = floorQuantities(above(), below);
+    const hole = Math.abs(signedArea(stairOutline(below.stairs.s1, 3.35)));
+    expect(q.slab.holeArea).toBeCloseTo(hole, 9);
+    expect(q.slab.area).toBeCloseTo(4.2 ** 2 - hole, 9);
+  });
+
+  it('deducts only the part of a stair inside the slab', () => {
+    const below = oneRoomFloor();
+    below.stairs.s1 = stair(4.1, 2);
+    const q = floorQuantities(above(), below);
+    const hole = Math.abs(signedArea(stairOutline(below.stairs.s1, 3.35)));
+    expect(q.slab.holeArea).toBeGreaterThan(0);
+    expect(q.slab.holeArea).toBeLessThan(hole - 1e-6);
+    expect(q.slab.area + q.slab.holeArea).toBeCloseTo(4.2 ** 2, 9);
+  });
+
+  it('measures each wall face', () => {
+    const q = floorQuantities(oneRoomFloor());
+    const w2 = q.walls.find((w) => w.id === 'w2')!;
+    expect(w2.faces.left.side).toBe('interior');
+    expect(w2.faces.left.length).toBeCloseTo(3.8, 9);
+    expect(w2.faces.left.grossArea).toBeCloseTo(3.8 * 3.2, 9);
+    expect(w2.faces.right.side).toBe('exterior');
+    expect(w2.faces.right.length).toBeCloseTo(4.2, 9);
+    const w1 = q.walls.find((w) => w.id === 'w1')!;
+    expect(w1.faces.left.openingArea).toBeCloseTo(1.89, 9);
+    expect(w1.faces.right.netArea).toBeCloseTo(4.2 * 3.2 - 1.89, 9);
+    expect(q.totals.paintInterior).toBeCloseTo(4 * 3.8 * 3.2 - 1.89, 9);
+    expect(q.totals.paintExterior).toBeCloseTo(4 * 4.2 * 3.2 - 1.89, 9);
+  });
+
+  it('a wall between two rooms is interior on both faces', () => {
+    const w7 = floorQuantities(twoRoomFloor()).walls.find((w) => w.id === 'w7')!;
+    expect(w7.faces.left.side).toBe('interior');
+    expect(w7.faces.right.side).toBe('interior');
+  });
+
+  it('a wall with no room is exterior on both faces', () => {
+    const f = oneRoomFloor();
+    f.rooms = {};
+    f.openings = {};
+    const q = floorQuantities(f);
+    for (const w of q.walls) {
+      expect(w.faces.left.side).toBe('exterior');
+      expect(w.faces.right.side).toBe('exterior');
+    }
+    expect(q.totals.paintInterior).toBe(0);
+    expect(q.slab).toEqual({ area: 0, holeArea: 0, volume: 0 });
+  });
+
+  it('measures room perimeters between the walls', () => {
+    expect(floorQuantities(oneRoomFloor()).rooms[0]!.perimeter).toBeCloseTo(4 * 3.8, 9);
   });
 
   it('groups openings by type, preset and size', () => {
@@ -139,6 +222,15 @@ describe('projectQuantities', () => {
     expect(q.totals.openingCount).toBe(2);
     expect(q.totals.floorArea).toBeCloseTo(2 * 3.8 * 3.8, 6);
   });
+
+  it('cuts each slab by the stairs of the floor below', () => {
+    const f1 = oneRoomFloor();
+    f1.stairs.s1 = stair(2, 2);
+    const q = projectQuantities(project(f1, above()));
+    expect(q.floors[0]!.slab.holeArea).toBe(0);
+    expect(q.floors[1]!.slab.holeArea).toBeGreaterThan(0);
+    expect(q.totals.slabArea).toBeCloseTo(2 * 4.2 ** 2 - q.floors[1]!.slab.holeArea, 9);
+  });
 });
 
 describe('sample layouts', () => {
@@ -157,7 +249,10 @@ describe('sample layouts', () => {
         for (const w of f.walls) {
           expect(w.netArea).toBeGreaterThanOrEqual(0);
           expect(w.volume).toBeGreaterThan(0);
+          expect(w.faces.left.netArea).toBeGreaterThanOrEqual(0);
+          expect(w.faces.right.netArea).toBeGreaterThanOrEqual(0);
         }
+        if (f.rooms.length > 0) expect(f.slab.area).toBeGreaterThan(0);
       }
     },
   );

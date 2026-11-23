@@ -338,19 +338,26 @@ walls cuts out or absorbs a space too small to be a room. Moving walls still mov
 
 ### Quantities
 
-`floorQuantities(floor)` measures one floor for estimates, and `projectQuantities(project)` does
-every floor in order and adds them up (`totals`).
+`floorQuantities(floor, below?)` measures one floor for estimates, and `projectQuantities(project)`
+does every floor in order and adds them up (`totals`).
 
 - **Walls** (`WallQuantity`): `length` node to node, `grossArea` = length × height (one face),
   `openingArea` (only the part of each opening inside the wall), `netArea`, and `volume` from the
-  joined outline × height less the openings, so corners are counted once.
-- **Rooms** (`RoomQuantity`): `area` of the floor between the walls, holes excluded.
+  joined outline × height less the openings, so corners are counted once. `faces.left` /
+  `faces.right` (`WallFace`, sides of a → b) give each face's `length` along the joined outline,
+  areas net of the openings, and `side`: `interior` when it looks into a room, else `exterior`.
+- **Rooms** (`RoomQuantity`): `area` of the floor between the walls, holes excluded, and
+  `perimeter` of the outlines between the walls (skirting, before doors).
+- **Slab** (`SlabQuantity`): the rooms grown to the outer wall faces, as the 3D view draws it;
+  `area` leaves out courtyards and the stairs of the floor `below` (`holeArea`), `volume` =
+  area × slabThickness.
 - **Openings** (`OpeningQuantity`): grouped by type, preset, width and height, with `count` and
   `area`, like a door and window schedule.
 - **Roofs** (`RoofQuantity`): the true area of every face, overhangs included; vertical gable ends
   are left out.
 - **Totals** (`QuantityTotals`): `wallLength`, `wallNetArea`, `wallVolume`, `floorArea`,
-  `openingCount`, `openingArea`, `roofArea`.
+  `openingCount`, `openingArea`, `roofArea`, `slabArea`, `slabVolume`, `paintInterior`,
+  `paintExterior`.
 
 ### XML
 

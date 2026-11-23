@@ -90,6 +90,8 @@ export type {
   QuantityTotals,
   RoofQuantity,
   RoomQuantity,
+  SlabQuantity,
+  WallFace,
   WallQuantity,
 } from './quantities';
 export type { OutlineRing } from './floors/outline';
