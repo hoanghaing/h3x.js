@@ -10,12 +10,14 @@ import {
   resizeOpening,
   splitWall,
   stairOutline,
+  transformObjects,
   updateOpening,
   updateStair,
   type Command,
   type Hinge,
   type Id,
   type Issue,
+  type ObjectSet,
   type Opening,
   type PlacementGuide,
   type Roof,
@@ -62,6 +64,10 @@ interface Press {
   screen: ScreenPoint;
   plan: Vec2;
   shift: boolean;
+  /** Shift, Ctrl or Meta was held: a click adds / removes the target from the selection. */
+  toggle: boolean;
+  /** Shift + press on empty space: a drag draws a selection box. */
+  box: boolean;
   moved: boolean;
   /** The press grabbed a vertex handle of the selected roof. */
   roofVertex?: RoofVertexRef;
@@ -86,7 +92,9 @@ interface Gesture {
     | 'roof'
     | 'roofVertex'
     | 'opening'
-    | 'openingResize';
+    | 'openingResize'
+    | 'group'
+    | 'box';
   id: Id;
   /** Wall drags: unit left normal at gesture start. */
   normal: Vec2;
@@ -112,6 +120,8 @@ interface Gesture {
   end?: Hinge;
   /** Opening moves: the host of the last step, kept against nearby walls. */
   host?: Id;
+  /** Group drags: the selection being moved. */
+  objects?: ObjectSet;
 }
 
 const SNAP_RADIUS_PX = 8;
@@ -194,17 +204,24 @@ export class SelectEditTool implements Tool {
   onPointerDown(e: PlanPointerEvent): boolean {
     this.press = null;
     if (!this.ctx || e.native.button !== 0) return false;
+    const m = e.native as MouseEvent;
     this.press = {
       target: e.hit,
       screen: e.screen,
       plan: e.plan,
-      shift: (e.native as MouseEvent).shiftKey,
+      shift: m.shiftKey,
+      toggle: m.shiftKey || m.ctrlKey || m.metaKey,
+      box: false,
       moved: false,
       dead: false,
     };
     this.grabRoofHandle(e);
     if (this.press.roofVertex || this.press.roofEdge) return true;
     const kind = e.hit?.kind;
+    if (!kind && m.shiftKey) {
+      this.press.box = true;
+      return true;
+    }
     return (
       kind === 'openingHandle' ||
       kind === 'openingDistance' ||
@@ -257,9 +274,12 @@ export class SelectEditTool implements Tool {
       this.lastDistanceAsk = { id: t.id, end: t.end, at: now };
       return;
     }
-    if (t?.kind === 'openingHandle') this.ctx.plan.select({ kind: 'opening', id: t.id });
-    else if (t && selectable(t.kind)) this.ctx.plan.select({ kind: t.kind, id: t.id });
-    else if (t?.kind !== 'dimension') this.ctx.plan.select(null);
+    const plan = this.ctx.plan;
+    const pick = (sel: { kind: Selectable; id: Id }): void =>
+      press.toggle ? plan.toggleSelection(sel) : plan.select(sel);
+    if (t?.kind === 'openingHandle') pick({ kind: 'opening', id: t.id });
+    else if (t && selectable(t.kind)) pick({ kind: t.kind, id: t.id });
+    else if (t?.kind !== 'dimension' && !press.toggle) plan.select(null);
   }
 
   onDoubleClick(e: PlanPointerEvent): void {
@@ -312,7 +332,9 @@ export class SelectEditTool implements Tool {
     if (!dir || this.gesture || e.altKey || e.ctrlKey || e.metaKey) return false;
     const d = scale(dir, e.shiftKey ? this.nudgeLarge : this.nudge);
     let cmd: Command;
-    if (sel?.kind === 'wall') {
+    if (ctx.plan.selectionSet.length > 1) {
+      cmd = transformObjects(ctx.plan.selectionObjects(), { kind: 'translate', delta: d });
+    } else if (sel?.kind === 'wall') {
       cmd = moveWall(sel.id, d);
     } else if (sel?.kind === 'node') {
       const n = ctx.doc.floor.nodes[sel.id];
@@ -350,6 +372,16 @@ export class SelectEditTool implements Tool {
     let vertex: RoofVertexRef | undefined;
     let opening: Pick<Gesture, 'opening' | 'grab' | 'end'> | undefined;
     const sel = ctx.plan.selection;
+    const set = ctx.plan.selectionSet;
+    const inSet = !!t && set.some((s) => s.kind === t.kind && s.id === t.id);
+    if (press.box) {
+      this.gesture = { ...this.blankGesture('box', ''), start: press.plan };
+      return;
+    }
+    if (inSet && set.length > 1 && !press.shift && !press.roofVertex) {
+      this.gesture = { ...this.blankGesture('group', ''), objects: ctx.plan.selectionObjects() };
+      return;
+    }
     if (t?.kind === 'opening' || t?.kind === 'openingHandle') {
       const o = floor.openings[t.id];
       const x = o ? alongWall(floor, o, press.plan) : NaN;
@@ -418,10 +450,46 @@ export class SelectEditTool implements Tool {
     if (kind === 'node') ctx.setDragging(id);
   }
 
+  /** A gesture with no target entity (box, group). */
+  private blankGesture(kind: 'box' | 'group', id: Id): Gesture {
+    return {
+      key: `plan-drag-${++this.gestureCount}`,
+      kind,
+      id,
+      normal: { x: 0, y: 0 },
+      start: { x: 0, y: 0 },
+      applied: 0,
+      drop: null,
+    };
+  }
+
+  /** Draws the selection box: left to right takes what is inside, right to left what it touches. */
+  private stepBox(g: Gesture, p: Vec2): void {
+    const a = g.start;
+    this.ctx!.showGhost({
+      outline: [a, { x: p.x, y: a.y }, p, { x: a.x, y: p.y }],
+    });
+    g.shift = p;
+  }
+
+  /** Moves the whole selection by the pointer travel, snapped to the grid unless Alt is held. */
+  private stepGroup(g: Gesture, p: Vec2, free: boolean): void {
+    const ctx = this.ctx!;
+    const grid = ctx.plan.snapOptions.grid;
+    const d = sub(p, this.press!.plan);
+    const delta = free ? d : { x: snapScalar(d.x, grid), y: snapScalar(d.y, grid) };
+    if (g.shift && g.shift.x === delta.x && g.shift.y === delta.y) return;
+    if (this.run(transformObjects(g.objects!, { kind: 'translate', delta }), g.key, true)) {
+      g.shift = delta;
+    }
+  }
+
   private step(e: PlanPointerEvent): void {
     const g = this.gesture!;
     const free = (e.native as MouseEvent).altKey;
-    if (g.kind === 'node') this.stepNode(g, e.plan, free);
+    if (g.kind === 'box') this.stepBox(g, e.plan);
+    else if (g.kind === 'group') this.stepGroup(g, e.plan, free);
+    else if (g.kind === 'node') this.stepNode(g, e.plan, free);
     else if (g.kind === 'column') this.stepColumn(g, e.plan, free);
     else if (g.kind === 'stair') this.stepStair(g, e.plan, free);
     else if (g.kind === 'roofVertex') this.stepRoofVertex(g, e.plan, free);
@@ -741,6 +809,15 @@ export class SelectEditTool implements Tool {
   private finishGesture(): void {
     const ctx = this.ctx!;
     const g = this.gesture!;
+    if (g.kind === 'box' && g.shift) {
+      const end = g.shift;
+      this.endGesture(true);
+      ctx.plan.selectInRect(g.start, end, {
+        mode: end.x >= g.start.x ? 'inside' : 'touching',
+        add: true,
+      });
+      return;
+    }
     if (g.kind === 'node' && g.drop) {
       const target =
         'node' in g.drop ? { node: g.drop.node } : { wall: g.drop.wall, at: g.drop.at };

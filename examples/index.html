@@ -166,6 +166,15 @@
         margin: 6px 0 0;
         color: #b3261e;
       }
+      #groupbar {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        font-size: 13px;
+      }
+      #groupbar input {
+        width: 3.5em;
+      }
       #toolbar button.active {
         background: #d8e8ff;
       }
@@ -184,6 +193,17 @@
     <div id="toolbar">
       <button id="btn-select">Chọn</button>
       <button id="btn-delete" title="Xoá đối tượng đang chọn (Delete)">Xoá</button>
+      <span
+        id="groupbar"
+        title="Shift / Ctrl + nhấp để chọn thêm; Shift + kéo ở chỗ trống để chọn bằng khung"
+      >
+        <button id="btn-rotate" title="Xoay vùng chọn 90° quanh tâm">Xoay 90°</button>
+        <button id="btn-mirror-x" title="Lật trái - phải">Lật ngang</button>
+        <button id="btn-mirror-y" title="Lật trên - dưới">Lật dọc</button>
+        <label>Dời <input id="in-move-x" type="number" step="0.1" value="1" /></label>
+        <label><input id="in-move-y" type="number" step="0.1" value="0" /></label>
+        <button id="btn-move" title="Dời vùng chọn theo x, y (m)">Dời</button>
+      </span>
       <button id="btn-wall">Vẽ tường</button>
       <button id="btn-site">Vẽ khu đất</button>
       <button id="btn-column-round">Cột tròn</button>

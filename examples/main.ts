@@ -13,6 +13,7 @@ import {
   updateStair,
   type RoofPresetId,
   type Stair,
+  type Transform,
 } from 'h3x/core';
 import {
   ColumnTool,
@@ -100,6 +101,10 @@ function mount(next: H3xDocument): void {
     }),
     // Selection follows between plan and viewer; the ids are compared first, so neither side
     // echoes the other's change back.
+    plan.on('selectionchange', () => {
+      const n = plan.selectionSet.length;
+      if (n > 1) say(`Đã chọn ${n} đối tượng`);
+    }),
     plan.on('selectionchange', (sel) => {
       const want = sel?.kind === 'opening' ? { kind: 'opening' as const, id: sel.id } : null;
       if (viewer.selection?.id !== want?.id) viewer.select(want);
@@ -183,7 +188,7 @@ function selectedStair(): Stair | undefined {
 
 /** Shows the stair controls only while a stair is selected and syncs them with it. */
 function refreshStairControls(): void {
-  const s = selectedStair();
+  const s = plan.selectionSet.length === 1 ? selectedStair() : undefined;
   stairBar.style.display = s ? 'flex' : 'none';
   if (!s) return;
   stairTypeSelect.value = s.type;
@@ -254,6 +259,28 @@ on('btn-wall', () => {
 on('btn-site', () => {
   useTool(new DrawSiteTool());
   say('Vẽ khu đất: nhấp từng đỉnh, nhấp đỉnh đầu hoặc Enter để đóng');
+});
+/** Turns, mirrors or moves the whole selection; reports what happened in the status line. */
+function transformSelection(t: (c: { x: number; y: number }) => Transform, done: string): void {
+  const c = plan.selectionCenter();
+  if (!c) return say('Chọn đối tượng trước (Shift / Ctrl + nhấp để chọn thêm)', true);
+  if (plan.transformSelection(t(c))) say(done);
+  else say('Không thực hiện được: kết quả không hợp lệ', true);
+}
+on('btn-rotate', () =>
+  transformSelection((center) => ({ kind: 'rotate', center, angle: Math.PI / 2 }), 'Đã xoay 90°'),
+);
+on('btn-mirror-x', () =>
+  transformSelection((c) => ({ kind: 'mirror', a: c, b: { x: c.x, y: c.y + 1 } }), 'Đã lật ngang'),
+);
+on('btn-mirror-y', () =>
+  transformSelection((c) => ({ kind: 'mirror', a: c, b: { x: c.x + 1, y: c.y } }), 'Đã lật dọc'),
+);
+on('btn-move', () => {
+  const x = (document.getElementById('in-move-x') as HTMLInputElement).valueAsNumber;
+  const y = (document.getElementById('in-move-y') as HTMLInputElement).valueAsNumber;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return say('Nhập khoảng dời x, y (m)', true);
+  transformSelection(() => ({ kind: 'translate', delta: { x, y } }), `Đã dời ${x}, ${y} m`);
 });
 on('btn-delete', () => {
   if (!plan.deleteSelection())

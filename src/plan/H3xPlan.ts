@@ -1,13 +1,16 @@
 import type {
   ChangeEvent,
   EntityChange,
+  Floor,
   H3xDocument,
   Hinge,
   Id,
   Issue,
+  ObjectSet,
   PresetResolver,
   RoofEdge,
   RoofGeometry,
+  Transform,
   Vec2,
 } from '../core';
 import { Emitter } from '../core/document/emitter';
@@ -16,6 +19,7 @@ import {
   removeColumn,
   removeItem,
   removeNode,
+  removeObjects,
   removeOpening,
   removeRoof,
   removeStair,
@@ -24,7 +28,9 @@ import {
   setSite,
   setWallLength,
   stairRise,
+  transformObjects,
 } from '../core';
+import { planRect, selectInRect } from './boxSelect';
 import { pickAnchor } from './anchor';
 import { computeJoins, type Joins } from '../shared/walls/joins';
 import { PlanInput } from './input';
@@ -192,6 +198,8 @@ export class H3xPlan {
   private _tool: Tool | null = null;
   private readonly toolContext: ToolContext;
   private _selection: Selection | null = null;
+  /** The other members of a multiple selection (the primary one is `_selection`). */
+  private _extra: Selection[] = [];
   private standing: Issue[] = [];
   private rejected: Issue[] = [];
   private rejectedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -426,17 +434,134 @@ export class H3xPlan {
     return this._selection;
   }
 
+  /**
+   * Every selected entity, the primary one (`selection`) first; empty when nothing is selected.
+   * Shift / Ctrl + click and Shift + drag on empty space build a multiple selection.
+   */
+  get selectionSet(): Selection[] {
+    return this._selection ? [this._selection, ...this._extra] : [];
+  }
+
   /** Selects an entity; an unknown id selects nothing. Fires only when the selection changes. */
   select(sel: Selection | null): void {
-    const next =
-      sel && this.dom.elements[sel.kind].has(sel.id) ? { kind: sel.kind, id: sel.id } : null;
-    const prev = this._selection;
-    if (prev?.kind === next?.kind && prev?.id === next?.id) return;
-    this._selection = next;
-    this.dimensionState.selection = next;
+    this.selectMany(sel ? [sel] : []);
+  }
+
+  /**
+   * Selects these entities (the first is the primary one, `selection`); unknown ids and
+   * duplicates are dropped. Fires `selectionchange` (with the primary one) only when the set
+   * changes.
+   */
+  selectMany(list: readonly Selection[]): void {
+    const seen = new Set<string>();
+    const next: Selection[] = [];
+    for (const s of list) {
+      const key = `${s.kind}:${s.id}`;
+      if (seen.has(key) || !this.dom.elements[s.kind].has(s.id)) continue;
+      seen.add(key);
+      next.push({ kind: s.kind, id: s.id });
+    }
+    const prev = this.selectionSet;
+    const same =
+      prev.length === next.length &&
+      prev.every((p, i) => p.kind === next[i]!.kind && p.id === next[i]!.id);
+    if (same) return;
+    this._selection = next[0] ?? null;
+    this._extra = next.slice(1);
+    this.dimensionState.selection = next.length === 1 ? this._selection : null;
     this.refreshDimensions();
     this.refreshMarks();
-    this.selectionEmitter.emit(next);
+    this.selectionEmitter.emit(this._selection);
+  }
+
+  /** Adds an entity to the selection, or removes it when it is already in it. */
+  toggleSelection(sel: Selection): void {
+    const set = this.selectionSet;
+    const i = set.findIndex((s) => s.kind === sel.kind && s.id === sel.id);
+    if (i >= 0) set.splice(i, 1);
+    else set.push(sel);
+    this.selectMany(set);
+  }
+
+  /**
+   * Selects what the plan rectangle between corners `a` and `b` takes: 'inside' (default) the
+   * walls, openings, columns, stairs, items and visible roofs wholly inside it, 'touching' those
+   * with any part in it. `add` keeps the current selection. Returns how many entities it took.
+   */
+  selectInRect(
+    a: Vec2,
+    b: Vec2,
+    opts: { mode?: 'inside' | 'touching'; add?: boolean } = {},
+  ): number {
+    const found = selectInRect(
+      {
+        floor: this.doc.floor as Floor,
+        corners: this.joins.corners,
+        presets: this.presets,
+        stairRise: this.stairRise(),
+        roofsVisible: this._roofsVisible,
+      },
+      planRect(a, b),
+      opts.mode ?? 'inside',
+    );
+    this.selectMany(opts.add ? [...this.selectionSet, ...found] : found);
+    return found.length;
+  }
+
+  /** @internal The selection as an `ObjectSet` for group commands (the site is left out). */
+  selectionObjects(): ObjectSet {
+    const set: Record<string, Id[]> = {};
+    const key: Partial<Record<PlanKind, keyof ObjectSet>> = {
+      node: 'nodes',
+      wall: 'walls',
+      room: 'rooms',
+      opening: 'openings',
+      item: 'items',
+      column: 'columns',
+      stair: 'stairs',
+      roof: 'roofs',
+    };
+    for (const s of this.selectionSet) {
+      const k = key[s.kind];
+      if (k) (set[k] ??= []).push(s.id);
+    }
+    return set as ObjectSet;
+  }
+
+  /**
+   * Moves, turns or mirrors the whole selection (`transformObjects`, one undo step). Returns false
+   * when nothing is selected or the edit is rejected (reported as for any edit).
+   */
+  transformSelection(t: Transform): boolean {
+    if (this.selectionSet.length === 0) return false;
+    const res = this.doc.tryExecute(transformObjects(this.selectionObjects(), t));
+    this.reportRejected(res.ok ? [] : res.issues);
+    return res.ok;
+  }
+
+  /** The centre of the selection's bounding box in plan metres (null when nothing is selected). */
+  selectionCenter(): Vec2 | null {
+    const f = this.doc.floor;
+    const pts: Vec2[] = [];
+    for (const s of this.selectionSet) {
+      if (s.kind === 'node' && f.nodes[s.id]) pts.push(f.nodes[s.id]!);
+      else if (s.kind === 'wall') {
+        const w = f.walls[s.id];
+        for (const n of w ? [f.nodes[w.a], f.nodes[w.b]] : []) if (n) pts.push(n);
+      } else if (s.kind === 'column' && f.columns[s.id]) pts.push(f.columns[s.id]!);
+      else if (s.kind === 'stair' && f.stairs[s.id]) pts.push(f.stairs[s.id]!);
+      else if (s.kind === 'item') {
+        const it = f.items[s.id];
+        if (it && it.mount !== 'wall') pts.push(it);
+      } else if (s.kind === 'roof') pts.push(...(f.roofs[s.id]?.points ?? []));
+    }
+    if (pts.length === 0) return null;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    };
   }
 
   /**
@@ -449,23 +574,25 @@ export class H3xPlan {
     const sel = this._selection;
     if (!sel) return false;
     const cmd =
-      sel.kind === 'node'
-        ? removeNode(sel.id)
-        : sel.kind === 'wall'
-          ? removeWall(sel.id)
-          : sel.kind === 'column'
-            ? removeColumn(sel.id)
-            : sel.kind === 'stair'
-              ? removeStair(sel.id)
-              : sel.kind === 'roof'
-                ? removeRoof(sel.id)
-                : sel.kind === 'opening'
-                  ? removeOpening(sel.id)
-                  : sel.kind === 'item'
-                    ? removeItem(sel.id)
-                    : sel.kind === 'site'
-                      ? setSite(null)
-                      : null;
+      this._extra.length > 0
+        ? removeObjects(this.selectionObjects())
+        : sel.kind === 'node'
+          ? removeNode(sel.id)
+          : sel.kind === 'wall'
+            ? removeWall(sel.id)
+            : sel.kind === 'column'
+              ? removeColumn(sel.id)
+              : sel.kind === 'stair'
+                ? removeStair(sel.id)
+                : sel.kind === 'roof'
+                  ? removeRoof(sel.id)
+                  : sel.kind === 'opening'
+                    ? removeOpening(sel.id)
+                    : sel.kind === 'item'
+                      ? removeItem(sel.id)
+                      : sel.kind === 'site'
+                        ? setSite(null)
+                        : null;
     if (!cmd) return false;
     const res = this.doc.tryExecute(cmd);
     if (!res.ok) {
@@ -793,14 +920,15 @@ export class H3xPlan {
     const invalid = new Set(blocking.flatMap((i) => i.ids));
     const warned = new Set(this.standing.filter(isWarningIssue).flatMap((i) => i.ids));
     const rejected = new Set(this.rejected.flatMap((i) => i.ids));
-    const sel = this._selection;
-    if (sel && !this.dom.elements[sel.kind].has(sel.id)) {
-      this.select(null); // the selected entity was removed
+    const set = this.selectionSet;
+    if (set.some((s) => !this.dom.elements[s.kind].has(s.id))) {
+      this.selectMany(set); // a selected entity was removed: drop it
       return;
     }
+    const chosen = new Set(set.map((s) => `${s.kind}:${s.id}`));
     for (const kind of KINDS) {
       for (const [id, g] of this.dom.elements[kind]) {
-        g.classList.toggle(`${this.prefix}-selected`, sel?.kind === kind && sel.id === id);
+        g.classList.toggle(`${this.prefix}-selected`, chosen.has(`${kind}:${id}`));
         g.classList.toggle(`${this.prefix}-invalid`, invalid.has(id));
         g.classList.toggle(`${this.prefix}-warning`, warned.has(id) && !invalid.has(id));
         g.classList.toggle(`${this.prefix}-rejected`, rejected.has(id));
