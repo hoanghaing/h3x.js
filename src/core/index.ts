@@ -87,6 +87,14 @@ export { validateLayout } from './validate/layout';
 export { validateStairs, stairRise } from './validate/stairs';
 export { validateRoofs } from './validate/roofs';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';
+export { resolvePlacement } from './placement';
+export type {
+  OpeningSubject,
+  Placement,
+  PlacementGuide,
+  PlacementRequest,
+  PlacementSubject,
+} from './placement';
 export { detectRooms, roomPolygon, roomShape, roomArea } from './rooms/detect';
 export type { DetectedRoom } from './rooms/detect';
 export { polygonOverlapArea } from './geometry/clip';

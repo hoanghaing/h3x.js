@@ -45,6 +45,7 @@ const FUNCTIONS = [
   'validatePlacements',
   'checkItem',
   'checkOpening',
+  'resolvePlacement',
   'detectRooms',
   'roomPolygon',
   'roomArea',
