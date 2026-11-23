@@ -23,6 +23,7 @@ import {
   RoofTool,
   SelectEditTool,
   StairTool,
+  type Tool,
 } from 'h3x/plan';
 import { H3xScene, H3xViewer, type H3xViewMode } from 'h3x/three';
 import layoutXml from './layouts/nha-ong-4x16.h3x?raw';
@@ -40,6 +41,8 @@ let doc: H3xDocument;
 let scene: H3xScene;
 let viewer: H3xViewer;
 let plan: H3xPlan;
+/** The OpeningTool in use, so the preset select can change it without re-creating it. */
+let openingTool: OpeningTool | null = null;
 let teardown: Array<() => void> = [];
 
 /** Attaches a plan and a 3D viewer to `next`, disposing whatever was attached before. */
@@ -47,7 +50,8 @@ function mount(next: H3xDocument): void {
   for (const fn of teardown) fn();
   doc = next;
   scene = new H3xScene(doc);
-  viewer = new H3xViewer(appHost, scene);
+  viewer = new H3xViewer(appHost, scene, { editing: true });
+  openingTool = null;
   scene.setViewMode(viewSelect.value as H3xViewMode);
   viewer.setRoofsVisible(roofsCheck.checked);
   viewer.fitToContent();
@@ -92,12 +96,36 @@ function mount(next: H3xDocument): void {
         say(parts.join(', '), problems > 0);
       }
     }),
+    // Selection follows between plan and viewer; the ids are compared first, so neither side
+    // echoes the other's change back.
+    plan.on('selectionchange', (sel) => {
+      const want = sel?.kind === 'opening' ? { kind: 'opening' as const, id: sel.id } : null;
+      if (viewer.selection?.id !== want?.id) viewer.select(want);
+    }),
+    viewer.on('selectionchange', (sel) => {
+      if (sel?.id === (plan.selection?.kind === 'opening' ? plan.selection.id : undefined)) return;
+      if (!sel && plan.selection?.kind !== 'opening') return;
+      plan.select(sel ? { kind: 'opening', id: sel.id } : null);
+    }),
+    // Rejected pointer edits in 3D show their reasons in the same status line as the plan's.
+    viewer.on('issues', (issues) => {
+      if (issues.length === 0) return say('');
+      const reasons = [...new Set(issues.map((i) => i.message))];
+      say(`Không hợp lệ: ${reasons.join('; ')}`, true);
+    }),
     () => plan.dispose(),
     () => viewer.dispose(),
     () => scene.dispose(),
   ];
   refreshFloorControls();
   refreshStairControls();
+}
+
+/** Sets the plan's tool; 3D placement is on only while the door and window tool is. */
+function useTool(tool: Tool | null): void {
+  plan.setTool(tool);
+  openingTool = tool instanceof OpeningTool ? tool : null;
+  viewer.setPlacement(openingTool ? { preset: openingPresetSelect.value } : null);
 }
 
 const status = document.getElementById('status')!;
@@ -212,17 +240,17 @@ groundInput.addEventListener('change', () =>
 viewSelect.addEventListener('change', () => scene.setViewMode(viewSelect.value as H3xViewMode));
 
 on('btn-select', () => {
-  plan.setTool(new SelectEditTool());
+  useTool(new SelectEditTool());
   say(
     'Chọn: kéo nút / tường / cửa, nhấp đúp tường để thêm điểm, Shift + kéo tường để đẩy / kéo, nhấp số khoảng cách cửa để sửa',
   );
 });
 on('btn-wall', () => {
-  plan.setTool(new DrawWallTool());
+  useTool(new DrawWallTool());
   say('Vẽ tường: nhấp từng điểm, Enter / nhấp đúp để kết thúc, gõ độ dài rồi Enter');
 });
 on('btn-site', () => {
-  plan.setTool(new DrawSiteTool());
+  useTool(new DrawSiteTool());
   say('Vẽ khu đất: nhấp từng đỉnh, nhấp đỉnh đầu hoặc Enter để đóng');
 });
 on('btn-delete', () => {
@@ -251,7 +279,7 @@ const roofMode = (): 'follow' | 'draw' => (roofModeSelect.value === 'draw' ? 'dr
 on('btn-roof', () => {
   const mode = roofMode();
   roofTool = new RoofTool({ preset: roofPresetSelect.value as RoofPresetId, mode });
-  plan.setTool(roofTool);
+  useTool(roofTool);
   say(
     mode === 'follow'
       ? 'Vẽ mái: nhấp vào một phòng của tầng này (mái theo tường)'
@@ -276,22 +304,19 @@ roofsCheck.addEventListener('change', () => {
   plan.setRoofsVisible(roofsCheck.checked);
 });
 on('btn-column-round', () => {
-  plan.setTool(new ColumnTool({ shape: 'round' }));
+  useTool(new ColumnTool({ shape: 'round' }));
   say('Cột tròn: nhấp để đặt');
 });
 on('btn-column-square', () => {
-  plan.setTool(new ColumnTool({ shape: 'square' }));
+  useTool(new ColumnTool({ shape: 'square' }));
   say('Cột vuông: nhấp để đặt');
 });
 on('btn-stair', () => {
-  plan.setTool(new StairTool({ type: 'U', turn: 'landing', hand: 'right', flightWidth: 0.9 }));
+  useTool(new StairTool({ type: 'U', turn: 'landing', hand: 'right', flightWidth: 0.9 }));
   say('Cầu thang: kéo một ô chữ nhật (bám góc mặt tường), chọn rồi chỉnh kiểu ở góc phải dưới');
 });
-/** The OpeningTool in use, so the preset select can change it without re-creating it. */
-let openingTool: OpeningTool | null = null;
 on('btn-opening', () => {
-  openingTool = new OpeningTool({ preset: openingPresetSelect.value });
-  plan.setTool(openingTool);
+  useTool(new OpeningTool({ preset: openingPresetSelect.value }));
   say('Cửa: nhấp lên tường để đặt; Space đổi chiều mở, giữ Alt để bỏ bám');
 });
 // A new preset replaces the selected door or window's preset at once (same wall and centre) and
@@ -299,6 +324,7 @@ on('btn-opening', () => {
 openingPresetSelect.addEventListener('change', () => {
   const preset = openingPresetSelect.value;
   openingTool?.setOptions({ preset });
+  if (openingTool) viewer.setPlacement({ preset });
   const sel = plan.selection;
   if (sel?.kind === 'opening') {
     const r = doc.tryExecute(applyOpeningPreset(sel.id, preset));
