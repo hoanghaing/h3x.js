@@ -530,8 +530,17 @@ both views.
   `'room'`, `'opening'`, `'item'`, `'column'` or `'site'`); `plan.select(sel)` sets it (an
   unknown id selects nothing). Clicking selects nodes, walls, columns and the site outline.
   `plan.getElement(kind, id)` returns the entity's `<g>`.
+- **Multiple selection.** `plan.selectionSet` lists every selected entity, the primary one
+  (`plan.selection`) first. `plan.selectMany(list)`, `plan.toggleSelection(sel)` and
+  `plan.selectInRect(a, b, { mode?, add? })` (plan corners; `'inside'` takes the walls, openings,
+  columns, stairs, items and visible roofs wholly inside, `'touching'` those with any part in it)
+  change it. `plan.transformSelection(transform)` runs `transformObjects` on it (one undo step;
+  a rejection is flashed), `plan.selectionCenter()` gives the centre of its bounding box (for
+  turning or mirroring in place), and `plan.deleteSelection()` removes all of it
+  (`removeObjects`). `selectionchange` fires whenever the set changes, with the primary one.
 - **Events.** `plan.on(type, fn)` returns an unsubscribe function.
-  - `selectionchange` receives the new `Selection | null`, only when it changes.
+  - `selectionchange` receives the new primary `Selection | null`, only when the selection
+    (or the multiple selection) changes.
   - `lengthEditRequest` receives `{ wallId, length, anchor, anchorRect }` when the user
     double-clicks a wall's dimension label. `length` is in meters, `anchor` is the end the
     plan suggests keeping fixed, and `anchorRect` is the label's rect in px, so you can place
@@ -563,6 +572,11 @@ both views.
   and optionally `onPointerDown / Move / Up`, `onDoubleClick` and `onKeyDown`, which receive
   plan and screen coordinates and the hit target. `SelectEditTool` supports:
   - click a node, wall, column or the site outline to select it, click empty space to clear;
+  - **Shift** / **Ctrl** + click adds an entity to the selection or removes it; **Shift** + drag
+    on empty space draws a selection box (left to right: what is wholly inside, right to left:
+    what it touches) added to the selection. A plain drag on empty space still pans;
+  - drag any member of a multiple selection to move all of it (snapped to the grid, **Alt** for
+    none; one undo step); arrow keys nudge all of it, **Delete** removes all of it;
   - drag a node, or a wall (it moves along its normal). A drag snaps to a 5 cm grid and to
     alignment with other nodes (guide lines are drawn); hold **Alt** to disable snapping. The
     whole drag is one undo step;

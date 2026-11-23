@@ -34,7 +34,8 @@ export function attachOpeningPanel(doc: H3xDocument, plan: H3xPlan, say: Say): (
   const { signal } = listeners;
 
   const selected = (): Opening | undefined => {
-    const sel = plan.selection;
+    // A multiple selection has no single opening to edit.
+    const sel = plan.selectionSet.length === 1 ? plan.selection : null;
     return sel?.kind === 'opening' ? doc.floor.openings[sel.id] : undefined;
   };
 
