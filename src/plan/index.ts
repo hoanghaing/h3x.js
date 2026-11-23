@@ -39,3 +39,4 @@ export { DrawSiteTool } from './tools/DrawSiteTool';
 export { ColumnTool, type ColumnToolOptions } from './tools/ColumnTool';
 export { RoofTool, type RoofToolOptions } from './tools/RoofTool';
 export { StairTool, type StairToolOptions } from './tools/StairTool';
+export { OpeningTool, type OpeningToolOptions } from './tools/OpeningTool';

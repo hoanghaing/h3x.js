@@ -1,6 +1,7 @@
-import type { Floor, Vec2 } from '../core';
+import type { Floor, OpeningGeometry, PlacementGuide, Vec2 } from '../core';
 import { dimensionLabel, wallsShowingDimensions, type DimensionState } from './dimensions';
 import type { PlanDom } from './kinds';
+import { createOpeningSymbol, drawOpeningSymbol } from './openings';
 import {
   NON_SCALING,
   createDimensionElement,
@@ -73,6 +74,46 @@ export function renderPreview(
     text.textContent = preview.label.text;
     layer.appendChild(text);
   }
+}
+
+/** The ghost of an opening being placed: its symbol, or a bar at the pointer when it has no wall. */
+export interface GhostState {
+  shape: OpeningGeometry | { at: Vec2; width: number };
+  invalid: boolean;
+  guides: readonly PlacementGuide[];
+}
+
+/** Replaces the overlay layer's opening ghost and its snap ticks; `null` clears. */
+export function renderGhost(layer: SVGGElement, prefix: string, ghost: GhostState | null): void {
+  for (const el of Array.from(layer.querySelectorAll(`.${prefix}-ghost`))) el.remove();
+  if (!ghost) return;
+  const { shape } = ghost;
+  const free = 'at' in shape;
+  const g = svgEl('g', { class: `${prefix}-ghost` });
+  g.classList.toggle(`${prefix}-ghost-free`, free);
+  g.classList.toggle(`${prefix}-invalid`, ghost.invalid);
+  createOpeningSymbol(g, prefix);
+  drawOpeningSymbol(g, free ? null : shape);
+  if (free) {
+    const { at, width } = shape;
+    g.lastElementChild!.setAttribute(
+      'd',
+      `M${at.x - width / 2},${at.y}L${at.x + width / 2},${at.y}`,
+    );
+  }
+  for (const { from, to } of ghost.guides) {
+    g.appendChild(
+      svgEl('line', {
+        class: `${prefix}-guide`,
+        x1: String(from.x),
+        y1: String(from.y),
+        x2: String(to.x),
+        y2: String(to.y),
+        ...NON_SCALING,
+      }),
+    );
+  }
+  layer.appendChild(g);
 }
 
 /** Radius (px) of the drop-target marker. */

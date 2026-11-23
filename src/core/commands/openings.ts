@@ -3,7 +3,7 @@ import { deepEqual } from '../document/history';
 import { EPS, tidy } from '../geometry/vec';
 import { createId } from '../ids';
 import { openingClearances } from '../openings/clearance';
-import { defaultOpeningType } from '../openings/normalize';
+import { presetOpening } from '../openings/presets';
 import { openingSpan } from '../shapes';
 import type { Hinge, Id, Opening } from '../types';
 import { assertFreeId, fail, notFound, presetFor, type Created } from './shared';
@@ -62,21 +62,7 @@ function fromPreset(
   if (info.mount !== 'opening') {
     throw fail('unknown-preset', [id], `Preset ${preset} is not an opening preset`);
   }
-  const sill = over.sill ?? info.sill ?? 0;
-  const made: Opening = {
-    id,
-    wall: base.wall,
-    preset,
-    offset: base.offset,
-    width: info.footprint.w,
-    height: info.footprint.h,
-    sill,
-    type: info.opening?.type ?? defaultOpeningType(sill),
-    hinge: info.opening?.hinge ?? base.hinge,
-    swing: info.opening?.swing ?? base.swing,
-  };
-  if (info.opening?.leaves !== undefined) made.leaves = info.opening.leaves;
-  if (info.opening?.split !== undefined) made.split = info.opening.split;
+  const made = presetOpening(info, base, over.sill ?? info.sill ?? 0);
   return patched(made, over);
 }
 

@@ -28,6 +28,13 @@ ${p} .${prefix}-opening.${prefix}-selected .${prefix}-opening-gap { fill: #dbeaf
 ${p} .${prefix}-opening.${prefix}-invalid path, ${p} .${prefix}-opening.${prefix}-rejected path { stroke: #dc2626; }
 ${p} .${prefix}-opening.${prefix}-rejected path { stroke-width: 3; }
 ${p} .${prefix}-opening.${prefix}-invalid .${prefix}-opening-gap, ${p} .${prefix}-opening.${prefix}-rejected .${prefix}-opening-gap { fill: #fee2e2; }
+${p} .${prefix}-ghost { opacity: 0.8; pointer-events: none; }
+${p} .${prefix}-ghost .${prefix}-opening-gap { fill: #dbeafe; stroke: none; }
+${p} .${prefix}-ghost path { fill: none; stroke: #2563eb; stroke-width: 1.5; }
+${p} .${prefix}-ghost .${prefix}-opening-arc { stroke-width: 1; stroke-dasharray: 4 3; }
+${p} .${prefix}-ghost.${prefix}-invalid path { stroke: #dc2626; }
+${p} .${prefix}-ghost.${prefix}-invalid .${prefix}-opening-gap { fill: #fee2e2; }
+${p} .${prefix}-ghost-free .${prefix}-opening-lines { stroke-width: 4; }
 ${p} .${prefix}-column circle, ${p} .${prefix}-column polygon { fill: #a8a29e; stroke: #292524; stroke-width: 1; }
 ${p} .${prefix}-stair polygon, ${p} .${prefix}-stair path { fill: none; stroke: #44403c; stroke-width: 1; }
 ${p} .${prefix}-stair .${prefix}-stair-outline { stroke: #57534e; }

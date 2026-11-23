@@ -1,4 +1,5 @@
-import type { OpeningType, PresetInfo, PresetResolver } from '../types';
+import type { Opening, OpeningType, PresetInfo, PresetResolver } from '../types';
+import { defaultOpeningType } from './normalize';
 
 function make(
   type: OpeningType,
@@ -32,4 +33,30 @@ export function createPresetResolver(host?: PresetResolver): PresetResolver {
     if (info) return info;
     return Object.hasOwn(OPENING_PRESETS, id) ? structuredClone(OPENING_PRESETS[id]) : undefined;
   };
+}
+
+/**
+ * The opening `info` (an opening preset) makes at `base`: its size, sill, type, leaves and split.
+ * Orientation the preset does not give stays as in `base`.
+ */
+export function presetOpening(
+  info: PresetInfo,
+  base: Pick<Opening, 'id' | 'wall' | 'preset' | 'offset' | 'hinge' | 'swing'>,
+  sill = info.sill ?? 0,
+): Opening {
+  const made: Opening = {
+    id: base.id,
+    wall: base.wall,
+    preset: base.preset,
+    offset: base.offset,
+    width: info.footprint.w,
+    height: info.footprint.h,
+    sill,
+    type: info.opening?.type ?? defaultOpeningType(sill),
+    hinge: info.opening?.hinge ?? base.hinge,
+    swing: info.opening?.swing ?? base.swing,
+  };
+  if (info.opening?.leaves !== undefined) made.leaves = info.opening.leaves;
+  if (info.opening?.split !== undefined) made.split = info.opening.split;
+  return made;
 }

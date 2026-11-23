@@ -41,6 +41,7 @@ import {
 import type { DimensionState } from './dimensions';
 import {
   renderDropTarget,
+  renderGhost,
   renderGuides,
   renderPreview,
   renderRoofHandles,
@@ -272,6 +273,10 @@ export class H3xPlan {
         });
       },
       showGuides: (g) => this.showGuides(g),
+      showGhost: (g, invalid = false, guides = []) => {
+        if (this.disposed) return;
+        renderGhost(this.dom.layers.overlay, this.prefix, g && { shape: g, invalid, guides });
+      },
       setDragging: (id) => {
         this.dimensionState.draggingNode = id;
         this.refreshDimensions();

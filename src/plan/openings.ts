@@ -1,5 +1,5 @@
 import { pieceOutline, type OpeningGeometry } from '../core';
-import { pointsAttr } from './render';
+import { NON_SCALING, pointsAttr, setAttr, svgEl } from './svg';
 
 /**
  * The default symbol of an opening, in plan space: the gap polygon's points, a path of solid
@@ -22,4 +22,22 @@ export function paintOpening(g: OpeningGeometry): { gap: string; lines: string; 
     arcs += `M${from.x},${from.y}A${r},${r} 0 0 ${ccw ? 1 : 0} ${to.x},${to.y}`;
   }
   return { gap: pointsAttr(g.cut), lines, arcs };
+}
+
+/** Appends the (empty) gap, arc and line elements of an opening symbol to `g`. */
+export function createOpeningSymbol(g: SVGGElement, prefix: string): void {
+  g.append(
+    svgEl('polygon', { class: `${prefix}-opening-gap`, ...NON_SCALING }),
+    svgEl('path', { class: `${prefix}-opening-arc`, ...NON_SCALING }),
+    svgEl('path', { class: `${prefix}-opening-lines`, ...NON_SCALING }),
+  );
+}
+
+/** Fills the elements `createOpeningSymbol` made with the symbol of `geometry`; null empties them. */
+export function drawOpeningSymbol(g: SVGGElement, geometry: OpeningGeometry | null): void {
+  const symbol = geometry && paintOpening(geometry);
+  const [gap, arcs, lines] = Array.from(g.children);
+  setAttr(gap!, 'points', symbol?.gap ?? '');
+  setAttr(arcs!, 'd', symbol?.arcs ?? '');
+  setAttr(lines!, 'd', symbol?.lines ?? '');
 }
