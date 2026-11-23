@@ -17,7 +17,7 @@ import { fail, notFound } from './shared';
  * first shift by the change of length. Loops the move encloses become new rooms; existing rooms
  * are left alone.
  */
-function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
+export function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
   const { floor } = ctx;
   const changes: EntityChange[] = [];
   const pos = (id: Id): Vec2 | undefined => moves.get(id) ?? floor.nodes[id];

@@ -15,6 +15,8 @@ export type {
 } from './document/H3xDocument';
 
 export { moveNode, moveWall, setWallLength } from './commands/layout';
+export { removeObjects, sequence, transformObjects } from './commands/transform';
+export type { ObjectSet, Transform } from './commands/transform';
 export {
   addWall,
   splitWall,
