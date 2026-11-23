@@ -67,6 +67,11 @@ export class H3xScene {
     });
   }
 
+  /** The document this scene follows. */
+  get document(): H3xDocument {
+    return this.doc;
+  }
+
   get viewMode(): H3xViewMode {
     return this.mode;
   }
