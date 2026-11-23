@@ -179,6 +179,53 @@ describe('updateOpening', () => {
     }
   });
 
+  describe('a type change and the stored leaf count', () => {
+    const withLeaves = (type: Opening['type'], leaves: number): H3xDocument => {
+      const f = oneRoomFloor();
+      Object.assign(f.openings.o1!, { type, leaves });
+      return mk(f);
+    };
+
+    it.each<[Opening['type'], number, Opening['type']]>([
+      ['door-folding', 6, 'door-sliding'],
+      ['door-sliding', 1, 'window-sliding'],
+      ['window-fixed', 5, 'window-casement'],
+      ['window-fixed', 6, 'window-sliding'],
+    ])('drops %s leaves %i that %s cannot take, in one undo step', (from, leaves, to) => {
+      const doc = withLeaves(from, leaves);
+      const before = structuredClone(doc.floor.openings.o1!);
+      expect(doc.tryExecute(updateOpening('o1', { type: to }))).toEqual({ ok: true });
+      const expected: Partial<Opening> = { ...before, type: to };
+      delete expected.leaves;
+      expect(doc.floor.openings.o1).toEqual(expected);
+      doc.undo();
+      expect(doc.floor.openings.o1).toEqual(before);
+      expect(doc.canUndo).toBe(false);
+    });
+
+    it('keeps leaves the new type can take', () => {
+      const doc = withLeaves('window-fixed', 3);
+      doc.execute(updateOpening('o1', { type: 'window-casement' }));
+      expect(doc.floor.openings.o1).toMatchObject({ type: 'window-casement', leaves: 3 });
+    });
+
+    it('keeps leaves set in the same patch, and rejects them when they do not fit', () => {
+      const doc = withLeaves('door-folding', 6);
+      const res = doc.tryExecute(updateOpening('o1', { type: 'door-sliding', leaves: 6 }));
+      expect(res).toMatchObject({ ok: false, issues: [{ code: 'invalid-opening' }] });
+      doc.execute(updateOpening('o1', { type: 'door-sliding', leaves: 3 }));
+      expect(doc.floor.openings.o1).toMatchObject({ type: 'door-sliding', leaves: 3 });
+    });
+
+    it('keeps the split, which every type can hold', () => {
+      const f = oneRoomFloor();
+      Object.assign(f.openings.o1!, { type: 'door-double', split: 0.6 });
+      const doc = mk(f);
+      doc.execute(updateOpening('o1', { type: 'door-swing' }));
+      expect(doc.floor.openings.o1).toMatchObject({ type: 'door-swing', split: 0.6 });
+    });
+  });
+
   it('repairs a loaded opening with height 0', () => {
     const f = oneRoomFloor();
     f.openings.o1!.height = 0;

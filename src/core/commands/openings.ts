@@ -3,6 +3,7 @@ import { deepEqual } from '../document/history';
 import { EPS, tidy } from '../geometry/vec';
 import { createId } from '../ids';
 import { openingClearances } from '../openings/clearance';
+import { leavesFit } from '../openings/params';
 import { presetOpening } from '../openings/presets';
 import { openingSpan } from '../shapes';
 import type { Hinge, Id, Opening } from '../types';
@@ -24,11 +25,19 @@ const OPENING_KEYS = [
   'split',
 ] as const satisfies readonly (keyof OpeningPatch)[];
 
-/** `o` with the defined fields of `patch`. */
+/**
+ * `o` with the defined fields of `patch`. A new type drops a kept leaf count it cannot take, so
+ * the opening has the type's default; a count set in the same patch stays and is validated.
+ */
 function patched(o: Opening, patch: OpeningPatch): Opening {
   const after: Record<string, unknown> = { ...o };
   for (const k of OPENING_KEYS) if (patch[k] !== undefined) after[k] = patch[k];
-  return after as unknown as Opening;
+  const result = after as unknown as Opening;
+  const retyped = patch.type !== undefined && patch.type !== o.type;
+  if (retyped && patch.leaves === undefined && result.leaves !== undefined) {
+    if (!leavesFit(result.type, result.leaves)) delete result.leaves;
+  }
+  return result;
 }
 
 function getOpening(ctx: CommandContext, id: Id): Opening {
@@ -88,7 +97,8 @@ export function addOpening(
 
 /**
  * Sets any field but the id, also the wall, in one step. A field left undefined keeps its value;
- * a new `preset` is only a name here (`applyOpeningPreset` applies one).
+ * a new `preset` is only a name here (`applyOpeningPreset` applies one). A new `type` drops a
+ * stored `leaves` the type cannot take (back to the type's default) unless the patch sets it.
  */
 export function updateOpening(id: Id, patch: OpeningPatch): Command {
   return {

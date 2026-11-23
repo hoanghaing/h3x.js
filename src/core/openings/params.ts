@@ -78,6 +78,14 @@ const invalid = (o: Opening, what: string): Issue => ({
   message: `Opening ${o.id} ${what}`,
 });
 
+/** Whether an opening of `type` may store `leaves`: in the type's range, else a whole number >= 1. */
+export function leavesFit(type: OpeningType, leaves: number): boolean {
+  const range = LEAVES[type];
+  return (
+    Number.isInteger(leaves) && leaves >= (range?.min ?? 1) && leaves <= (range?.max ?? Infinity)
+  );
+}
+
 /** Issues for a type, orientation, leaf count or split outside what the type allows. */
 export function validateOpeningParams(o: Opening): Issue[] {
   const bad = (what: string): Issue => invalid(o, what);
@@ -87,11 +95,7 @@ export function validateOpeningParams(o: Opening): Issue[] {
   if (o.swing !== 'left' && o.swing !== 'right') out.push(bad('swing must be "left" or "right"'));
   if (o.leaves !== undefined) {
     const range = LEAVES[o.type];
-    const ok =
-      Number.isInteger(o.leaves) &&
-      o.leaves >= (range?.min ?? 1) &&
-      o.leaves <= (range?.max ?? Infinity);
-    if (!ok) {
+    if (!leavesFit(o.type, o.leaves)) {
       const span = range ? `between ${range.min} and ${range.max}` : 'a whole number above 0';
       out.push(bad(`leaves must be ${span}`));
     }
