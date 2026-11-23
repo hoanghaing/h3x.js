@@ -56,6 +56,9 @@ export interface Tool {
   onDoubleClick?(e: PlanPointerEvent): void;
   /** Return true when handled. */
   onKeyDown?(e: KeyboardEvent): boolean;
+  onKeyUp?(e: KeyboardEvent): void;
+  /** The pointer left the plan. */
+  onPointerLeave?(): void;
   /** Drawing tools: commits the segment being drawn at `length`; false when there is none. */
   setPendingSegmentLength?(length: number): boolean;
 }

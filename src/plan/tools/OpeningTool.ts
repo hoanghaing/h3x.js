@@ -54,6 +54,7 @@ export class OpeningTool implements Tool {
   /** Hinge and swing chosen with Space, while the ghost stays on `wall`. */
   private orientation: { wall: Id; hinge: Hinge; swing: Swing } | null = null;
   private candidate: Candidate | null = null;
+  private unsubscribe: (() => void) | null = null;
 
   constructor(opts: OpeningToolOptions) {
     this.preset = opts.preset;
@@ -62,16 +63,30 @@ export class OpeningTool implements Tool {
   /** Changes what is placed; the ghost follows at once. */
   setOptions(opts: { preset?: string }): void {
     if (opts.preset !== undefined) this.preset = opts.preset;
-    this.redraw();
+    if (this.candidate) this.redraw();
   }
 
   activate(ctx: ToolContext): void {
     this.ctx = ctx;
+    // An edit under a still pointer (undo while hovering) moves what the ghost stands against.
+    this.unsubscribe = ctx.doc.on('change', () => {
+      if (this.candidate) this.redraw();
+    });
   }
 
   deactivate(): void {
     this.clear();
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     this.ctx = null;
+  }
+
+  onPointerLeave(): void {
+    this.hide();
+  }
+
+  onKeyUp(e: KeyboardEvent): void {
+    if (e.key === 'Alt') this.setFree(false);
   }
 
   onPointerMove(e: PlanPointerEvent): void {
@@ -118,6 +133,10 @@ export class OpeningTool implements Tool {
 
   onKeyDown(e: KeyboardEvent): boolean {
     if (!this.ctx || e.ctrlKey || e.metaKey) return false;
+    if (e.key === 'Alt') {
+      this.setFree(true);
+      return false;
+    }
     if (e.key === 'Escape') {
       if (!this.candidate) return false;
       this.clear();
@@ -132,6 +151,13 @@ export class OpeningTool implements Tool {
       return true;
     }
     return false;
+  }
+
+  /** Alt pressed or released without a move: snapping follows at once. */
+  private setFree(free: boolean): void {
+    if (!this.pointer || this.pointer.free === free) return;
+    this.pointer = { ...this.pointer, free };
+    if (this.candidate) this.redraw();
   }
 
   /** Re-resolves the last pointer and draws the ghost there. */

@@ -104,7 +104,7 @@ export function renderGhost(layer: SVGGElement, prefix: string, ghost: GhostStat
   for (const { from, to } of ghost.guides) {
     g.appendChild(
       svgEl('line', {
-        class: `${prefix}-guide`,
+        class: `${prefix}-ghost-guide`,
         x1: String(from.x),
         y1: String(from.y),
         x2: String(to.x),

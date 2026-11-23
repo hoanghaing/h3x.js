@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   H3xDocument,
+  addOpening,
   openingGeometry,
   type Floor,
   type Opening,
@@ -62,8 +63,8 @@ function click(plan: H3xPlan, p: Vec2, mods: { altKey?: boolean } = {}): void {
   fire(plan, 'pointerup', p, mods);
 }
 
-function key(plan: H3xPlan, k: string): KeyboardEvent {
-  const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+function key(plan: H3xPlan, k: string, type = 'keydown'): KeyboardEvent {
+  const e = new KeyboardEvent(type, { key: k, bubbles: true, cancelable: true });
   plan.svg.dispatchEvent(e);
   return e;
 }
@@ -138,9 +139,9 @@ describe('OpeningTool', () => {
   it('shows the snap guides of the placement and clears them when the ghost goes', () => {
     const plan = makePlan();
     fire(plan, 'pointermove', NEAR_W3);
-    expect(plan.svg.querySelectorAll('.h3x-plan-guide').length).toBeGreaterThan(0);
+    expect(plan.svg.querySelectorAll('.h3x-plan-ghost-guide').length).toBeGreaterThan(0);
     key(plan, 'Escape');
-    expect(plan.svg.querySelectorAll('.h3x-plan-guide')).toHaveLength(0);
+    expect(plan.svg.querySelectorAll('.h3x-plan-ghost-guide')).toHaveLength(0);
   });
 
   it('a click is one undo step, selects the new opening and keeps the tool', () => {
@@ -185,7 +186,7 @@ describe('OpeningTool', () => {
     const n = (p.lines ?? '').match(/-?[\d.e-]+/g)!.map(Number);
     expect(n).toHaveLength(4);
     [1.55, 2, 2.45, 2].forEach((v, i) => expect(n[i]).toBeCloseTo(v, 6));
-    expect(plan.svg.querySelectorAll('.h3x-plan-guide')).toHaveLength(0);
+    expect(plan.svg.querySelectorAll('.h3x-plan-ghost-guide')).toHaveLength(0);
     fire(plan, 'pointerdown', { x: 2, y: 2 });
     expect(added(plan)).toHaveLength(0);
     expect(plan.issues.rejected.map((i) => i.code)).toEqual(['placement-no-host']);
@@ -227,7 +228,7 @@ describe('OpeningTool', () => {
     const plan = makePlan();
     click(plan, NEAR_W3, { altKey: true });
     expect(added(plan)[0]!.offset).toBeCloseTo(1.97, 6);
-    expect(plan.svg.querySelectorAll('.h3x-plan-guide')).toHaveLength(0);
+    expect(plan.svg.querySelectorAll('.h3x-plan-ghost-guide')).toHaveLength(0);
   });
 
   it('Esc clears the ghost; the next move shows it again', () => {
@@ -245,7 +246,7 @@ describe('OpeningTool', () => {
     fire(plan, 'pointermove', NEAR_W3);
     plan.setTool(null);
     expect(ghost(plan)).toBeNull();
-    expect(plan.svg.querySelectorAll('.h3x-plan-guide')).toHaveLength(0);
+    expect(plan.svg.querySelectorAll('.h3x-plan-ghost-guide')).toHaveLength(0);
   });
 
   it('setOptions changes the preset live', () => {
@@ -264,5 +265,103 @@ describe('OpeningTool', () => {
     );
     fire(plan, 'pointerdown', NEAR_W3);
     expect(added(plan)[0]).toMatchObject({ preset: 'window-01', width: 1.2, sill: 0.9 });
+  });
+
+  it('Alt pressed or released without a move redraws the ghost', () => {
+    const plan = makePlan();
+    fire(plan, 'pointermove', NEAR_W3);
+    key(plan, 'Alt');
+    expect(pathsOf(ghost(plan)!)).toEqual(expected(plan.doc.floor, { offset: 1.97 }));
+    expect(plan.svg.querySelectorAll('.h3x-plan-ghost-guide')).toHaveLength(0);
+    key(plan, 'Alt', 'keyup');
+    expect(pathsOf(ghost(plan)!)).toEqual(expected(plan.doc.floor, { offset: 2 }));
+  });
+
+  it('guide ticks have their own class and survive other guides being cleared', () => {
+    const tool = new OpeningTool({ preset: 'door-single-01' });
+    const plan = makePlan(tool);
+    fire(plan, 'pointermove', NEAR_W3);
+    const ticks = plan.svg.querySelectorAll('.h3x-plan-ghost-guide');
+    expect(ticks.length).toBeGreaterThan(0);
+    expect(plan.svg.querySelectorAll('.h3x-plan-guide')).toHaveLength(0);
+    (tool as unknown as { ctx: { showGuides(g: []): void } }).ctx.showGuides([]);
+    expect(plan.svg.querySelectorAll('.h3x-plan-ghost-guide')).toHaveLength(ticks.length);
+  });
+
+  it('reach follows the zoom', () => {
+    const plan = makePlan();
+    const p = { x: 2.03, y: 3.75 }; // 0.15 m from the face of w3
+    plan.setView({ scale: 100 }); // reach 0.24 m
+    fire(plan, 'pointermove', p);
+    expect(ghost(plan)!.classList.contains('h3x-plan-ghost-free')).toBe(false);
+    plan.setView({ scale: 400 }); // reach 0.06 m
+    click(plan, p);
+    expect(ghost(plan)!.classList.contains('h3x-plan-ghost-free')).toBe(true);
+    expect(added(plan)).toHaveLength(0);
+    expect(plan.issues.rejected.map((i) => i.code)).toEqual(['placement-no-host']);
+  });
+
+  it('Esc forgets the Space choice', () => {
+    const plan = makePlan();
+    fire(plan, 'pointermove', NEAR_W3);
+    key(plan, ' ');
+    key(plan, 'Escape');
+    fire(plan, 'pointermove', NEAR_W3);
+    expect(pathsOf(ghost(plan)!)).toEqual(expected(plan.doc.floor, {}));
+  });
+
+  it('the ghost hides after a successful click until the next move', () => {
+    const plan = makePlan();
+    click(plan, NEAR_W3);
+    expect(added(plan)).toHaveLength(1);
+    expect(ghost(plan)).toBeNull();
+    fire(plan, 'pointermove', { x: 3.95, y: 2.03 });
+    expect(ghost(plan)).not.toBeNull();
+  });
+
+  it('a preset that is not an opening preset adds nothing and says so', () => {
+    const plan = makePlan(new OpeningTool({ preset: 'no-such-preset' }));
+    click(plan, NEAR_W3);
+    expect(added(plan)).toHaveLength(0);
+    expect(plan.issues.rejected.map((i) => i.code)).toEqual(['unknown-preset']);
+  });
+
+  it('an edit the document rejects is reported and nothing is selected', () => {
+    const plan = makePlan();
+    const issue = { code: 'some-issue', ids: ['w3'], message: 'no' };
+    vi.spyOn(plan.doc, 'tryExecute').mockReturnValue({ ok: false, issues: [issue] });
+    click(plan, NEAR_W3);
+    expect(added(plan)).toHaveLength(0);
+    expect(plan.selection).toBeNull();
+    expect(plan.issues.rejected).toEqual([issue]);
+  });
+
+  it('the ghost follows document changes while it is shown (undo during hover)', () => {
+    const plan = makePlan();
+    fire(plan, 'pointermove', NEAR_W3);
+    plan.doc.execute(addOpening({ wall: 'w3', preset: 'door-single-01', offset: 2 }));
+    expect(ghost(plan)!.classList.contains('h3x-plan-invalid')).toBe(true);
+    plan.doc.undo();
+    expect(ghost(plan)!.classList.contains('h3x-plan-invalid')).toBe(false);
+  });
+
+  it('leaving the plan hides the ghost; a hidden ghost ignores document changes', () => {
+    const plan = makePlan();
+    fire(plan, 'pointermove', NEAR_W3);
+    plan.svg.dispatchEvent(new MouseEvent('pointerleave'));
+    expect(ghost(plan)).toBeNull();
+    plan.doc.execute(addOpening({ wall: 'w1', preset: 'door-single-01', offset: 3 }));
+    expect(ghost(plan)).toBeNull();
+  });
+
+  it('after a tool change, document changes draw no ghost', () => {
+    const tool = new OpeningTool({ preset: 'door-single-01' });
+    const plan = makePlan(tool);
+    fire(plan, 'pointermove', NEAR_W3);
+    plan.setTool(null);
+    plan.doc.execute(addOpening({ wall: 'w1', preset: 'door-single-01', offset: 3 }));
+    expect(ghost(plan)).toBeNull();
+    tool.setOptions({ preset: 'window-01' });
+    expect(ghost(plan)).toBeNull();
   });
 });

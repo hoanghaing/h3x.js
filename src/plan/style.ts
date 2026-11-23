@@ -77,6 +77,6 @@ ${p} .${prefix}-preview { stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 
 ${p} .${prefix}-preview-label { fill: #1d4ed8; font-size: ${DIMENSION_FONT_PX}px; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: #fafaf9; stroke-width: 3px; }
 ${p} .${prefix}-roof-handle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; }
 ${p} .${prefix}-drop-target { fill: none; stroke: #db2777; stroke-width: 2; }
-${p} .${prefix}-guide { stroke: #db2777; stroke-width: 1; stroke-dasharray: 4 3; }
+${p} .${prefix}-guide, ${p} .${prefix}-ghost-guide { stroke: #db2777; stroke-width: 1; stroke-dasharray: 4 3; }
 `.trimStart();
 }
