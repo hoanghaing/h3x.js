@@ -211,6 +211,7 @@ export class OpeningInteraction {
     if (this.disposed) return;
     this.placement = p ? { preset: p.preset } : null;
     this.hideGhost();
+    if (!this.gesture) this.report([]);
   }
 
   /** Follows the scene after a rebuild: the selection mark takes the new geometry. */
@@ -257,7 +258,9 @@ export class OpeningInteraction {
 
   private onDown(e: PointerEvent): void {
     if (this.disposed || e.target !== this.host.canvas || e.button !== 0) return;
-    if (this.press) return; // a second pointer: ignored
+    // A second pointer is ignored while the viewer holds a press; a press left to orbit (whose
+    // release may never reach the container) is simply replaced.
+    if (this.press?.consumed) return;
     this.host.canvas.focus?.({ preventScroll: true });
     const press: Press = {
       pointerId: e.pointerId,
@@ -343,7 +346,10 @@ export class OpeningInteraction {
   // --- keys ------------------------------------------------------------------------------
 
   private onKey(e: KeyboardEvent): void {
-    if (this.disposed || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Keys typed into the host's own inputs inside the container are not the viewer's.
+    if (this.disposed || e.target !== this.host.canvas || e.ctrlKey || e.metaKey || e.altKey) {
+      return;
+    }
     if (e.key === 'Escape') {
       if (this.gesture) {
         const { key } = this.gesture;
@@ -556,8 +562,11 @@ export class OpeningInteraction {
 
   private hover(e: PointerEvent): void {
     const c = this.candidateAt(e);
-    if (c) this.showGhost(c.opening, c.placement.issues.length > 0);
+    const invalid = !!c && c.placement.issues.length > 0;
+    if (c) this.showGhost(c.opening, invalid);
     else this.hideGhost();
+    // A refusal stops applying once the pointer finds a valid spot or leaves the walls.
+    if (!invalid) this.report([]);
   }
 
   /** Adds the preset where the press hit; false when it hit no wall (the press is orbit's). */

@@ -123,7 +123,27 @@ function setup(opts: { editing?: boolean; floors?: Floor[] } = {}) {
   const key = (k: string): void => {
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
   };
-  return { doc, scene, container, canvas, viewer, look, screen, fire, down, move, up, key };
+  const inner = viewer as unknown as {
+    controls: { enabled: boolean };
+    overlay: { children: unknown[] };
+  };
+  const orbit = (): boolean => inner.controls.enabled;
+  return {
+    doc,
+    scene,
+    container,
+    canvas,
+    viewer,
+    look,
+    screen,
+    fire,
+    down,
+    move,
+    up,
+    key,
+    orbit,
+    inner,
+  };
 }
 
 /** Front of the door o1 (on w1's outer face, world z = +0.1), mid height. */
@@ -370,7 +390,9 @@ describe('H3xViewer editing', () => {
     const cam = t.viewer.camera.position.clone();
     t.down(DOOR_FRONT);
     t.move(new Vector3(2.6, 1.05, 0.1));
+    expect(t.orbit()).toBe(false);
     t.key('Escape');
+    expect(t.orbit()).toBe(true);
     expect(opening(t.doc)!.offset).toBe(1.2);
     expect(t.doc.canUndo).toBe(false);
     // The rest of the press is ignored.
@@ -399,6 +421,58 @@ describe('H3xViewer editing', () => {
     expect(opening(t.doc)).toBeDefined();
   });
 
+  it('keys typed into an input inside the container do not reach the viewer', () => {
+    const t = setup({ editing: true });
+    t.look(SOUTH, ORIGIN);
+    t.down(DOOR_FRONT);
+    t.up(DOOR_FRONT);
+    const input = document.createElement('input');
+    t.container.appendChild(input);
+    input.focus();
+    for (const k of ['Delete', 'Backspace', 'Escape']) {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }),
+      );
+    }
+    expect(opening(t.doc)).toBeDefined();
+    expect(t.viewer.selection).toEqual({ kind: 'opening', id: 'o1' });
+  });
+
+  it('issues clear when the pointer finds a valid spot, leaves the walls or placing changes', () => {
+    const t = setup({ editing: true });
+    t.look(SOUTH_EAST, ORIGIN);
+    const issues: Issue[][] = [];
+    t.viewer.on('issues', (i) => issues.push(i));
+    t.viewer.setPlacement({ preset: 'door-single-01' });
+    // On the door: refused.
+    t.down(DOOR_FRONT);
+    t.up(DOOR_FRONT);
+    expect(issues.at(-1)!.length).toBeGreaterThan(0);
+    t.move(new Vector3(4.1, 1.05, -2.5));
+    expect(issues.at(-1)).toEqual([]);
+    t.down(DOOR_FRONT);
+    t.up(DOOR_FRONT);
+    expect(issues.at(-1)!.length).toBeGreaterThan(0);
+    t.fire('pointermove', { x: 10, y: 10 });
+    expect(issues.at(-1)).toEqual([]);
+    t.down(DOOR_FRONT);
+    t.up(DOOR_FRONT);
+    expect(issues.at(-1)!.length).toBeGreaterThan(0);
+    t.viewer.setPlacement(null);
+    expect(issues.at(-1)).toEqual([]);
+    expect(Object.keys(t.doc.floor.openings)).toHaveLength(1);
+  });
+
+  it('a press left to orbit does not block the next one', () => {
+    const t = setup({ editing: true });
+    t.look(SOUTH, ORIGIN);
+    // Its release never reaches the container.
+    t.fire('pointerdown', { x: 10, y: 10 });
+    t.down(DOOR_FRONT);
+    t.up(DOOR_FRONT);
+    expect(t.viewer.selection).toEqual({ kind: 'opening', id: 'o1' });
+  });
+
   it('a document change ends the drag', () => {
     const t = setup({ editing: true });
     t.look(SOUTH_EAST, ORIGIN);
@@ -415,7 +489,9 @@ describe('H3xViewer editing', () => {
     t.look(SOUTH_EAST, ORIGIN);
     t.down(DOOR_FRONT);
     t.move(new Vector3(2.6, 1.05, 0.1));
+    expect(t.orbit()).toBe(false);
     t.doc.setActiveFloor('f2');
+    expect(t.orbit()).toBe(true);
     expect(t.viewer.selection).toBeNull();
     t.move(new Vector3(3, 1.05, 0.1));
     t.up(new Vector3(3, 1.05, 0.1));
@@ -426,9 +502,22 @@ describe('H3xViewer editing', () => {
   it('dispose ends the drag as one undo step and stops listening', () => {
     const t = setup({ editing: true });
     t.look(SOUTH_EAST, ORIGIN);
+    const removed = vi.spyOn(t.container, 'removeEventListener');
+    expect(t.canvas.getAttribute('tabindex')).toBe('0');
     t.down(DOOR_FRONT);
     t.move(new Vector3(2.6, 1.05, 0.1));
+    expect(t.orbit()).toBe(false);
+    expect(t.inner.overlay.children.length).toBeGreaterThan(0);
     t.viewer.dispose();
+    expect(t.orbit()).toBe(true);
+    expect(t.canvas.hasAttribute('tabindex')).toBe(false);
+    expect(t.inner.overlay.children).toHaveLength(0);
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+      expect(removed).toHaveBeenCalledWith(type, expect.any(Function), true);
+    }
+    for (const type of ['pointerleave', 'keydown']) {
+      expect(removed).toHaveBeenCalledWith(type, expect.any(Function), false);
+    }
     t.move(new Vector3(3, 1.05, 0.1));
     t.up(new Vector3(3, 1.05, 0.1));
     expect(opening(t.doc)!.offset).toBeCloseTo(2.6, 9);
@@ -459,11 +548,13 @@ describe('H3xViewer editing', () => {
     t.up(at);
     expect(Object.keys(t.doc.floor.openings)).toHaveLength(2);
     expect(issues.at(-1)!.map((i) => i.code)).toContain('opening-overlap');
-    // Off: a press on the wall selects nothing new and adds nothing.
+    // Off: a press on the new window selects it again and adds nothing.
     t.viewer.setPlacement(null);
+    t.viewer.select(null);
     t.down(at);
     t.up(at);
     expect(Object.keys(t.doc.floor.openings)).toHaveLength(2);
+    expect(t.viewer.selection).toEqual({ kind: 'opening', id: added[0]!.id });
   });
 
   it('a placement press on empty space leaves it to orbit', () => {
