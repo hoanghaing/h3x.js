@@ -113,6 +113,62 @@
         border-radius: 8px;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
       }
+      #quantities {
+        position: fixed;
+        top: 64px;
+        right: 12px;
+        z-index: 11;
+        width: min(440px, calc(100vw - 24px));
+        max-height: calc(100vh - 140px);
+        overflow: auto;
+        padding: 8px 10px;
+        font-size: 12px;
+        background: rgba(255, 255, 255, 0.97);
+        border-radius: 8px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+      }
+      #quantities[hidden] {
+        display: none;
+      }
+      #quantities header {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #quantities header strong {
+        flex: 1;
+        font-size: 14px;
+      }
+      #quantities h4 {
+        margin: 10px 0 4px;
+      }
+      #quantities table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      #quantities th,
+      #quantities td {
+        padding: 2px 4px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+        white-space: nowrap;
+      }
+      #quantities .num {
+        text-align: right;
+      }
+      #quantities input {
+        width: 7.5em;
+      }
+      #quantities tfoot th {
+        font-size: 13px;
+      }
+      #quantities-unpriced {
+        margin: 6px 0 0;
+        color: #b3261e;
+      }
+      #toolbar button.active {
+        background: #d8e8ff;
+      }
       #status {
         font-size: 13px;
         color: #2a7a3b;
@@ -178,8 +234,71 @@
       <button id="btn-widen">Mở rộng nhà +0,5 m</button>
       <button id="btn-undo">Hoàn tác</button>
       <button id="btn-redo">Làm lại</button>
+      <button id="btn-quantities" title="Khối lượng và dự toán">Khối lượng</button>
       <span id="status"></span>
     </div>
+    <aside id="quantities" hidden>
+      <header>
+        <strong>Khối lượng</strong>
+        <select id="sel-quantities-scope" title="Phạm vi">
+          <option value="project">Cả công trình</option>
+          <option value="floor">Tầng đang chọn</option>
+        </select>
+        <button id="btn-quantities-close" title="Đóng">✕</button>
+      </header>
+      <table>
+        <tbody id="quantities-summary"></tbody>
+      </table>
+      <h4>Cửa</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Loại</th>
+            <th>Rộng × cao</th>
+            <th class="num">Số bộ</th>
+            <th class="num">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody id="quantities-openings"></tbody>
+      </table>
+      <h4>Dự toán (đơn giá minh họa, VND)</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Hạng mục</th>
+            <th class="num">Khối lượng</th>
+            <th>Đơn giá</th>
+            <th class="num">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody id="quantities-costs"></tbody>
+        <tbody>
+          <tr>
+            <td>Cửa đi</td>
+            <td></td>
+            <td>
+              <input id="in-price-door" type="number" min="0" step="100000" value="3500000" /> /bộ
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>Cửa sổ</td>
+            <td></td>
+            <td>
+              <input id="in-price-window" type="number" min="0" step="100000" value="2500000" /> /bộ
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <th colspan="3">Tổng</th>
+            <th id="quantities-total" class="num"></th>
+          </tr>
+        </tfoot>
+      </table>
+      <p id="quantities-unpriced"></p>
+    </aside>
     <div id="floorbar">
       <label
         >Tầng
