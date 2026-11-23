@@ -98,18 +98,44 @@ A straight wall between two nodes, centered on the line between them. Its direct
 
 ### `<opening>`
 
-A door or window cut into a wall.
+A door, window or plain opening cut into a wall.
 
-| Attribute | Type    | Required | Default | Notes                                                               |
-| --------- | ------- | -------- | ------- | ------------------------------------------------------------------- |
-| `id`      | string  | yes      | -       |                                                                     |
-| `wall`    | id      | yes      | -       | Must reference a wall.                                              |
-| `preset`  | string  | yes      | -       | Preset id, resolved by the host.                                    |
-| `offset`  | number  | yes      | -       | Distance of the opening's **center** from node `a`, along the wall. |
-| `width`   | number  | yes      | -       | Meters, above 0 (otherwise a parse error).                          |
-| `height`  | number  | yes      | -       | Meters.                                                             |
-| `sill`    | number  | no       | `0`     | Height of the bottom edge above the floor, meters.                  |
-| `flip`    | boolean | no       | false   | Mirrors the opening; written as `1` only when true.                 |
+| Attribute | Type    | Required | Default        | Notes                                                                                |
+| --------- | ------- | -------- | -------------- | ------------------------------------------------------------------------------------ |
+| `id`      | string  | yes      | -              |                                                                                      |
+| `wall`    | id      | yes      | -              | Must reference a wall.                                                               |
+| `preset`  | string  | yes      | -              | Preset id: the host's, or a built-in one (`OPENING_PRESETS`).                        |
+| `offset`  | number  | yes      | -              | Distance of the opening's **center** from node `a`, along the wall.                  |
+| `width`   | number  | yes      | -              | Meters, above 0 (otherwise a parse error).                                           |
+| `height`  | number  | yes      | -              | Meters.                                                                              |
+| `sill`    | number  | no       | `0`            | Height of the bottom edge above the floor, meters.                                   |
+| `type`    | string  | no       | from `sill`    | One of the types below; without it, `door-swing` at sill 0 and `window-fixed` above. |
+| `hinge`   | `a`/`b` | no       | `a`            | The wall end nearer the hinge (or the jamb a single leaf starts from).               |
+| `swing`   | string  | no       | `left`         | `left` or `right`: the side of the wall `a -> b` the opening opens to.               |
+| `leaves`  | integer | no       | type's default | Leaf count, for the types that have one (see below).                                 |
+| `split`   | number  | no       | `0.5`          | `door-double` only: share of the larger leaf, at least 0.5 and below 1.              |
+| `flip`    | boolean | no       | -              | Read only, from older files: `1` means `hinge="b" swing="right"`. Never written.     |
+
+Writers always write `type`; `hinge` and `swing` only when not `a` / `left`; `leaves` and `split`
+only when set.
+
+| Type              | Hinge                   | Swing | Leaves (default) | Split |
+| ----------------- | ----------------------- | ----- | ---------------- | ----- |
+| `door-swing`      | yes                     | yes   | 1                | -     |
+| `door-double`     | when `split` is not 0.5 | yes   | 2                | yes   |
+| `door-sliding`    | with one leaf           | yes   | 1 to 4 (2)       | -     |
+| `door-folding`    | yes                     | yes   | 2 to 8 (4)       | -     |
+| `door-rolling`    | -                       | yes   | 1                | -     |
+| `opening`         | -                       | -     | 0                | -     |
+| `window-casement` | with one leaf           | yes   | 1 to 4 (2)       | -     |
+| `window-sliding`  | -                       | -     | 2 to 4 (2)       | -     |
+| `window-awning`   | -                       | yes   | 1 to 4 (1)       | -     |
+| `window-fixed`    | -                       | -     | 1 to 6 (1)       | -     |
+
+A parameter a type does not use is kept and written, but changes nothing (`openingParams(o)`
+lists the ones that apply), so switching the type and back loses nothing. Parse errors: an
+unknown `type`, a `hinge` or `swing` other than the values above, a `leaves` outside the type's
+range (or not a whole number above 0 on a type without one), a `split` outside `0.5 <= split < 1`.
 
 ### `<room>`
 
@@ -299,7 +325,7 @@ The `Mount` type also lists `opening`; that is a preset mount used by `addOpenin
 - `H3xParseError` (`element` and `attribute` say where, when known) for: malformed XML; root not
   `<h3x>`; missing, non-integer or `< 1` `version`; `unit` other than `m`; no `<floor>`; a missing
   required attribute; a non-numeric number (empty, `NaN`, `Infinity`); a bad `side`, `mount` or
-  column `shape`; a bad `<stair>` or `<roof>` (see their sections); a bad or missing `<site>` (fewer than 3 points, malformed point, more than one); a
+  column `shape`; a bad `<opening>` (see its section); a bad `<stair>` or `<roof>` (see their sections); a bad or missing `<site>` (fewer than 3 points, malformed point, more than one); a
   duplicate id within a floor; a duplicate floor id; a `slabThickness` not above 0; a reference to a
   missing node or wall (wall `a` / `b`, opening `wall`, room `walls` / `holes`, wall-item `wall`); a
   room whose walls or hole loops do not form a loop.
@@ -333,8 +359,8 @@ A 4 x 4 m room with a door, a window, a sofa, an outlet and a ceiling lamp. Wall
     <wall id="w2" a="n2" b="n3" thickness="0.2" height="3"/>
     <wall id="w3" a="n3" b="n4" thickness="0.2" height="3"/>
     <wall id="w4" a="n4" b="n1" thickness="0.2" height="3"/>
-    <opening id="d1" wall="w1" preset="door-single" offset="1" width="0.9" height="2.1" sill="0"/>
-    <opening id="win1" wall="w3" preset="window-2" offset="2" width="1.4" height="1.2" sill="0.9" flip="1"/>
+    <opening id="d1" wall="w1" preset="door-single" offset="1" width="0.9" height="2.1" sill="0" type="door-swing"/>
+    <opening id="win1" wall="w3" preset="window-2" offset="2" width="1.4" height="1.2" sill="0.9" type="window-casement" hinge="b" swing="right" leaves="2"/>
     <room id="r1" walls="w1 w2 w3 w4" name="Studio"/>
     <item id="sofa1" preset="sofa-3seat" mount="floor" x="2" y="3.2" rotation="3.1416"/>
     <item id="out1" preset="outlet" mount="wall" wall="w2" side="left" offset="2" elevation="0.3"/>

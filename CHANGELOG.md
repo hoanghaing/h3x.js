@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+Doors and windows.
+
+- Core: typed openings. `Opening` gains `type` (`door-swing`, `door-double`, `door-sliding`,
+  `door-folding`, `door-rolling`, `opening`, `window-casement`, `window-sliding`,
+  `window-awning`, `window-fixed`), `hinge` (`'a' | 'b'`), `swing` (`'left' | 'right'`) and
+  optional `leaves` and `split`. XML attributes `type`, `hinge`, `swing`, `leaves`, `split` (see
+  `docs/xml-format.md`); a file without them still loads (the type follows the sill, `flip="1"`
+  reads as `hinge="b" swing="right"`). `openingParams`, `openingLeaves`, `nextOrientation`,
+  `mirrorOrientation`, `validateOpeningParams`, `validateOpeningValues`, `normalizeOpening`.
+- Built-in opening presets (`OPENING_PRESETS`, one or more per type), resolved after the host's
+  presets (`createPresetResolver`); `PresetInfo.opening` gives a preset's type and parameters;
+  `presetOpening`.
+- Commands: `updateOpening` (any field, `wall` included; `moveOpening` is the same command),
+  `resizeOpening`, `setOpeningDistance` (from the wall face / next opening or from the end node),
+  `applyOpeningPreset`. `addOpening` takes `hinge`, `swing`, `type`, `leaves` and `split`.
+- Geometry: `openingGeometry` (cut, frame / leaf / glass pieces closed and open, swept areas),
+  `openingHit`, `pieceOutline`, `openingClearances`; one shape for the plan symbol, hit area, 3D
+  parts and checks. `resolvePlacement` places an opening near a point (host wall with
+  hysteresis, snaps, clamp, re-host keeping the space a door opened into).
+- Validation: new blocking codes `opening-hits-column` and, on opening edits, every
+  `invalid-opening` value (type, orientation, leaves, split, sizes also as saved, sill, offset);
+  new warning `opening-swing-blocked` (`validatePlacements` only). An edit that changes only the
+  type, hinge, swing, leaves or split of a flagged opening is blocked only by issues it adds.
+- **Changed:** `opening-out-of-wall` now uses the wall's clear length: an opening must stay clear
+  of the drawn outline of a meeting wall, and at least `OPENING_END_MARGIN` from the node. Layout
+  edits leave in place an opening that fits this or the old range, so older files do not move.
+- Plan: `OpeningTool` (ghost on the nearest wall, snap ticks, red where invalid, Space for
+  orientation, Alt for no snapping; `placement-no-host` when no wall is in reach).
+  `SelectEditTool` moves an opening along its wall and onto other walls, resizes it by its jamb
+  handles, nudges it with the arrows and cycles its orientation with Space; a drag is one undo
+  step and dragging back leaves none. New events `openingDistanceRequest` (answer with
+  `plan.setOpeningDistance`) and `openingEditRequest`. New classes `-warning` (amber, for an
+  entity flagged only by a warning), `-opening-handle`, `-opening-distance`, `-ghost`,
+  `-ghost-free`, `-ghost-guide` and `-ghost-guides`. `paintOpening` is exported. An opening that
+  stands wholly beyond its wall is drawn as a red box and stays selectable.
+- 3D: doors and windows get frame, leaf and glass meshes (`h3xKind: 'opening'`,
+  `h3x-opening-<id>-<part>`, in an `h3x-openings` group per floor) and an invisible pick box;
+  `buildOpeningParts`, `OPENING_PARTS`, `scene.getOpeningMeshes(id, floorId?)`, materials
+  `openingFrame`, `openingLeaf`, `openingGlass`, `pick`. Only openings whose shape changed get new
+  buffers.
+- **Removed:** `flip` on `Opening`, `addOpening` and `moveOpening` (use `hinge` and `swing`; XML
+  `flip` is still read, never written); `openingShape` / `OpeningShape` from `h3x/plan` (use
+  `openingGeometry` and `paintOpening`); the plan class `-opening-leaf` (leaves are drawn in
+  `-opening-lines`).
+- **Changed:** an entity flagged only by `opening-swing-blocked` gets `-warning` instead of
+  `-invalid`.
+- `opening-out-of-wall` is listed once in the plan's standing issues (layout and placement
+  checks both report it).
+- Example page: door and window tool with a preset picker, a bar for the selected opening (type,
+  width, height, sill, hinge, swing, leaves, split; inputs the type does not use are disabled),
+  an input for a clicked clear distance, and rejection reasons in the status line.
+
 Editing fixes.
 
 - Openings and wall items stay in place when either end of their wall moves (`moveNode`,
