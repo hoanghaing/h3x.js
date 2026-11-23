@@ -12,6 +12,7 @@ import type {
 } from '../core';
 import { Emitter } from '../core/document/emitter';
 import {
+  isWarningIssue,
   removeColumn,
   removeItem,
   removeNode,
@@ -156,9 +157,6 @@ export interface OpeningEditRequest {
   /** Where it was double-clicked, in viewport pixels. */
   at: ScreenPoint;
 }
-
-/** Issue codes that warn without blocking: drawn as warnings, not as invalid. */
-const WARNING_CODES: ReadonlySet<string> = new Set(['opening-swing-blocked']);
 
 /** The floor a change is on; undefined for the (project-level) site. */
 const floorOf = (c: EntityChange): Id | undefined => (c.kind === 'site' ? undefined : c.floorId);
@@ -788,14 +786,12 @@ export class H3xPlan {
 
   /**
    * Toggles selected / invalid / warning / rejected classes on every entity element. An entity
-   * named only by warnings (`WARNING_CODES`) is marked as a warning, not as invalid.
+   * named only by warnings (`isWarningIssue`) is marked as a warning, not as invalid.
    */
   private refreshMarks(): void {
-    const blocking = this.standing.filter((i) => !WARNING_CODES.has(i.code));
+    const blocking = this.standing.filter((i) => !isWarningIssue(i));
     const invalid = new Set(blocking.flatMap((i) => i.ids));
-    const warned = new Set(
-      this.standing.filter((i) => WARNING_CODES.has(i.code)).flatMap((i) => i.ids),
-    );
+    const warned = new Set(this.standing.filter(isWarningIssue).flatMap((i) => i.ids));
     const rejected = new Set(this.rejected.flatMap((i) => i.ids));
     const sel = this._selection;
     if (sel && !this.dom.elements[sel.kind].has(sel.id)) {

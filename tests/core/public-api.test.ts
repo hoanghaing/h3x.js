@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import * as h3x from '../../src/index';
+import * as plan from '../../src/plan';
+import * as three from '../../src/three';
 import readme from '../../README.md?raw';
 
 const FUNCTIONS = [
@@ -26,6 +28,7 @@ const FUNCTIONS = [
   'openingGeometry',
   'openingHit',
   'pieceOutline',
+  'isWarningIssue',
   'addItem',
   'moveItem',
   'removeItem',
@@ -76,6 +79,22 @@ describe('public API', () => {
 
   it.each(CONSTANTS)('exports constant %s', (name) => {
     expect(typeof (h3x as Record<string, unknown>)[name]).toBe('number');
+  });
+
+  it('exports the opening API of h3x/plan and h3x/three', () => {
+    for (const name of ['OpeningTool', 'paintOpening', 'H3xPlan', 'SelectEditTool']) {
+      expect(typeof (plan as Record<string, unknown>)[name]).toBe('function');
+    }
+    for (const name of ['buildOpeningParts', 'H3xScene', 'MaterialLibrary']) {
+      expect(typeof (three as Record<string, unknown>)[name]).toBe('function');
+    }
+    expect(three.OPENING_PARTS).toEqual(['frame', 'leaf', 'glass', 'pick']);
+  });
+
+  it('tells warnings from blocking issues', () => {
+    const issue = (code: string) => ({ code, ids: [], message: '' });
+    expect(h3x.isWarningIssue(issue('opening-swing-blocked'))).toBe(true);
+    expect(h3x.isWarningIssue(issue('opening-overlap'))).toBe(false);
   });
 
   it('keeps internals private', () => {

@@ -11,7 +11,7 @@ import { FloorView, type FloorContext } from './floorView';
 import { MaterialLibrary, type FinishResolver } from './materials';
 import { buildSiteLine } from './site';
 
-export type { H3xKind, OpeningPart } from './floorView';
+export { OPENING_PARTS, type H3xKind, type OpeningPart } from './floorView';
 
 const FLOOR_GEOMETRY_KINDS = new Set([
   'node',

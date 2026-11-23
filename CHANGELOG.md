@@ -16,14 +16,20 @@ Doors and windows.
   `presetOpening`.
 - Commands: `updateOpening` (any field, `wall` included; `moveOpening` is the same command),
   `resizeOpening`, `setOpeningDistance` (from the wall face / next opening or from the end node),
-  `applyOpeningPreset`. `addOpening` takes `hinge`, `swing`, `type`, `leaves` and `split`.
+  `applyOpeningPreset`. `addOpening` takes `hinge`, `swing`, `type`, `leaves` and `split`. A type
+  change drops a stored leaf count the new type cannot take (back to its default) unless the same
+  patch sets one.
+- **Changed:** `doc.presets` is always defined: the host's resolver wrapped so the built-in
+  opening presets resolve after it.
 - Geometry: `openingGeometry` (cut, frame / leaf / glass pieces closed and open, swept areas),
-  `openingHit`, `pieceOutline`, `openingClearances`; one shape for the plan symbol, hit area, 3D
+  `openingHit`, `pieceOutline`, `openingClearances` (type `OpeningClearances`); one shape for the plan symbol, hit area, 3D
   parts and checks. `resolvePlacement` places an opening near a point (host wall with
   hysteresis, snaps, clamp, re-host keeping the space a door opened into).
 - Validation: new blocking codes `opening-hits-column` and, on opening edits, every
   `invalid-opening` value (type, orientation, leaves, split, sizes also as saved, sill, offset);
-  new warning `opening-swing-blocked` (`validatePlacements` only). An edit that changes only the
+  new warning `opening-swing-blocked` (`validatePlacements` only; `isWarningIssue` and
+  `WARNING_CODES` tell warnings apart). `validatePlacements(floor, presets, above?)` takes the
+  floor above, which gives stairs their rise for the swing check. An edit that changes only the
   type, hinge, swing, leaves or split of a flagged opening is blocked only by issues it adds.
 - **Changed:** `opening-out-of-wall` now uses the wall's clear length: an opening must stay clear
   of the drawn outline of a meeting wall, and at least `OPENING_END_MARGIN` from the node. Layout

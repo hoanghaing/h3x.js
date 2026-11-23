@@ -153,7 +153,8 @@ the opening it makes.
   - `addOpening({ wall, preset, offset, ...fields })`: the preset gives size, sill, type, leaves
     and split; any field passed overrides it.
   - `updateOpening(id, patch)` changes any field but the id, `wall` included (`moveOpening` is
-    the same command).
+    the same command). A new `type` drops a stored `leaves` the type cannot take, back to the
+    type's default, unless the patch sets `leaves` too.
   - `resizeOpening(id, { end, width })` moves the jamb at `end` and keeps the other.
   - `setOpeningDistance(id, { end, distance, from })` moves the opening so the clear distance
     from the jamb at `end` is `distance`: to the wall face or next opening (`from: 'face'`), or
@@ -304,8 +305,10 @@ instead. Only entities touched by a change can block it.
 The usable range along a wall is shortened at each end by half the thickness of the thickest
 other wall meeting there, so nothing sits inside a corner. An opening's range ends where the
 wall's clear length stops (the drawn outline of a meeting wall), and at least
-`OPENING_END_MARGIN` from the node; `openingClearances(floor, opening)` gives the clear distance
-from each jamb to that end or the next opening (`face`) and to the end node (`axis`).
+`OPENING_END_MARGIN` from the node; `openingClearances(floor, opening)` (`OpeningClearances`)
+gives the clear distance from each jamb to that end or the next opening (`face`) and to the end
+node (`axis`). `isWarningIssue(issue)` (codes in `WARNING_CODES`, today `opening-swing-blocked`)
+tells a warning from a problem.
 Standalone checks: `validateLayout(floor)`, `validatePlacements(floor, presets, above?)`,
 `checkOpening(floor, opening)`, `checkItem(floor, item, presets)`. Details in
 [docs/validation.md](docs/validation.md).
@@ -401,7 +404,7 @@ viewer.viewFromAxis('y'); // top view
   to the active floor; `buildSlabGeometry` is exported too.
 - **Doors and windows.** Each opening gets frame, leaf and glass meshes (those its type has,
   named `h3x-opening-<id>-<part>`, in the floor's `h3x-openings` group) built from
-  `openingGeometry` by `buildOpeningParts(floor, opening, geometry)`, plus an invisible `pick`
+  `openingGeometry` by `buildOpeningParts(floor, geometry)`, plus an invisible `pick`
   box over the cut that rays still hit. `scene.getOpeningMeshes(id, floorId?)` returns them in
   `OPENING_PARTS` order (`frame`, `leaf`, `glass`, `pick`). Materials: `openingFrame()`,
   `openingLeaf()`, `openingGlass()` (translucent) and `pick()` on `MaterialLibrary`.
@@ -556,7 +559,7 @@ presets?, tool?, stairLabels? })`. Defaults: grid shown, `snap` 0.05 m with alig
   attributes `data-h3x-kind` and `data-h3x-id`. Junction fills carry `data-h3x-node` (class `h3x-plan-join`) and dimension
   labels `data-h3x-wall` (class `h3x-plan-dimension`). State classes on entity elements:
   `h3x-plan-selected`, `h3x-plan-invalid` (the entity is in a blocking standing issue),
-  `h3x-plan-warning` (only in a warning, such as `opening-swing-blocked`; drawn amber) and
+  `h3x-plan-warning` (only in warnings, `isWarningIssue`; drawn amber) and
   `h3x-plan-rejected` (flashed after a rejected edit). An opening symbol has `-opening-gap`,
   `-opening-lines` (frame and leaves) and `-opening-arc` paths; `paintOpening(geometry)` gives
   their path data. The selected opening shows `h3x-plan-opening-handle` squares at its jambs and

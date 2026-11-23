@@ -8,6 +8,14 @@ import { stairOutline } from '../stairs/layout';
 import type { Floor, Id, Issue, Opening, Vec2 } from '../types';
 import { stairRise } from './stairs';
 
+/** Issue codes that warn without blocking anything: an editor shows them apart from errors. */
+export const WARNING_CODES: ReadonlySet<string> = new Set(['opening-swing-blocked']);
+
+/** Whether `issue` is a warning (`WARNING_CODES`) rather than a problem that blocks or must be fixed. */
+export function isWarningIssue(issue: Pick<Issue, 'code'>): boolean {
+  return WARNING_CODES.has(issue.code);
+}
+
 /** Area (m²) shared by a swept area and what stands there at or below which they only touch. */
 const SWING_OVERLAP_AREA = 1e-4;
 /** How far to each side a leaf drawn as a line is probed. */

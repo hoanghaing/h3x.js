@@ -47,6 +47,7 @@ export {
 export { openingGeometry, openingHit, pieceOutline } from './openings/geometry';
 export type { OpeningGeometry, OpeningPiece, SweepArea } from './openings/geometry';
 export { openingClearances } from './openings/clearance';
+export type { OpeningClearances } from './openings/clearance';
 export { normalizeOpening } from './openings/normalize';
 export { OPENING_PRESETS, createPresetResolver, presetOpening } from './openings/presets';
 export { addColumn, moveColumn, removeColumn, setSite } from './commands/columns';
@@ -87,6 +88,7 @@ export { validateLayout } from './validate/layout';
 export { validateStairs, stairRise } from './validate/stairs';
 export { validateRoofs } from './validate/roofs';
 export { validatePlacements, checkItem, checkOpening } from './validate/placement';
+export { WARNING_CODES, isWarningIssue } from './validate/swing';
 export { resolvePlacement } from './placement';
 export type {
   OpeningSubject,

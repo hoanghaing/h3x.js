@@ -4,6 +4,7 @@ import {
   addFloor,
   applyOpeningPreset,
   applyRoofPreset,
+  isWarningIssue,
   removeFloor,
   setFloorHeight,
   setGroundElevation,
@@ -80,8 +81,16 @@ function mount(next: H3xDocument): void {
       if (rejected.length > 0) {
         const reasons = [...new Set(rejected.map((i) => i.message))];
         say(`Không hợp lệ: ${reasons.join('; ')}`, true);
-      } else if (standing.length > 0) say(`${standing.length} vấn đề tồn tại`, true);
-      else say('');
+      } else {
+        // Warnings (a door leaf that cannot open fully) are counted apart from real problems.
+        const warnings = standing.filter(isWarningIssue).length;
+        const problems = standing.length - warnings;
+        const parts = [
+          problems > 0 ? `${problems} vấn đề tồn tại` : '',
+          warnings > 0 ? `${warnings} cảnh báo` : '',
+        ].filter(Boolean);
+        say(parts.join(', '), problems > 0);
+      }
     }),
     () => plan.dispose(),
     () => viewer.dispose(),

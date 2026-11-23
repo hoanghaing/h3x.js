@@ -14,8 +14,9 @@ attributes match the fields of the matching type in `src/core/types.ts`. Read it
   written as `0`. On read, any finite number is accepted.
 - Writers sort child elements by id within each type, in the order node, wall, opening, room,
   item, column. A `<site>` is written directly after `<meta>`. Characters XML 1.0 forbids are written as U+FFFD; `& < > "` and line breaks are escaped.
-- `flip` is written as `1` when true and omitted when false. On read, `1` and `true` mean true;
-  anything else is false.
+- `<opening flip>` is read only, from older files, and never written: on read, `1` and `true`
+  mean `hinge="b" swing="right"`; anything else, or no `flip`, means `hinge="a" swing="left"`.
+  Explicit `hinge` and `swing` attributes win.
 - Unknown elements inside `<floor>` are ignored on read (and lost on save). Unknown attributes are
   ignored.
 

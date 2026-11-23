@@ -49,7 +49,7 @@ describe('buildOpeningParts', () => {
       const floor = caseFloor(over);
       const o = floor.openings.o1!;
       const g = openingGeometry(floor, o)!;
-      const parts = buildOpeningParts(floor, o, g);
+      const parts = buildOpeningParts(floor, g);
       const cut = grown(g.cut);
       const lo = floor.elevation + g.z0 - TOL;
       const hi = floor.elevation + g.z1 + TOL;
@@ -90,7 +90,7 @@ describe('buildOpeningParts', () => {
     const glassy = (over: Parameters<typeof openingFloor>[0]): boolean => {
       const f = openingFloor(over);
       const o = f.openings.o1!;
-      return buildOpeningParts(f, o, openingGeometry(f, o)!).glass !== undefined;
+      return buildOpeningParts(f, openingGeometry(f, o)!).glass !== undefined;
     };
     expect(glassy({ type: 'door-swing' })).toBe(false);
     expect(glassy({ type: 'window-fixed', sill: 0.9, height: 1.4 })).toBe(true);
@@ -100,7 +100,7 @@ describe('buildOpeningParts', () => {
   it('an empty cut gives only a pick', () => {
     const f = openingFloor({ offset: 9 });
     const o = f.openings.o1!;
-    const parts = buildOpeningParts(f, o, openingGeometry(f, o)!);
+    const parts = buildOpeningParts(f, openingGeometry(f, o)!);
     expect(parts.frame ?? parts.leaf ?? parts.glass).toBeUndefined();
     for (const v of vertices(parts.pick)) expect(Number.isFinite(v.x + v.y + v.z)).toBe(true);
   });

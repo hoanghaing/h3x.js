@@ -90,7 +90,7 @@ export function wallClearEnds(floor: Readonly<Floor>, wall: Wall): Record<Hinge,
  * distance, level with what stops the clear length: on a face, or between them where a corner of
  * a meeting wall does. Throws `not-found` without the wall.
  */
-export function openingClearances(floor: Readonly<Floor>, o: Opening): Clearances {
+export function openingClearances(floor: Readonly<Floor>, o: Opening): OpeningClearances {
   return clearancesTo(floor, o, wallClearEnds);
 }
 
@@ -98,17 +98,21 @@ export function openingClearances(floor: Readonly<Floor>, o: Opening): Clearance
  * `openingClearances` measured to the clear length itself (`wallFaceLimits`), without the end
  * margin: what the drawn outlines alone leave.
  */
-export function outlineClearances(floor: Readonly<Floor>, o: Opening): Clearances {
+export function outlineClearances(floor: Readonly<Floor>, o: Opening): OpeningClearances {
   return clearancesTo(floor, o, wallFaceLimits);
 }
 
-type Clearances = Record<Hinge, { face: number; axis: number; jamb: Vec2; until: Vec2 }>;
+/** The room beside each jamb of an opening (see `openingClearances`). */
+export type OpeningClearances = Record<
+  Hinge,
+  { face: number; axis: number; jamb: Vec2; until: Vec2 }
+>;
 
 function clearancesTo(
   floor: Readonly<Floor>,
   o: Opening,
   ends: (floor: Readonly<Floor>, wall: Wall) => Record<Hinge, WallFaceLimit>,
-): Clearances {
+): OpeningClearances {
   const wall = floor.walls[o.wall];
   if (!wall) throw notFound('Wall', o.wall);
   const a = floor.nodes[wall.a]!;

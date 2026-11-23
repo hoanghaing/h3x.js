@@ -265,7 +265,7 @@ export class H3xDocument {
   validatePlacements(): Issue[] {
     return validatePlacements(
       this.floor as Floor,
-      this.presets ?? (() => undefined),
+      this.presets,
       this.floorAbove(this.floor.id) as Floor | undefined,
     );
   }

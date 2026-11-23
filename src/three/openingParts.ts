@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from 'three';
-import type { Floor, Opening, OpeningGeometry, OpeningPiece, Vec2 } from '../core';
+import type { Floor, OpeningGeometry, OpeningPiece, Vec2 } from '../core';
 import { toWorld } from './coords';
 import { TriangleSink } from './triangulate';
 
@@ -31,11 +31,7 @@ const PART_OF: Record<OpeningPiece['role'], 'frame' | 'leaf' | 'glass' | null> =
  * The 3D parts of an opening from its geometry, shut, at the floor elevation. Every piece of
  * `g.closed` becomes a box; `opening` and an empty cut give only the pick.
  */
-export function buildOpeningParts(
-  floor: Readonly<Floor>,
-  _opening: Opening,
-  g: OpeningGeometry,
-): OpeningParts {
+export function buildOpeningParts(floor: Readonly<Floor>, g: OpeningGeometry): OpeningParts {
   const sinks = { frame: new TriangleSink(), leaf: new TriangleSink(), glass: new TriangleSink() };
   const y = floor.elevation;
   for (const piece of g.closed) {

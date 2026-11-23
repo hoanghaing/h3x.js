@@ -248,7 +248,7 @@ export class FloorView {
         this.openings.set(o.id, view);
       }
       view.key = key;
-      const parts = buildOpeningParts(f, o, g);
+      const parts = buildOpeningParts(f, g);
       for (const part of OPENING_PARTS) {
         const geom = parts[part as keyof OpeningParts];
         const mesh = view.meshes.get(part);
