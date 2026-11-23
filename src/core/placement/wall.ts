@@ -154,7 +154,6 @@ function snapsFor(
     out.push(
       { kind: 'opening', offset: s.lo - half, at: s.lo },
       { kind: 'opening', offset: s.hi + half, at: s.hi },
-      { kind: 'opening', offset: (s.lo + s.hi) / 2, at: (s.lo + s.hi) / 2 },
     );
   }
   // Free gaps between the face limits and the other openings.
@@ -236,7 +235,7 @@ export function resolvePlacement(floor: Readonly<Floor>, req: PlacementRequest):
 
   const id = opening.id ?? '';
   const candidate: Opening = { ...opening, id, wall: host.wall.id, offset, ...orientation };
-  const issues = checkOpening(floor as Floor, candidate).map((i) =>
+  const issues = checkOpening(floor as Floor, candidate, range).map((i) =>
     id === '' ? { ...i, ids: i.ids.filter((x) => x !== '') } : i,
   );
   return { wall: host.wall.id, offset, ...orientation, guides, issues };

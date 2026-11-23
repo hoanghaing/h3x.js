@@ -19,7 +19,7 @@ export interface PlacementRequest {
   snapReach: number;
   /** Grid step for the centre offset; 0 for none. */
   grid: number;
-  /** No snapping at all (Alt). */
+  /** No snapping at all. */
   free: boolean;
   /** A drag: the wall it started on and the pointer minus the centre, along that wall. */
   from?: { wall: Id; grab: number };

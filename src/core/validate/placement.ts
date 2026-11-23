@@ -22,13 +22,18 @@ import type { Floor, Issue, Item, Opening, PresetResolver, Vec2 } from '../types
 /**
  * The issues that block editing `o`: `invalid-opening`, `opening-out-of-wall` (see openingRange),
  * `opening-overlap`, `opening-too-tall` and `opening-hits-column`. `opening-swing-blocked` only
- * warns, so only `validatePlacements` reports it.
+ * warns, so only `validatePlacements` reports it. `range` is `openingRange(floor, o)` when the
+ * caller has it already.
  */
-export function checkOpening(floor: Floor, o: Opening): Issue[] {
+export function checkOpening(
+  floor: Floor,
+  o: Opening,
+  range: { lo: number; hi: number } = openingRange(floor, o),
+): Issue[] {
   const out = validateOpeningValues(o);
   const wall = floor.walls[o.wall];
   if (!wall) return out;
-  if (!inRange(o.offset, openingRange(floor, o))) {
+  if (!inRange(o.offset, range)) {
     out.push({
       code: 'opening-out-of-wall',
       ids: [o.id, o.wall],

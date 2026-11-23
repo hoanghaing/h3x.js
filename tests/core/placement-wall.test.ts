@@ -132,11 +132,14 @@ describe('placement on a wall: snaps', () => {
     expect(kinds(right)).toEqual(['opening']);
   });
 
-  it('snaps to the centre of another opening on the wall, which overlaps it', () => {
+  it('does not stick at the centre of another opening on the wall', () => {
     const p = at(snapFloor(), 7.38);
-    expect(p.offset).toBeCloseTo(7.5, 9);
-    expect(kinds(p)).toEqual(['opening']);
+    expect(p.offset).toBeCloseTo(7.4, 9);
+    expect(kinds(p)).toEqual(['grid']);
     expect(codes(p)).toContain('opening-overlap');
+    const bare = at(snapFloor(), 7.42, { grid: 0 });
+    expect(bare.offset).toBeCloseTo(7.42, 9);
+    expect(bare.guides).toEqual([]);
   });
 
   it('snaps to the middle of the free gap', () => {
@@ -432,22 +435,76 @@ describe('placement on a wall: re-host', () => {
     }
   }
 
-  it('returning to the start wall restores hinge and swing, whatever the path', () => {
+  it('a drag through another wall and back ends as a direct one', () => {
     const f = ringFloor(SHAPES[1]![1].map(rot(30)), (i) => i === 2);
     const ids = Object.keys(f.walls);
     for (const start of ids) {
       for (const [hinge, swing] of ORIENTATIONS) {
         const s = subject({ hinge, swing });
+        const from = { wall: start, grab: 0 };
         for (const via of ids) {
-          const from = { wall: start, grab: 0 };
-          resolvePlacement(f, req(middle(f, via), { subject: s, from, free: true }));
+          const there = resolvePlacement(f, req(middle(f, via), { subject: s, from, free: true }))!;
+          expect(there.wall).toBe(via);
+          // Back to the start, with the hop as the previous host.
           const back = resolvePlacement(
             f,
             req(middle(f, start), { subject: s, from, current: via, free: true }),
           )!;
           expect(back.wall).toBe(start);
           expect([back.hinge, back.swing]).toEqual([hinge, swing]);
+          // A drag that had started on the hop, as it stood there, lands the same way.
+          const hop = subject({ hinge: there.hinge, swing: there.swing });
+          const again = resolvePlacement(
+            f,
+            req(middle(f, start), { subject: hop, from: { wall: via, grab: 0 }, free: true }),
+          )!;
+          expect([again.hinge, again.swing]).toEqual([hinge, swing]);
         }
+      }
+    }
+  });
+
+  it('from an outer wall onto a wall with rooms on both sides', () => {
+    const f = twoRoomFloor();
+    // w1 runs (0,0) -> (4,0), r1 on its left; w7 runs (4,0) -> (4,4), r1 left, r2 right.
+    const onto = (hinge: Hinge, swing: Swing) =>
+      resolvePlacement(
+        f,
+        req(middle(f, 'w7'), {
+          subject: subject({ hinge, swing }),
+          from: { wall: 'w1', grab: 0 },
+          free: true,
+        }),
+      )!;
+    // Into r1: the r1 side.
+    expect([onto('a', 'left').hinge, onto('a', 'left').swing]).toEqual(['a', 'left']);
+    expect([onto('b', 'left').hinge, onto('b', 'left').swing]).toEqual(['b', 'left']);
+    // Outdoors faces neither side: the swing is kept (the walls are at 90 degrees).
+    expect([onto('a', 'right').hinge, onto('a', 'right').swing]).toEqual(['a', 'right']);
+    expect([onto('b', 'right').hinge, onto('b', 'right').swing]).toEqual(['b', 'right']);
+  });
+
+  it('from an outer wall onto a hole wall', () => {
+    const f = holedRoomFloor();
+    const hole = Object.keys(f.walls).filter((id) => id.startsWith('hw'));
+    for (const target of hole) {
+      for (const [hinge, swing] of ORIENTATIONS) {
+        // w1 runs (0,0) -> (10,0): left is into the room, right is outdoors.
+        const p = resolvePlacement(
+          f,
+          req(middle(f, target), {
+            subject: subject({ hinge, swing }),
+            from: { wall: 'w1', grab: 0 },
+            free: true,
+          }),
+        )!;
+        const { a, b } = ends(f, target);
+        const n = sideNormal(f, target, p.swing);
+        const intoHole = (5 - (a.x + b.x) / 2) * n.x + (5 - (a.y + b.y) / 2) * n.y > 0;
+        expect(intoHole).toBe(swing === 'right');
+        expect(handedness(f, target, p.offset, p.hinge, p.swing)).toBe(
+          handedness(f, 'w1', 5, hinge, swing),
+        );
       }
     }
   });
