@@ -767,7 +767,16 @@ export class H3xPlan {
   }
 
   private computeStanding(): Issue[] {
-    return [...this.doc.validateLayout(), ...this.doc.validatePlacements()];
+    const placements = this.doc.validatePlacements();
+    // Both checks report an opening that does not fit its wall; keep the placement one, which
+    // also names the wall.
+    const outOfWall = new Set(
+      placements.filter((i) => i.code === 'opening-out-of-wall').map((i) => i.ids[0]),
+    );
+    const layout = this.doc
+      .validateLayout()
+      .filter((i) => i.code !== 'opening-out-of-wall' || !outOfWall.has(i.ids[0]));
+    return [...layout, ...placements];
   }
 
   /** Recomputes standing problems and fires `issues` when their content changed. */

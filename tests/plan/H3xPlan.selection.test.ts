@@ -79,6 +79,8 @@ describe('issues', () => {
     plan.doc.execute(setWallLength('w1', 1.0));
     expect(plan.getElement('opening', 'o1')!.classList.contains('h3x-plan-invalid')).toBe(true);
     expect(plan.issues.standing.map((i) => i.code)).toContain('opening-out-of-wall');
+    // Layout and placement checks both find it; the list holds it once.
+    expect(plan.issues.standing.filter((i) => i.code === 'opening-out-of-wall')).toHaveLength(1);
     expect(fn).toHaveBeenCalled();
     plan.doc.undo();
     expect(plan.getElement('opening', 'o1')!.classList.contains('h3x-plan-invalid')).toBe(false);

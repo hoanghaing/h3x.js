@@ -458,6 +458,15 @@ describe('openingClearances', () => {
       const at = { ...o, offset: o.offset + (end === 'a' ? -face : face) };
       const overlap = (o: Opening) => polygonOverlapArea(openingGeometry(f, o)!.cut, ring);
       expect(overlap(at)).toBeLessThan(1e-9);
+      // Where the clear distance is the outline's (at the short wall, not at the one almost in
+      // line), distance 0 puts the opening at that same spot.
+      const same = Math.abs(openingClearances(f, o)[end].face - face) < 1e-9;
+      expect(same).toBe(deg < 90);
+      if (same) {
+        const cmd = setOpeningDistance('o1', { end, distance: 0, from: 'face' });
+        const after = cmd.run(ctxFor(f))[0]!.after as Opening;
+        expect(after.offset).toBeCloseTo(at.offset, 9);
+      }
       // 5 mm further toward the node it does.
       const past = end === 'a' ? -0.005 : 0.005;
       expect(overlap({ ...at, offset: at.offset + past })).toBeGreaterThan(1e-9);

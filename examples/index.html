@@ -93,8 +93,25 @@
         border-radius: 8px;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
       }
-      #stairbar input {
+      #stairbar input,
+      #openingbar input {
         width: 5em;
+      }
+      #openingbar {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 10;
+        display: none;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        max-width: 46%;
+        padding: 8px;
+        font-size: 13px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
       }
       #status {
         font-size: 13px;
@@ -116,6 +133,22 @@
       <button id="btn-column-round">Cột tròn</button>
       <button id="btn-column-square">Cột vuông</button>
       <button id="btn-stair">Cầu thang</button>
+      <button id="btn-opening" title="Nhấp lên tường để đặt; Space đổi chiều, Alt bỏ bám">
+        Cửa
+      </button>
+      <select id="sel-opening-preset" title="Mẫu cửa">
+        <option value="door-single-01">Cửa đi 1 cánh</option>
+        <option value="door-double-01">Cửa đi 2 cánh</option>
+        <option value="door-double-unequal-01">Cửa 2 cánh lệch</option>
+        <option value="door-sliding-01">Cửa trượt</option>
+        <option value="door-folding-01">Cửa xếp</option>
+        <option value="door-rolling-01">Cửa cuốn</option>
+        <option value="opening-01">Ô trống</option>
+        <option value="window-01">Cửa sổ cố định</option>
+        <option value="window-casement-01">Cửa sổ mở quay</option>
+        <option value="window-sliding-01">Cửa sổ lùa</option>
+        <option value="window-awning-01">Cửa sổ lật</option>
+      </select>
       <button id="btn-clear">Xóa hết</button>
       <button id="btn-load">Nhà ống</button>
       <button id="btn-load-3f">Nhà phố 3 tầng</button>
@@ -187,6 +220,44 @@
       <button id="btn-stair-hand">Tay phải</button>
       <label>Bề rộng vế <input id="in-stair-width" type="number" step="0.05" min="0.1" /></label>
       <button id="btn-stair-rotate">Xoay 90°</button>
+    </div>
+    <div id="openingbar">
+      <label
+        >Loại
+        <select id="sel-opening-type">
+          <option value="door-swing">Cửa đi 1 cánh</option>
+          <option value="door-double">Cửa đi 2 cánh</option>
+          <option value="door-sliding">Cửa trượt</option>
+          <option value="door-folding">Cửa xếp</option>
+          <option value="door-rolling">Cửa cuốn</option>
+          <option value="opening">Ô trống</option>
+          <option value="window-casement">Cửa sổ mở quay</option>
+          <option value="window-sliding">Cửa sổ lùa</option>
+          <option value="window-awning">Cửa sổ lật</option>
+          <option value="window-fixed">Cửa sổ cố định</option>
+        </select>
+      </label>
+      <label>Rộng <input id="in-opening-width" type="number" step="0.05" min="0.05" /></label>
+      <label>Cao <input id="in-opening-height" type="number" step="0.05" min="0.05" /></label>
+      <label>Bậu <input id="in-opening-sill" type="number" step="0.05" min="0" /></label>
+      <label
+        >Bản lề
+        <select id="sel-opening-hinge">
+          <option value="a">Đầu A</option>
+          <option value="b">Đầu B</option>
+        </select>
+      </label>
+      <label
+        >Mở về
+        <select id="sel-opening-swing">
+          <option value="left">Bên trái</option>
+          <option value="right">Bên phải</option>
+        </select>
+      </label>
+      <label>Số cánh <input id="in-opening-leaves" type="number" step="1" min="1" /></label>
+      <label
+        >Tỉ lệ cánh <input id="in-opening-split" type="number" step="0.01" min="0.5" max="0.99"
+      /></label>
     </div>
     <script type="module" src="./main.ts"></script>
   </body>
