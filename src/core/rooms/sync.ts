@@ -3,7 +3,7 @@ import type { EntityChange } from '../document/changes';
 import { H3xValidationError } from '../errors';
 import { polygonOverlapArea } from '../geometry/clip';
 import { signedArea } from '../geometry/polygon';
-import { createId } from '../ids';
+import { createId, idFor } from '../ids';
 import type { Floor, Id, Room, Vec2 } from '../types';
 import { detectRooms, roomShape } from './detect';
 import type { DetectedRoom } from './detect';
@@ -150,5 +150,46 @@ export function syncRooms(before: Readonly<Floor>, after: Readonly<Floor>): Enti
     changes.push({ kind: 'room', id: room.id, before: null, after: room });
   });
 
+  return changes;
+}
+
+/** True when some entity of the floor has the id (ids are unique per floor across kinds). */
+function inUse(floor: Readonly<Floor>, id: Id): boolean {
+  return [
+    floor.nodes,
+    floor.walls,
+    floor.openings,
+    floor.rooms,
+    floor.items,
+    floor.columns,
+    floor.stairs,
+    floor.roofs,
+  ].some((c) => Object.hasOwn(c, id));
+}
+
+/**
+ * New rooms for the faces of `after` that `before` does not have and that no room of `before`
+ * already runs round (same outer walls): what moving walls encloses. Other rooms are left
+ * alone. A new room's id comes from its outer walls, so a drag, which re-runs its command
+ * from the start at every step, keeps one id.
+ */
+export function enclosedRooms(before: Readonly<Floor>, after: Readonly<Floor>): EntityChange[] {
+  const known = [
+    ...detectRooms(before as Floor).map((f) => f.walls),
+    ...Object.values(before.rooms).map((r) => r.walls),
+  ];
+  const isKnown = (walls: Id[]): boolean =>
+    known.some((k) => sameCycle(k, walls) || sameCycle([...k].reverse(), walls));
+  const added = new Set<Id>();
+  const changes: EntityChange[] = [];
+  for (const face of detectRooms(after as Floor)) {
+    if (isKnown(face.walls)) continue;
+    const key = [...face.walls].sort().join(',');
+    const id = idFor(key, (k) => added.has(k) || inUse(before, k));
+    added.add(id);
+    const room: Room = { id, name: '', walls: [...face.walls] };
+    if (face.holes.length > 0) room.holes = face.holes.map((h) => [...h]);
+    changes.push({ kind: 'room', id, before: null, after: room });
+  }
   return changes;
 }

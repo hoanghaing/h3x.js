@@ -1,14 +1,16 @@
 import type { Command, CommandContext, EntityChange } from '../document/changes';
 import { MIN_WALL_LENGTH } from '../constants';
+import { enclosedRooms } from '../rooms/sync';
 import { EPS, add, distance, dot, leftNormal, scale, sub, tidy } from '../geometry/vec';
 import { clampIntoRange, openingRange, wallUsableRange } from '../validate/layout';
-import type { Id, Vec2, WallItem } from '../types';
+import type { Floor, Id, PlanNode, Vec2, WallItem } from '../types';
 import { fail, notFound } from './shared';
 
 /**
  * Node moves plus re-fit of openings / wall items on walls whose length changed. They keep their
  * distance from the end that stays: offsets are measured from node a, so when only a moves they
- * first shift by the change of length.
+ * first shift by the change of length. Loops the move encloses become new rooms; existing rooms
+ * are left alone.
  */
 function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
   const { floor } = ctx;
@@ -54,7 +56,11 @@ function applyMoves(ctx: CommandContext, moves: Map<Id, Vec2>): EntityChange[] {
       changes.push({ kind: 'item', id: it.id, before: structuredClone(it), after });
     }
   }
-  return changes;
+  const nodes = changes.filter((c) => c.kind === 'node');
+  if (nodes.length === 0) return changes;
+  const after: Floor = { ...floor, nodes: { ...floor.nodes } };
+  for (const c of nodes) after.nodes[c.id] = c.after as PlanNode;
+  return [...changes, ...enclosedRooms(floor, after)];
 }
 
 export function moveNode(nodeId: Id, to: Vec2): Command {

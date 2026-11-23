@@ -26,6 +26,8 @@ Editing fixes.
   detected or accepted, and real rooms that such outlines lost are found again. A phantom already
   stored in a file is reported as `room-degenerate`: edits of its walls that leave it that narrow
   are rejected, and the next structural edit removes it (a follow roof on it becomes independent).
+- A wall loop too small to be a room becomes one when its walls are dragged larger (`moveNode`,
+  `moveWall`, `setWallLength`); it used to wait for the next structural edit or a reload.
 
 Milestone 7: irregular lots and roofs.
 
