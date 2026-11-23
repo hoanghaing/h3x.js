@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   H3xDocument,
   moveNode,
+  roomArea,
   setSite,
   type Floor,
   type Project,
@@ -405,5 +406,92 @@ describe('DrawWallTool ortho and angle input', () => {
     expect(plan.setPendingSegmentLength(2, 0)).toBe(true);
     expect(Object.values(plan.doc.floor.nodes).some((n) => n.x === 8 && n.y === 3)).toBe(true);
     expect(plan.setPendingSegmentLength(2, Number.NaN)).toBe(false);
+  });
+});
+
+describe('DrawWallTool reference line', () => {
+  const draw = (plan: H3xPlan, pts: Vec2[]): void => {
+    for (const p of pts) click(plan, p);
+  };
+  const near = (plan: H3xPlan, x: number, y: number) =>
+    Object.values(plan.doc.floor.nodes).find(
+      (n) => Math.abs(n.x - x) < 1e-9 && Math.abs(n.y - y) < 1e-9,
+    );
+  const RECT = [
+    { x: 6, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 3 },
+    { x: 6, y: 3 },
+    { x: 6, y: 0 },
+  ];
+
+  it('left faces drawn round a space keep it clear: the walls stand outside', () => {
+    const plan = makePlan(new DrawWallTool({ reference: 'left' }));
+    plan.fitToContent();
+    draw(plan, RECT);
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(8);
+    for (const [x, y] of [
+      [5.9, -0.1],
+      [10.1, -0.1],
+      [10.1, 3.1],
+      [5.9, 3.1],
+    ]) {
+      expect(near(plan, x!, y!)).toBeDefined();
+    }
+    const room = Object.values(plan.doc.floor.rooms).find((r) => r.id !== 'r1')!;
+    expect(roomArea(plan.doc.floor as Floor, room)).toBeCloseTo(12, 9);
+    expect(plan.doc.validateLayout()).toEqual([]);
+  });
+
+  it('right faces drawn round a space are its outside: the walls stand inside', () => {
+    const plan = makePlan(new DrawWallTool({ reference: 'right' }));
+    plan.fitToContent();
+    draw(plan, RECT);
+    expect(near(plan, 6.1, 0.1)).toBeDefined();
+    expect(near(plan, 9.9, 2.9)).toBeDefined();
+    const room = Object.values(plan.doc.floor.rooms).find((r) => r.id !== 'r1')!;
+    expect(roomArea(plan.doc.floor as Floor, room)).toBeCloseTo(3.6 * 2.6, 9);
+  });
+
+  it('an open chain offsets its ends and meets at the corners; one undo step per click', () => {
+    const plan = makePlan(new DrawWallTool({ reference: 'left' }));
+    plan.fitToContent();
+    draw(plan, RECT.slice(0, 3));
+    expect(near(plan, 6, -0.1)).toBeDefined();
+    expect(near(plan, 10.1, -0.1)).toBeDefined();
+    expect(near(plan, 10.1, 3)).toBeDefined();
+    plan.doc.undo();
+    expect(near(plan, 10, -0.1)).toBeDefined();
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(5);
+  });
+
+  it('Backspace steps back and the next click meets the right corner', () => {
+    const plan = makePlan(new DrawWallTool({ reference: 'left' }));
+    plan.fitToContent();
+    draw(plan, RECT.slice(0, 3));
+    key(plan, 'Backspace');
+    click(plan, { x: 10, y: -2 });
+    // The second wall now turns down: wall body to the right of (0,-1) is -x, so x = 9.9.
+    expect(near(plan, 9.9, -0.1)).toBeDefined();
+    expect(near(plan, 9.9, -2)).toBeDefined();
+  });
+
+  it('a typed length runs along the face', () => {
+    const plan = makePlan(new DrawWallTool({ reference: 'left' }));
+    plan.fitToContent();
+    click(plan, { x: 6, y: 0 });
+    expect(plan.setPendingSegmentLength(3, 0)).toBe(true);
+    expect(near(plan, 9, -0.1)).toBeDefined();
+  });
+
+  it('setOptions switches the reference line and ends the chain', () => {
+    const tool = new DrawWallTool();
+    const plan = makePlan(tool);
+    plan.fitToContent();
+    click(plan, { x: 6, y: 0 });
+    tool.setOptions({ reference: 'right' });
+    expect(tool.options).toEqual({ reference: 'right' });
+    click(plan, { x: 8, y: 0 });
+    expect(Object.keys(plan.doc.floor.walls)).toHaveLength(4);
   });
 });
